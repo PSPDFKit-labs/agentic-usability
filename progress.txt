@@ -10,6 +10,7 @@
 - Shared suite validation and table printing lives in `src/commands/suite-utils.ts` — reuse for any command that reads/writes test suites
 - cli-table3 imported as `import Table from 'cli-table3'` (default export)
 - OpenSandbox SDK: `Sandbox.create()` handles readiness polling via `readyTimeoutSeconds`; `SandboxClient` in `src/sandbox/opensandbox.ts` wraps the SDK for simplified usage
+- Docs fetcher: `fetchAndCacheDocs(publicInfo, options)` from `src/sandbox/docs-fetcher.ts` — caches in `.agentic-usability/cache/docs/` with 24h TTL, truncates to 100KB
 
 ---
 
@@ -116,4 +117,20 @@
   - `files.search({ path })` returns `FileInfo[]` — use for directory listing
   - `sandbox.kill()` may throw if sandbox is already gone — always wrap in try/catch for cleanup
   - `ConnectionConfig.getBaseUrl()` returns the full API base URL (useful for connectivity checks)
+---
+
+## 2026-03-31 - US-012
+- Created `src/sandbox/docs-fetcher.ts` with `fetchAndCacheDocs()` function
+- Fetches `publicInfo.docsUrl` and each URL in `publicInfo.guides` using native `fetch()`
+- HTML responses converted to markdown using Turndown; non-HTML saved as-is
+- Caches in `.agentic-usability/cache/docs/` with URL-hash filenames and 24h TTL
+- Assembles single DOCS.md string from all fetched docs + `publicInfo.additionalContext`
+- Truncates to 100KB with a note pointing to the original URL
+- `FetchDocsOptions.freshDocs` flag bypasses cache
+- Files changed: src/sandbox/docs-fetcher.ts (new), progress.txt, prd.json
+- **Learnings for future iterations:**
+  - `fetchAndCacheDocs()` accepts `FetchDocsOptions { freshDocs?: boolean }` — future commands should pass CLI `--fresh-docs` flag through
+  - Cache uses sha256-truncated-to-12-chars of URL for filenames, same pattern as source-resolver
+  - Turndown reuse: same import pattern as source-resolver (`import TurndownService from 'turndown'`)
+  - Truncation cuts at last newline boundary to avoid mid-line breaks
 ---
