@@ -6,6 +6,7 @@
 - Quality checks: `npm run typecheck`, `npm run lint`, `npm run build`
 - Commands go in `src/commands/<name>.ts` and export an async function, wired in `src/index.ts`
 - Use `node:readline/promises` for interactive CLI prompts (no extra dependency needed)
+- Agent JSON output parsing: use `extractJson()` pattern to strip markdown fences and find array boundaries, then retry once on parse failure
 
 ---
 
@@ -58,4 +59,22 @@
   - `node:readline/promises` createInterface works well for simple interactive prompts — no need for inquirer
   - Commands that replace stubs need to update the import and action in src/index.ts
   - `ensureWorkingDir()` from config.ts handles .agentic-usability/ directory creation
+---
+
+## 2026-03-31 - US-009
+- Created `src/commands/generate.ts` with full test suite generation logic
+- Loads config, resolves source path, creates generator agent via createAdapter()
+- Builds structured prompt instructing agent to explore codebase and output TestCase[] JSON
+- Parses agent stdout with `extractJson()` helper that handles markdown fences and raw JSON
+- Validates each test case for required fields (problemStatement, referenceSolution, difficulty, targetApis, expectedTokens, tags)
+- Auto-assigns sequential IDs (TC-001, TC-002, etc.) if agent doesn't provide them
+- Retries once with correction prompt if agent output is malformed JSON
+- Saves validated suite to config.output.suiteFile (default: .agentic-usability/suite.json)
+- Prints summary: count, difficulty breakdown, target APIs found
+- Updated `src/index.ts` to import generateCommand and wire it with `--fresh` flag
+- Files changed: src/commands/generate.ts (new), src/index.ts (modified)
+- **Learnings for future iterations:**
+  - Generator defaults to `{ command: 'claude' }` if config.agents.generator is not set
+  - `extractJson()` strips markdown fences and finds JSON array boundaries — useful pattern for any agent output parsing
+  - Commands with `--fresh` flag pass it through to `resolveSource(config, { fresh })` for cache bypass
 ---

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { initCommand } from './commands/init.js';
+import { generateCommand } from './commands/generate.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -27,9 +28,9 @@ program
 program
   .command('generate')
   .description('Generate test suite by having an AI agent explore the SDK source')
-  .action(() => {
-    console.log('Not implemented yet');
-    process.exit(0);
+  .option('--fresh', 'Force re-resolve source (bypass cache)')
+  .action(async (opts: { fresh?: boolean }) => {
+    await generateCommand({ fresh: opts.fresh });
   });
 
 program
