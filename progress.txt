@@ -23,6 +23,8 @@
 - Judge command saves `judge.json` per test case; errors saved as `judge-error.log`
 - Report: `reportCommand({ json })` from `src/commands/report.ts` — reads all results and prints scorecard or JSON; `exportResultsCommand({ output })` writes results to file
 - Pipeline state: `PipelineStateManager` from `src/core/pipeline.ts` — state stored in `.agentic-usability/pipeline-state.json`; `load()`/`save()` for persistence, `markTestComplete(stage, testId)` tracks per-test progress, `getIncompleteTests(stage, allTestIds)` for resumability
+- Run command: `runCommand({ resume, fresh, skipJudge })` from `src/commands/run.ts` — orchestrates generate→execute→analyze→judge→report with per-test state tracking
+- `executeTestCase` and `loadTestSuite` are exported from `src/commands/execute.ts` for reuse by the run command
 
 ---
 
@@ -271,4 +273,23 @@
   - `getIncompleteTests()` uses a Set for O(1) lookups instead of Array.includes() — good for large test suites
   - `reset()` is separate from `load()` — callers (run command) should prompt for confirmation before calling reset
   - Stage names match the completed object keys: 'generate', 'execute', 'analyze', 'judge'
+---
+
+## 2026-03-31 - US-020
+- Created `src/commands/run.ts` with full pipeline orchestration (generate → execute → analyze → judge → report)
+- Uses PipelineStateManager for per-test state tracking within each stage; supports `--resume` to continue from last checkpoint
+- Stage transitions displayed with chalk: `[Stage 2/5] Executing test cases...`
+- `--skip-judge` flag skips judge stage (4 stages instead of 5); `--fresh` flag clears state with confirmation prompt
+- Execute stage uses WorkerPool for concurrent execution with per-test state saving
+- Analyze stage runs `analyzeTokens()` per test; judge stage runs `runJudge()` per test — errors logged but don't halt pipeline
+- Final stage calls `reportCommand()` to display the scorecard
+- Exported `executeTestCase` and `loadTestSuite` from execute.ts for reuse
+- Updated `src/index.ts` to wire run command with `--resume`, `--fresh`, `--skip-judge` flags
+- Files changed: src/commands/run.ts (new), src/commands/execute.ts (modified), src/index.ts (modified), prd.json, progress.txt
+- **Learnings for future iterations:**
+  - Run command reuses exported functions from execute.ts rather than duplicating sandbox logic
+  - Stage ordering tracked via `STAGE_ORDER` array with `stageIndex()` helper for comparison
+  - Per-test state tracking in execute stage: markTestComplete inside executeFn so failed tests are NOT marked (retried on resume)
+  - `--fresh` prompts for confirmation via `node:readline/promises`, consistent with other commands
+  - Report stage always runs (even on resume) since it's a read-only summary
 ---

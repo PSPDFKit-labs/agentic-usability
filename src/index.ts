@@ -13,6 +13,7 @@ import { executeCommand } from './commands/execute.js';
 import { analyzeCommand } from './commands/analyze.js';
 import { judgeCommand } from './commands/judge.js';
 import { reportCommand, exportResultsCommand } from './commands/report.js';
+import { runCommand } from './commands/run.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -74,9 +75,11 @@ program
 program
   .command('run')
   .description('Execute the full benchmark pipeline end-to-end')
-  .action(() => {
-    console.log('Not implemented yet');
-    process.exit(0);
+  .option('--resume', 'Resume from last checkpoint')
+  .option('--fresh', 'Clear existing pipeline state before starting')
+  .option('--skip-judge', 'Skip the LLM judge stage')
+  .action(async (opts: { resume?: boolean; fresh?: boolean; skipJudge?: boolean }) => {
+    await runCommand({ resume: opts.resume, fresh: opts.fresh, skipJudge: opts.skipJudge });
   });
 
 program

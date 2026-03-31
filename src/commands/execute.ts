@@ -41,7 +41,7 @@ Implement the solution and write all output files to the /workspace/solution/ di
 Make sure to create the /workspace/solution/ directory first if it does not exist.`;
 }
 
-async function loadTestSuite(config: Config): Promise<TestCase[]> {
+export async function loadTestSuite(config: Config): Promise<TestCase[]> {
   const suiteFile = resolve(config.output?.suiteFile ?? DEFAULT_SUITE_FILE);
   let raw: string;
   try {
@@ -94,7 +94,7 @@ async function extractSolution(
   return solution;
 }
 
-async function executeTestCase(
+export async function executeTestCase(
   testCase: TestCase,
   target: { name: string; image: string; timeout?: number },
   config: Config,
