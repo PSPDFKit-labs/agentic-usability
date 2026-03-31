@@ -22,6 +22,7 @@
 - `formatSolution(files)` from `src/scoring/judge.ts` — renders SolutionFile[] as `--- File: path ---\ncontent` blocks
 - Judge command saves `judge.json` per test case; errors saved as `judge-error.log`
 - Report: `reportCommand({ json })` from `src/commands/report.ts` — reads all results and prints scorecard or JSON; `exportResultsCommand({ output })` writes results to file
+- Pipeline state: `PipelineStateManager` from `src/core/pipeline.ts` — state stored in `.agentic-usability/pipeline-state.json`; `load()`/`save()` for persistence, `markTestComplete(stage, testId)` tracks per-test progress, `getIncompleteTests(stage, allTestIds)` for resumability
 
 ---
 
@@ -253,4 +254,21 @@
   - `computeAggregates()` builds worstApis and missedTokens by iterating tokenAnalysis results and counting misses
   - `buildJsonOutput()` produces the same data structure for both `--json` flag and `export-results` command
   - Report command follows the same config+ensureWorkingDir pattern as other commands
+---
+
+## 2026-03-31 - US-019
+- Created `src/core/pipeline.ts` with `PipelineStateManager` class
+- State stored in `.agentic-usability/pipeline-state.json` matching PipelineState interface from types.ts
+- `load()` reads existing state or returns fresh initial state; `save()` writes to disk
+- `markTestComplete(stage, testId)` tracks per-test-case completion within a stage (deduplicates)
+- `advanceStage(stage)` transitions the pipeline to the next stage
+- `isTestComplete(stage, testId)` checks individual test completion; `getIncompleteTests(stage, allTestIds)` returns unfinished test IDs using Set for efficient lookup
+- `reset()` clears in-memory state and deletes the state file (caller handles confirmation)
+- `PipelineStage` type derived from `keyof PipelineState['completed']` for type safety on stage parameters
+- Files changed: src/core/pipeline.ts (new), prd.json, progress.txt
+- **Learnings for future iterations:**
+  - `PipelineStateManager` constructor takes the working directory path (from `ensureWorkingDir()`) — not the state file path
+  - `getIncompleteTests()` uses a Set for O(1) lookups instead of Array.includes() — good for large test suites
+  - `reset()` is separate from `load()` — callers (run command) should prompt for confirmation before calling reset
+  - Stage names match the completed object keys: 'generate', 'execute', 'analyze', 'judge'
 ---
