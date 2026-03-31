@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { initCommand } from './commands/init.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -19,9 +20,8 @@ program
 program
   .command('init')
   .description('Initialize a new .agentic-usability.json config file')
-  .action(() => {
-    console.log('Not implemented yet');
-    process.exit(0);
+  .action(async () => {
+    await initCommand();
   });
 
 program

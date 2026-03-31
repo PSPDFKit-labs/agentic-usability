@@ -146,7 +146,7 @@
         "Typecheck passes"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Use commander's built-in prompt or a library like inquirer/prompts for interactive input"
     },
     {

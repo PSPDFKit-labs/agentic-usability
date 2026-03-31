@@ -4,6 +4,8 @@
 - Types are centralized in `src/core/types.ts` — import from there
 - ESM project (`"type": "module"` in package.json) — use `import`, not `require`
 - Quality checks: `npm run typecheck`, `npm run lint`, `npm run build`
+- Commands go in `src/commands/<name>.ts` and export an async function, wired in `src/index.ts`
+- Use `node:readline/promises` for interactive CLI prompts (no extra dependency needed)
 
 ---
 
@@ -43,4 +45,17 @@
   - `resolveSource()` now handles all three source types (local, git, url) — no separate resolver needed
   - URL hash is computed from all URLs joined with newline, so changing the URL list gets a new cache dir
   - Turndown default import works with the `@types/turndown` dev dependency already in the project
+---
+
+## 2026-03-31 - US-008
+- Created `src/commands/init.ts` with interactive prompts using `node:readline/promises`
+- Prompts for: source type (local/git/url) with corresponding fields, publicInfo (docsUrl, packageName, installCommand), agent command (default: claude), targets (name + Docker image, loop), sandbox domain (default: localhost:8080)
+- Validates local paths exist before writing config
+- Writes `.agentic-usability.json` and creates `.agentic-usability/` working directory
+- Updated `src/index.ts` to import and wire the init command (replaces stub)
+- Files changed: src/commands/init.ts (new), src/index.ts (modified)
+- **Learnings for future iterations:**
+  - `node:readline/promises` createInterface works well for simple interactive prompts — no need for inquirer
+  - Commands that replace stubs need to update the import and action in src/index.ts
+  - `ensureWorkingDir()` from config.ts handles .agentic-usability/ directory creation
 ---
