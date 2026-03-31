@@ -12,6 +12,9 @@
 - OpenSandbox SDK: `Sandbox.create()` handles readiness polling via `readyTimeoutSeconds`; `SandboxClient` in `src/sandbox/opensandbox.ts` wraps the SDK for simplified usage
 - Docs fetcher: `fetchAndCacheDocs(publicInfo, options)` from `src/sandbox/docs-fetcher.ts` — caches in `.agentic-usability/cache/docs/` with 24h TTL, truncates to 100KB
 - Workspace scaffolding: `scaffoldWorkspace(client, config, testCase)` from `src/sandbox/scaffolding.ts` — returns log string, layers are optional
+- Results stored in `.agentic-usability/results/<test-id>/` — files: generated-solution.json, agent-output.log, setup.log, error.log
+- Agent install: `getAgentInstallCommand()` in execute.ts maps known agents to npm install commands; custom agents skip install
+- System prompt interpolation: `{{packageName}}` and `{{docsUrl}}` replaced from config.publicInfo
 
 ---
 
@@ -149,4 +152,22 @@
   - Layer 1 (container image) is handled by `SandboxClient.create()` — not part of scaffolding
   - Template files are uploaded with paths relative to the template directory, prefixed with `/workspace/`
   - Global setup script failure throws an error (hard fail); per-test setup failure only logs a warning
+---
+
+## 2026-03-31 - US-014
+- Created `src/commands/execute.ts` with full sandbox test executor and solution extractor
+- Sequential execution: for each test case creates sandbox → scaffolds workspace → uploads PROBLEM.md + DOCS.md → installs agent CLI → runs agent → extracts solution → destroys sandbox
+- Solution extraction: lists files from `/workspace/solution/`, reads each file, builds SolutionFile[] JSON
+- Saves `generated-solution.json`, `agent-output.log`, `setup.log`, and `error.log` (on failure) to `.agentic-usability/results/<test-id>/`
+- Validates OpenSandbox connectivity before starting via `SandboxClient.checkConnectivity()`
+- Agent install command mapped by known adapters (claude → @anthropic-ai/claude-code, codex → @openai/codex, gemini → @google/gemini-cli)
+- System prompt interpolation replaces `{{packageName}}` and `{{docsUrl}}`
+- Updated `src/index.ts` to wire execute command with `--fresh-docs` flag
+- Files changed: src/commands/execute.ts (new), src/index.ts (modified)
+- **Learnings for future iterations:**
+  - Execute command uses first target from config.targets[] — US-015 will add concurrency across targets
+  - Results directory structure: `.agentic-usability/results/<test-id>/` with generated-solution.json, agent-output.log, setup.log, error.log
+  - `getAgentInstallCommand()` returns null for unknown agents — custom agents are assumed pre-installed
+  - Agent prompt instructs the agent to write output to `/workspace/solution/` directory
+  - Docs content is fetched once and reused across all test cases (not per-test)
 ---

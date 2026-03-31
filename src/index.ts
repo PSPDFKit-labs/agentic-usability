@@ -9,6 +9,7 @@ import { generateCommand } from './commands/generate.js';
 import { editCommand } from './commands/edit.js';
 import { exportCommand } from './commands/export.js';
 import { importCommand } from './commands/import.js';
+import { executeCommand } from './commands/execute.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -39,9 +40,9 @@ program
 program
   .command('execute')
   .description('Execute test cases in sandboxed environments with AI agents')
-  .action(() => {
-    console.log('Not implemented yet');
-    process.exit(0);
+  .option('--fresh-docs', 'Bypass documentation cache')
+  .action(async (opts: { freshDocs?: boolean }) => {
+    await executeCommand({ freshDocs: opts.freshDocs });
   });
 
 program

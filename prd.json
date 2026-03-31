@@ -262,7 +262,7 @@
         "Typecheck passes"
       ],
       "priority": 14,
-      "passes": false,
+      "passes": true,
       "notes": "Concurrency is handled separately in US-015. This story runs test cases sequentially."
     },
     {
