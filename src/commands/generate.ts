@@ -6,6 +6,7 @@ import { loadConfig, ensureWorkingDir } from '../core/config.js';
 import { resolveSource } from '../core/source-resolver.js';
 import { createAdapter } from '../agents/adapter.js';
 import { TestCase, Config } from '../core/types.js';
+import { printSuiteTable } from './suite-utils.js';
 
 const DEFAULT_SUITE_FILE = '.agentic-usability/suite.json';
 
@@ -208,4 +209,5 @@ export async function generateCommand(options: { fresh?: boolean } = {}): Promis
   console.log(chalk.green(`\nSuite saved to ${suiteFile}`));
 
   printSummary(testCases);
+  printSuiteTable(testCases);
 }

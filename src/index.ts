@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { initCommand } from './commands/init.js';
 import { generateCommand } from './commands/generate.js';
+import { editCommand } from './commands/edit.js';
+import { exportCommand } from './commands/export.js';
+import { importCommand } from './commands/import.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -76,25 +79,24 @@ program
 program
   .command('export')
   .description('Export the test suite to a file')
-  .action(() => {
-    console.log('Not implemented yet');
-    process.exit(0);
+  .requiredOption('--output <path>', 'Output file path')
+  .action(async (opts: { output: string }) => {
+    await exportCommand({ output: opts.output });
   });
 
 program
   .command('import')
   .description('Import a test suite from a file')
-  .action(() => {
-    console.log('Not implemented yet');
-    process.exit(0);
+  .requiredOption('--input <path>', 'Input file path')
+  .action(async (opts: { input: string }) => {
+    await importCommand({ input: opts.input });
   });
 
 program
   .command('edit')
   .description('Open the test suite in your editor for manual curation')
-  .action(() => {
-    console.log('Not implemented yet');
-    process.exit(0);
+  .action(async () => {
+    await editCommand();
   });
 
 program.parse();
