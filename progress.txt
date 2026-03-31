@@ -1,0 +1,18 @@
+## Codebase Patterns
+- Module resolution uses NodeNext — all local imports must end with `.js` extension
+- Types are centralized in `src/core/types.ts` — import from there
+- ESM project (`"type": "module"` in package.json) — use `import`, not `require`
+- Quality checks: `npm run typecheck`, `npm run lint`, `npm run build`
+
+---
+
+## 2026-03-31 - US-005
+- Implemented AgentAdapter interface and createAdapter() factory in src/agents/adapter.ts
+- Created shared spawn helper in src/agents/spawn.ts (timeout, stdout/stderr capture, error handling)
+- Built-in adapters: ClaudeAdapter (claude.ts), CodexAdapter (codex.ts), GeminiAdapter (gemini.ts)
+- CustomAdapter (custom.ts) interpolates {prompt} and {workDir} in config args
+- **Learnings for future iterations:**
+  - All adapters share the same spawn pattern — use `spawnAgent()` from spawn.ts
+  - createAdapter() maps known command names (claude/codex/gemini) to built-in adapters, falls back to CustomAdapter
+  - AgentConfig has `command` and optional `args` — adapters build their own CLI flags and append config.args
+---
