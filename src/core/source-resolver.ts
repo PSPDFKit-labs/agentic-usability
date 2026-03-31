@@ -1,7 +1,8 @@
-import { access, mkdir } from 'node:fs/promises';
+import { access, mkdir, writeFile, rm } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
+import TurndownService from 'turndown';
 import { Config } from './types.js';
 
 const REPOS_DIR = '.agentic-usability/repos';
@@ -20,9 +21,7 @@ export async function resolveSource(
     case 'git':
       return resolveGit(config, options);
     case 'url':
-      throw new Error(
-        "Source type 'url' is not supported by resolveSource(). Use the URL resolver instead."
-      );
+      return resolveUrl(config, options);
   }
 }
 
@@ -70,6 +69,77 @@ async function resolveGit(
   return appendSubpath(cloneDir, config.source.subpath);
 }
 
+async function resolveUrl(
+  config: Config,
+  options: ResolveOptions
+): Promise<string> {
+  const urls = config.source.urls;
+  if (!urls || urls.length === 0) {
+    throw new Error("Source type 'url' requires a non-empty 'urls' array.");
+  }
+
+  const hash = createHash('sha256')
+    .update(urls.join('\n'))
+    .digest('hex')
+    .slice(0, 12);
+  const destDir = resolve(REPOS_DIR, `url-${hash}`);
+
+  const exists = await dirExists(destDir);
+
+  if (exists && !options.fresh) {
+    return destDir;
+  }
+
+  if (exists && options.fresh) {
+    await rmDir(destDir);
+  }
+
+  await mkdir(destDir, { recursive: true });
+
+  const turndown = new TurndownService();
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        console.warn(`Warning: Failed to fetch ${url} (HTTP ${response.status})`);
+        continue;
+      }
+
+      const contentType = response.headers.get('content-type') ?? '';
+      const body = await response.text();
+      const filename = urlToFilename(url);
+
+      if (contentType.includes('text/html')) {
+        const markdown = turndown.turndown(body);
+        await writeFile(join(destDir, filename + '.md'), markdown, 'utf-8');
+      } else {
+        const ext = contentType.includes('text/markdown') ? '.md' : '.txt';
+        await writeFile(join(destDir, filename + ext), body, 'utf-8');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`Warning: Could not fetch ${url}: ${message}`);
+    }
+  }
+
+  return destDir;
+}
+
+function urlToFilename(url: string): string {
+  // Use URL path to derive a readable filename, falling back to hash
+  try {
+    const parsed = new URL(url);
+    const segments = parsed.pathname.replace(/\/$/, '').split('/').filter(Boolean);
+    if (segments.length > 0) {
+      return segments.join('_').replace(/[^a-zA-Z0-9_.-]/g, '_');
+    }
+  } catch {
+    // fall through to hash
+  }
+  return createHash('sha256').update(url).digest('hex').slice(0, 12);
+}
+
 async function cloneShallow(
   url: string,
   dest: string,
@@ -96,7 +166,6 @@ async function cloneSparse(
   await gitExec(['-C', dest, 'config', 'core.sparseCheckout', 'true']);
 
   // Write sparse checkout paths
-  const { writeFile } = await import('node:fs/promises');
   const sparseFile = join(dest, '.git', 'info', 'sparse-checkout');
   await writeFile(sparseFile, sparse!.join('\n') + '\n', 'utf-8');
 
@@ -133,6 +202,5 @@ async function dirExists(path: string): Promise<boolean> {
 }
 
 async function rmDir(path: string): Promise<void> {
-  const { rm } = await import('node:fs/promises');
   await rm(path, { recursive: true, force: true });
 }
