@@ -16,3 +16,17 @@
   - createAdapter() maps known command names (claude/codex/gemini) to built-in adapters, falls back to CustomAdapter
   - AgentConfig has `command` and optional `args` — adapters build their own CLI flags and append config.args
 ---
+
+## 2026-03-31 - US-006
+- Implemented `resolveSource()` in src/core/source-resolver.ts
+- Handles 'local' type: resolves to absolute path, appends subpath, validates directory exists
+- Handles 'git' type: clones to `.agentic-usability/repos/<url-hash>/` with `--depth 1`
+- Git sparse checkout supported via init + remote + sparse-checkout config pattern
+- Caching: skips clone if directory exists; `fresh` option forces re-clone
+- Files changed: src/core/source-resolver.ts (new)
+- **Learnings for future iterations:**
+  - `resolveSource()` accepts `ResolveOptions { fresh?: boolean }` — future commands should pass CLI --fresh flag through
+  - URL hashing uses sha256 truncated to 12 chars for directory names
+  - The 'url' source type is NOT handled here — it's in US-007's separate resolver
+  - Git sparse checkout uses the older `.git/info/sparse-checkout` file approach (works with all git versions)
+---
