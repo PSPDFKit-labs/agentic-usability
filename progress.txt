@@ -7,6 +7,9 @@
 - Commands go in `src/commands/<name>.ts` and export an async function, wired in `src/index.ts`
 - Use `node:readline/promises` for interactive CLI prompts (no extra dependency needed)
 - Agent JSON output parsing: use `extractJson()` pattern to strip markdown fences and find array boundaries, then retry once on parse failure
+- Shared suite validation and table printing lives in `src/commands/suite-utils.ts` — reuse for any command that reads/writes test suites
+- cli-table3 imported as `import Table from 'cli-table3'` (default export)
+- OpenSandbox SDK: `Sandbox.create()` handles readiness polling via `readyTimeoutSeconds`; `SandboxClient` in `src/sandbox/opensandbox.ts` wraps the SDK for simplified usage
 
 ---
 
@@ -77,4 +80,40 @@
   - Generator defaults to `{ command: 'claude' }` if config.agents.generator is not set
   - `extractJson()` strips markdown fences and finds JSON array boundaries — useful pattern for any agent output parsing
   - Commands with `--fresh` flag pass it through to `resolveSource(config, { fresh })` for cache bypass
+---
+
+## 2026-03-31 - US-010
+- Created `src/commands/edit.ts`: opens suite.json in $EDITOR (falls back to vi), re-validates on save, prints summary table
+- Created `src/commands/export.ts`: copies suite.json to `--output <path>`
+- Created `src/commands/import.ts`: validates input file against TestCase[] schema, prompts before overwriting, prints summary table
+- Created `src/commands/suite-utils.ts`: shared `validateTestSuite()` and `printSuiteTable()` used by edit, import, and generate commands
+- Updated `src/index.ts` to wire edit, export, import commands (replaced stubs)
+- Updated `src/commands/generate.ts` to also print the summary table after generation
+- Files changed: src/commands/edit.ts (new), src/commands/export.ts (new), src/commands/import.ts (new), src/commands/suite-utils.ts (new), src/commands/generate.ts (modified), src/index.ts (modified)
+- **Learnings for future iterations:**
+  - Extracted shared test suite validation into suite-utils.ts to avoid duplicating validation logic across commands
+  - `cli-table3` works well for terminal tables — `Table` is the default export
+  - `requiredOption()` in commander enforces required flags at the framework level (no manual check needed)
+  - Import uses `node:readline/promises` for overwrite confirmation, same pattern as init command
+---
+
+## 2026-03-31 - US-011
+- Created `src/sandbox/opensandbox.ts` with `SandboxClient` class wrapping `@alibaba-group/opensandbox` SDK
+- Constructor takes `SandboxConfig` (domain, apiKey) and creates `ConnectionConfig`
+- `create(image, env, timeout)` creates a sandbox via `Sandbox.create()` with 60s ready timeout
+- `uploadFiles()` wraps `sandbox.files.writeFiles()` for uploading file content
+- `runCommand()` wraps `sandbox.commands.run()`, collects stdout/stderr from OutputMessage logs, returns `CommandResult`
+- `listFiles()` wraps `sandbox.files.search()` to list files by path
+- `readFile()` wraps `sandbox.files.readFile()` for reading file content
+- `destroy()` calls `sandbox.kill()` then `sandbox.close()` (best-effort, ignores errors)
+- `checkConnectivity()` static method fetches the sandboxes endpoint to verify server is reachable; throws descriptive error with Docker setup instructions
+- All SDK errors wrapped with actionable messages describing the failed operation
+- Exports `CommandResult` interface for use by other modules
+- Files changed: src/sandbox/opensandbox.ts (new)
+- **Learnings for future iterations:**
+  - OpenSandbox `Sandbox.create()` handles readiness polling internally via `readyTimeoutSeconds` option — no manual polling needed
+  - `commands.run()` returns an `Execution` object with `logs.stdout[]` and `logs.stderr[]` as `OutputMessage[]` — join `.text` to get full output
+  - `files.search({ path })` returns `FileInfo[]` — use for directory listing
+  - `sandbox.kill()` may throw if sandbox is already gone — always wrap in try/catch for cleanup
+  - `ConnectionConfig.getBaseUrl()` returns the full API base URL (useful for connectivity checks)
 ---
