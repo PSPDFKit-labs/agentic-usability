@@ -18,6 +18,9 @@
 - WorkerPool: `new WorkerPool(concurrency)` from `src/sandbox/worker-pool.ts` — `run(testCases, executeFn, onProgress)` with retry (2 retries, 1s/3s backoff) and SIGINT graceful shutdown
 - Token analysis: `analyzeTokens(solution, targetApis, expectedTokens, testId, target)` from `src/scoring/tokens.ts` — targetApis use word-boundary regex, expectedTokens support full regex
 - Analyze command loads `generated-solution.json` from results dir, saves `token-analysis.json` per test case
+- Judge scoring: `runJudge(testCase, generatedSolution, judgeConfig, target)` from `src/scoring/judge.ts` — returns JudgeScore, retries once on malformed JSON
+- `formatSolution(files)` from `src/scoring/judge.ts` — renders SolutionFile[] as `--- File: path ---\ncontent` blocks
+- Judge command saves `judge.json` per test case; errors saved as `judge-error.log`
 
 ---
 
@@ -210,4 +213,23 @@
   - Regex escaping helper `escapeRegex()` used for targetApis to prevent regex injection from API names
   - `loadTestSuite()` pattern duplicated from execute.ts — could be extracted to a shared util in the future
   - Empty solutions still produce a token-analysis.json (with 0% coverage) so downstream report always has data
+---
+
+## 2026-03-31 - US-017
+- Created `src/scoring/judge.ts` with `formatSolution()` and `runJudge()` functions
+- `formatSolution()` renders SolutionFile[] as readable `--- File: path ---\ncontent` blocks
+- `runJudge()` builds a structured judge prompt with problem statement + reference + generated solutions, invokes judge agent, parses JSON response
+- Uses `extractJsonObject()` (object variant of extractJson pattern) to strip markdown fences and find JSON boundaries
+- Validates JudgeScore fields: four numeric scores (0-100), functionalMatch boolean, notes string
+- Retries once with correction prompt on malformed JSON (same pattern as generate.ts)
+- Created `src/commands/judge.ts` that iterates test cases, loads generated solutions, runs judge, saves `judge.json` per test case
+- Missing solutions skipped with a warning; judge failures saved as `judge-error.log`
+- `--skip-judge` flag allows skipping the judge stage entirely
+- Updated `src/index.ts` to wire judge command (replaced stub)
+- Files changed: src/scoring/judge.ts (new), src/commands/judge.ts (new), src/index.ts (modified)
+- **Learnings for future iterations:**
+  - Judge defaults to `{ command: 'claude' }` if config.agents.judge is not set
+  - `extractJsonObject()` finds `{...}` boundaries instead of `[...]` — use for single-object agent responses
+  - Judge errors are non-fatal per test case — the command continues with remaining tests
+  - `loadTestSuite()` pattern still duplicated — now in analyze.ts and judge.ts (should extract to shared util)
 ---

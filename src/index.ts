@@ -11,6 +11,7 @@ import { exportCommand } from './commands/export.js';
 import { importCommand } from './commands/import.js';
 import { executeCommand } from './commands/execute.js';
 import { analyzeCommand } from './commands/analyze.js';
+import { judgeCommand } from './commands/judge.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -56,9 +57,9 @@ program
 program
   .command('judge')
   .description('Have an LLM compare reference and generated solutions')
-  .action(() => {
-    console.log('Not implemented yet');
-    process.exit(0);
+  .option('--skip-judge', 'Skip the judge stage')
+  .action(async (opts: { skipJudge?: boolean }) => {
+    await judgeCommand({ skipJudge: opts.skipJudge });
   });
 
 program
