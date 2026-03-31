@@ -15,6 +15,7 @@
 - Results stored in `.agentic-usability/results/<test-id>/` — files: generated-solution.json, agent-output.log, setup.log, error.log
 - Agent install: `getAgentInstallCommand()` in execute.ts maps known agents to npm install commands; custom agents skip install
 - System prompt interpolation: `{{packageName}}` and `{{docsUrl}}` replaced from config.publicInfo
+- WorkerPool: `new WorkerPool(concurrency)` from `src/sandbox/worker-pool.ts` — `run(testCases, executeFn, onProgress)` with retry (2 retries, 1s/3s backoff) and SIGINT graceful shutdown
 
 ---
 
@@ -170,4 +171,22 @@
   - `getAgentInstallCommand()` returns null for unknown agents — custom agents are assumed pre-installed
   - Agent prompt instructs the agent to write output to `/workspace/solution/` directory
   - Docs content is fetched once and reused across all test cases (not per-test)
+---
+
+## 2026-03-31 - US-015
+- Created `src/sandbox/worker-pool.ts` with `WorkerPool` class for parallel sandbox execution
+- Constructor takes concurrency limit (default 3, from `config.sandbox.concurrency`)
+- `run(testCases, executeFn, onProgress)` processes queue with N parallel workers using async worker loop pattern
+- Failed executions retry up to 2 times with exponential backoff (1s, 3s)
+- Progress callback reports `ProgressInfo` (completed, running, queued, failed, total) plus event type (start/done/fail)
+- SIGINT handler sets abort flag — running workers finish, queued items are skipped
+- Updated `src/commands/execute.ts` to use WorkerPool instead of sequential for loop
+- Terminal progress shows `[N/total] TC-XXX (difficulty) — running/done/failed [elapsed]` with color coding
+- Added `formatElapsed()` helper for human-readable elapsed time
+- Files changed: src/sandbox/worker-pool.ts (new), src/commands/execute.ts (modified)
+- **Learnings for future iterations:**
+  - WorkerPool uses a simple async worker loop pattern: each worker pops from a shared queue until empty or aborted
+  - Error handling in executeFn: the pool retries, but callers should still save error.log before re-throwing
+  - ora spinner replaced with console.log for progress since multiple concurrent tasks can't share a single spinner
+  - Concurrency defaults to 3 via `config.sandbox.concurrency ?? 3` in execute command
 ---

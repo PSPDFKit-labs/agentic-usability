@@ -7,6 +7,7 @@ import { createAdapter } from '../agents/adapter.js';
 import { SandboxClient } from '../sandbox/opensandbox.js';
 import { fetchAndCacheDocs } from '../sandbox/docs-fetcher.js';
 import { scaffoldWorkspace } from '../sandbox/scaffolding.js';
+import { WorkerPool } from '../sandbox/worker-pool.js';
 import type { Config, TestCase, SolutionFile } from '../core/types.js';
 
 const DEFAULT_SUITE_FILE = '.agentic-usability/suite.json';
@@ -193,29 +194,34 @@ export async function executeCommand(options: {
     : '';
   spinner.succeed('Documentation ready');
 
-  // Use the first target (sequential execution per US-014 — concurrency in US-015)
   const target = config.targets[0];
+  const concurrency = config.sandbox.concurrency ?? 3;
   console.log(chalk.bold(`\nTarget: ${target.name} (${target.image})`));
+  console.log(chalk.dim(`Concurrency: ${concurrency}\n`));
 
-  let passed = 0;
-  let failed = 0;
+  const startTime = Date.now();
+  const pool = new WorkerPool(concurrency);
 
-  for (let i = 0; i < testCases.length; i++) {
-    const tc = testCases[i];
-    const label = `[${i + 1}/${testCases.length}] ${tc.id} (${tc.difficulty})`;
-
-    spinner.start(`${label} — running...`);
+  const executeFn = async (tc: TestCase): Promise<void> => {
     try {
       await executeTestCase(tc, target, config, docsContent);
-      spinner.succeed(`${label} — done`);
-      passed++;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      spinner.fail(`${label} — failed: ${message}`);
       await saveResult(tc.id, 'error.log', message);
-      failed++;
+      throw err;
     }
-  }
+  };
+
+  const { passed, failed } = await pool.run(testCases, executeFn, (info, tc, event) => {
+    const elapsed = formatElapsed(Date.now() - startTime);
+    if (event === 'start') {
+      console.log(chalk.dim(`[${info.completed + info.running}/${info.total}] ${tc.id} (${tc.difficulty}) — running... [${elapsed}]`));
+    } else if (event === 'done') {
+      console.log(chalk.green(`[${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — done [${elapsed}]`));
+    } else {
+      console.log(chalk.red(`[${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — failed [${elapsed}]`));
+    }
+  });
 
   console.log('');
   console.log(chalk.bold('Execution Summary'));
@@ -224,5 +230,13 @@ export async function executeCommand(options: {
   if (failed > 0) {
     console.log(chalk.red(`  Failed: ${failed}`));
   }
+  console.log(chalk.dim(`  Elapsed: ${formatElapsed(Date.now() - startTime)}`));
   console.log(`  Results saved to ${resolve(RESULTS_DIR)}`);
+}
+
+function formatElapsed(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return minutes > 0 ? `${minutes}m${secs}s` : `${secs}s`;
 }
