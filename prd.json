@@ -242,7 +242,7 @@
         "Typecheck passes"
       ],
       "priority": 13,
-      "passes": false,
+      "passes": true,
       "notes": "Layer 1 (container image) is handled by SandboxClient.create() — not part of this story"
     },
     {

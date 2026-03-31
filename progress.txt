@@ -11,6 +11,7 @@
 - cli-table3 imported as `import Table from 'cli-table3'` (default export)
 - OpenSandbox SDK: `Sandbox.create()` handles readiness polling via `readyTimeoutSeconds`; `SandboxClient` in `src/sandbox/opensandbox.ts` wraps the SDK for simplified usage
 - Docs fetcher: `fetchAndCacheDocs(publicInfo, options)` from `src/sandbox/docs-fetcher.ts` — caches in `.agentic-usability/cache/docs/` with 24h TTL, truncates to 100KB
+- Workspace scaffolding: `scaffoldWorkspace(client, config, testCase)` from `src/sandbox/scaffolding.ts` — returns log string, layers are optional
 
 ---
 
@@ -133,4 +134,19 @@
   - Cache uses sha256-truncated-to-12-chars of URL for filenames, same pattern as source-resolver
   - Turndown reuse: same import pattern as source-resolver (`import TurndownService from 'turndown'`)
   - Truncation cuts at last newline boundary to avoid mid-line breaks
+---
+
+## 2026-03-31 - US-013
+- Created `src/sandbox/scaffolding.ts` with `scaffoldWorkspace()` function
+- Implements 3 optional layers: Template (uploads local directory), Global Setup (uploads and runs script), Per-Test Setup (runs testCase.setupInstructions)
+- Returns a log string that callers can save as setup.log
+- Template layer uses `readDirRecursive()` helper to recursively read all files and upload to `/workspace/`
+- Global setup script uploaded as `/workspace/.setup.sh`, chmod'd, and executed; fails if exit code is non-zero
+- Per-test setup logs a warning on non-zero exit but does not throw
+- Files changed: src/sandbox/scaffolding.ts (new), prd.json, progress.txt
+- **Learnings for future iterations:**
+  - `scaffoldWorkspace()` returns `Promise<string>` (log string), not `Promise<void>` — callers should save this as setup.log
+  - Layer 1 (container image) is handled by `SandboxClient.create()` — not part of scaffolding
+  - Template files are uploaded with paths relative to the template directory, prefixed with `/workspace/`
+  - Global setup script failure throws an error (hard fail); per-test setup failure only logs a warning
 ---
