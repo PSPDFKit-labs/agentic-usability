@@ -12,6 +12,7 @@ import { importCommand } from './commands/import.js';
 import { executeCommand } from './commands/execute.js';
 import { analyzeCommand } from './commands/analyze.js';
 import { judgeCommand } from './commands/judge.js';
+import { reportCommand, exportResultsCommand } from './commands/report.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -65,9 +66,9 @@ program
 program
   .command('report')
   .description('Display a terminal scorecard of benchmark results')
-  .action(() => {
-    console.log('Not implemented yet');
-    process.exit(0);
+  .option('--json', 'Output raw structured JSON instead of the table')
+  .action(async (opts: { json?: boolean }) => {
+    await reportCommand({ json: opts.json });
   });
 
 program
@@ -99,6 +100,14 @@ program
   .description('Open the test suite in your editor for manual curation')
   .action(async () => {
     await editCommand();
+  });
+
+program
+  .command('export-results')
+  .description('Export all benchmark results to a single JSON file')
+  .requiredOption('--output <path>', 'Output file path')
+  .action(async (opts: { output: string }) => {
+    await exportResultsCommand({ output: opts.output });
   });
 
 program.parse();

@@ -21,6 +21,7 @@
 - Judge scoring: `runJudge(testCase, generatedSolution, judgeConfig, target)` from `src/scoring/judge.ts` — returns JudgeScore, retries once on malformed JSON
 - `formatSolution(files)` from `src/scoring/judge.ts` — renders SolutionFile[] as `--- File: path ---\ncontent` blocks
 - Judge command saves `judge.json` per test case; errors saved as `judge-error.log`
+- Report: `reportCommand({ json })` from `src/commands/report.ts` — reads all results and prints scorecard or JSON; `exportResultsCommand({ output })` writes results to file
 
 ---
 
@@ -232,4 +233,24 @@
   - `extractJsonObject()` finds `{...}` boundaries instead of `[...]` — use for single-object agent responses
   - Judge errors are non-fatal per test case — the command continues with remaining tests
   - `loadTestSuite()` pattern still duplicated — now in analyze.ts and judge.ts (should extract to shared util)
+---
+
+## 2026-03-31 - US-018
+- Created `src/commands/report.ts` with `reportCommand()` and `exportResultsCommand()` functions
+- Reads all results from `.agentic-usability/results/` (token-analysis.json, judge.json, generated-solution.json per test)
+- Displays terminal scorecard using cli-table3: Test ID, Difficulty, API Coverage, Token Coverage, Similarity, Problem (truncated)
+- Aggregate section: average API coverage, average token coverage, average similarity
+- Breakdown by difficulty table
+- Worst performing APIs section: targetApis ranked by miss rate across all solutions
+- Missed tokens section: expectedTokens ranked by miss rate
+- `--json` flag outputs raw structured JSON to stdout instead of the table
+- `export-results --output <path>` command writes all results to a single JSON file
+- Handles missing results gracefully (shows 'N/A' for tests without results)
+- Updated `src/index.ts` to wire report and export-results commands
+- Files changed: src/commands/report.ts (new), src/index.ts (modified), prd.json, progress.txt
+- **Learnings for future iterations:**
+  - `loadTestSuite()` pattern now duplicated in analyze.ts, judge.ts, and report.ts — all three should share a util
+  - `computeAggregates()` builds worstApis and missedTokens by iterating tokenAnalysis results and counting misses
+  - `buildJsonOutput()` produces the same data structure for both `--json` flag and `export-results` command
+  - Report command follows the same config+ensureWorkingDir pattern as other commands
 ---
