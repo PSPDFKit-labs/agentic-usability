@@ -10,6 +10,7 @@ import { editCommand } from './commands/edit.js';
 import { exportCommand } from './commands/export.js';
 import { importCommand } from './commands/import.js';
 import { executeCommand } from './commands/execute.js';
+import { analyzeCommand } from './commands/analyze.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -48,9 +49,8 @@ program
 program
   .command('analyze')
   .description('Analyze generated solutions for expected SDK API calls and patterns')
-  .action(() => {
-    console.log('Not implemented yet');
-    process.exit(0);
+  .action(async () => {
+    await analyzeCommand();
   });
 
 program

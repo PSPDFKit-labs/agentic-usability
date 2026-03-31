@@ -16,6 +16,8 @@
 - Agent install: `getAgentInstallCommand()` in execute.ts maps known agents to npm install commands; custom agents skip install
 - System prompt interpolation: `{{packageName}}` and `{{docsUrl}}` replaced from config.publicInfo
 - WorkerPool: `new WorkerPool(concurrency)` from `src/sandbox/worker-pool.ts` — `run(testCases, executeFn, onProgress)` with retry (2 retries, 1s/3s backoff) and SIGINT graceful shutdown
+- Token analysis: `analyzeTokens(solution, targetApis, expectedTokens, testId, target)` from `src/scoring/tokens.ts` — targetApis use word-boundary regex, expectedTokens support full regex
+- Analyze command loads `generated-solution.json` from results dir, saves `token-analysis.json` per test case
 
 ---
 
@@ -189,4 +191,23 @@
   - Error handling in executeFn: the pool retries, but callers should still save error.log before re-throwing
   - ora spinner replaced with console.log for progress since multiple concurrent tasks can't share a single spinner
   - Concurrency defaults to 3 via `config.sandbox.concurrency ?? 3` in execute command
+---
+
+## 2026-03-31 - US-016
+- Created `src/scoring/tokens.ts` with `analyzeTokens()` function for code token analysis
+- targetApis matched with word-boundary regex (`\b`) to avoid false positives; escaped for regex special chars
+- expectedTokens support full regex patterns (falls back to escaped literal on invalid regex)
+- Each TokenResult includes token string, found boolean, and foundIn path (first matching file)
+- apiCoverage and tokenCoverage calculated as percentages; defaults to 100% when no apis/tokens expected
+- Created `src/commands/analyze.ts` that loads test suite and generated solutions, runs analysis per test case
+- Saves `token-analysis.json` to `.agentic-usability/results/<test-id>/` per test case
+- Missing solutions result in 0% coverage with a yellow warning
+- Prints per-test summary: `TC-001: API 100% (3/3), Tokens 85% (6/7)`
+- Updated `src/index.ts` to wire analyze command (replaced stub)
+- Files changed: src/scoring/tokens.ts (new), src/commands/analyze.ts (new), src/index.ts (modified)
+- **Learnings for future iterations:**
+  - `analyzeTokens()` takes testId and target as params to populate the TokenAnalysis result
+  - Regex escaping helper `escapeRegex()` used for targetApis to prevent regex injection from API names
+  - `loadTestSuite()` pattern duplicated from execute.ts — could be extracted to a shared util in the future
+  - Empty solutions still produce a token-analysis.json (with 0% coverage) so downstream report always has data
 ---
