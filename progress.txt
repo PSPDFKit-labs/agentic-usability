@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Module resolution uses NodeNext — all local imports must end with `.js` extension
+- Turndown is imported as `import TurndownService from 'turndown'` (default export)
 - Types are centralized in `src/core/types.ts` — import from there
 - ESM project (`"type": "module"` in package.json) — use `import`, not `require`
 - Quality checks: `npm run typecheck`, `npm run lint`, `npm run build`
@@ -27,6 +28,19 @@
 - **Learnings for future iterations:**
   - `resolveSource()` accepts `ResolveOptions { fresh?: boolean }` — future commands should pass CLI --fresh flag through
   - URL hashing uses sha256 truncated to 12 chars for directory names
-  - The 'url' source type is NOT handled here — it's in US-007's separate resolver
   - Git sparse checkout uses the older `.git/info/sparse-checkout` file approach (works with all git versions)
+---
+
+## 2026-03-31 - US-007
+- Added URL source type handling to `resolveSource()` in src/core/source-resolver.ts
+- Fetches each URL via `fetch()`, converts HTML to markdown using Turndown, saves to `.agentic-usability/repos/url-<hash>/`
+- Non-HTML responses saved as-is (`.md` for markdown content-type, `.txt` otherwise)
+- Caching: skips fetch if directory exists; `fresh` option forces re-fetch
+- Unreachable URLs log a warning and continue processing remaining URLs
+- Added `urlToFilename()` helper that derives readable filenames from URL paths
+- Files changed: src/core/source-resolver.ts (modified)
+- **Learnings for future iterations:**
+  - `resolveSource()` now handles all three source types (local, git, url) — no separate resolver needed
+  - URL hash is computed from all URLs joined with newline, so changing the URL list gets a new cache dir
+  - Turndown default import works with the `@types/turndown` dev dependency already in the project
 ---
