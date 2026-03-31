@@ -1,3 +1,51 @@
 # Ralph Progress Log
 Started: Tue Mar 31 14:45:00 +07 2026
 ---
+
+## Codebase Patterns
+- Project uses ESM (`"type": "module"`) with NodeNext module resolution
+- Build with `npm run build` (tsc), typecheck with `npm run typecheck` (tsc --noEmit), lint with `npm run lint` (eslint)
+- Directory structure: src/{commands,core,agents,sandbox,scoring,reporting}
+- ESLint uses flat config format (eslint.config.js) with typescript-eslint
+- Imports must use `.js` extension for NodeNext resolution (e.g., `import { Config } from '../core/types.js'`)
+---
+
+## 2026-03-31 - US-001
+- Initialized TypeScript project with all required tooling
+- Files changed: package.json, tsconfig.json, eslint.config.js, .gitignore, src/index.ts
+- **Learnings for future iterations:**
+  - `@alibaba-group/opensandbox` is the sandbox dependency (not `@anthropic-ai/sdk`)
+  - ESLint 9 uses flat config format — need `@eslint/js` + `typescript-eslint` packages
+  - The `bin` entry points to `dist/index.js` — remember the shebang in src/index.ts
+  - Only master branch exists locally (no `main`), created feature branch from master
+---
+
+## 2026-03-31 - US-002
+- Defined all shared TypeScript interfaces in src/core/types.ts
+- Files changed: src/core/types.ts
+- **Learnings for future iterations:**
+  - Config interface uses nested sub-interfaces (SourceConfig, PublicInfo, AgentConfig, TargetConfig, WorkspaceConfig, SandboxConfig, OutputConfig) for cleanliness
+  - PipelineState.completed uses string arrays (test IDs) per stage for tracking completion
+  - All types are exported individually from src/core/types.ts — import with `import { Type } from '../core/types.js'` (remember .js extension for NodeNext)
+---
+
+## 2026-03-31 - US-003
+- Implemented config loader and validator in src/core/config.ts
+- Files changed: src/core/config.ts
+- **Learnings for future iterations:**
+  - Config file is `.agentic-usability.json` in cwd, working dir is `.agentic-usability/`
+  - `loadConfig()` accepts optional `cwd` param (defaults to `process.cwd()`)
+  - `ensureWorkingDir()` creates `.agentic-usability/` directory if missing
+  - Validation checks: source.type must be local/git/url with matching required fields, at least one target, sandbox.domain required
+  - The config validator uses runtime type checks (no schema library) — cast via `as unknown as Config` after validation
+---
+
+## 2026-03-31 - US-004
+- Implemented CLI entry point with commander, all 10 subcommands as stubs
+- Files changed: src/index.ts
+- **Learnings for future iterations:**
+  - Version is read from package.json via `readFileSync(join(__dirname, '..', 'package.json'))` — uses `__dirname` derived from `import.meta.url`
+  - All subcommands are inline in `src/index.ts` for now — future stories will replace stubs with imports from `src/commands/`
+  - Commander's `.parse()` is called at the end with no arguments (defaults to `process.argv`)
+  - Each stub does `console.log('Not implemented yet'); process.exit(0);`
+---
