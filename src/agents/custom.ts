@@ -4,6 +4,7 @@ import { spawnAgent } from './spawn.js';
 
 export class CustomAdapter implements AgentAdapter {
   readonly name: string;
+  readonly supportsSchema = false;
   private readonly config: AgentConfig;
 
   constructor(config: AgentConfig) {
@@ -20,5 +21,10 @@ export class CustomAdapter implements AgentAdapter {
       cwd: workDir,
       env,
     });
+  }
+
+  async executeWithSchema(prompt: string, _schema: object, workDir: string, env?: Record<string, string>): Promise<AgentResult> {
+    // Custom agents don't support schema constraints — schema is already in the prompt text
+    return this.execute(prompt, workDir, env);
   }
 }

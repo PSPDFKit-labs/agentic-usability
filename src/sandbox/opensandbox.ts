@@ -2,7 +2,6 @@ import {
   Sandbox,
   ConnectionConfig,
   type SandboxCreateOptions,
-  SandboxException,
 } from '@alibaba-group/opensandbox';
 import type { SandboxConfig } from '../core/types.js';
 
@@ -75,6 +74,12 @@ export class SandboxClient {
     }
   }
 
+  async runCommandTimed(cmd: string): Promise<CommandResult & { durationMs: number }> {
+    const start = Date.now();
+    const result = await this.runCommand(cmd);
+    return { ...result, durationMs: Date.now() - start };
+  }
+
   async listFiles(path: string): Promise<string[]> {
     const sbx = this.requireSandbox();
     try {
@@ -120,7 +125,7 @@ export class SandboxClient {
     });
     try {
       const baseUrl = conn.getBaseUrl();
-      const response = await fetch(`${baseUrl}/sandboxes`, {
+      const response = await fetch(`${baseUrl}/health`, {
         method: 'GET',
         signal: AbortSignal.timeout(5000),
       });
@@ -128,23 +133,15 @@ export class SandboxClient {
         throw new Error(`HTTP ${response.status}`);
       }
     } catch (err) {
-      if (err instanceof SandboxException) {
-        throw new Error(
-          `OpenSandbox server unreachable at '${config.domain}'. ` +
-            `Ensure the server is running:\n` +
-            `  1. Install: docker pull ghcr.io/alibaba/opensandbox\n` +
-            `  2. Run: docker run -d -p 8080:8080 ghcr.io/alibaba/opensandbox\n` +
-            `  3. Verify: curl http://${config.domain}/v1/sandboxes\n` +
-            `Error: ${err.message}`,
-        );
-      }
+      const message = err instanceof Error ? err.message : String(err);
       throw new Error(
         `OpenSandbox server unreachable at '${config.domain}'. ` +
           `Ensure the server is running:\n` +
-          `  1. Install: docker pull ghcr.io/alibaba/opensandbox\n` +
-          `  2. Run: docker run -d -p 8080:8080 ghcr.io/alibaba/opensandbox\n` +
-          `  3. Verify: curl http://${config.domain}/v1/sandboxes\n` +
-          `Error: ${err instanceof Error ? err.message : String(err)}`,
+          `  1. Install: pip install opensandbox-server (or: uv tool install opensandbox-server)\n` +
+          `  2. Init config: opensandbox-server init-config ~/.sandbox.toml --example docker\n` +
+          `  3. Run: opensandbox-server\n` +
+          `  4. Verify: curl http://${config.domain}/health\n` +
+          `Error: ${message}`,
       );
     } finally {
       await conn.closeTransport();

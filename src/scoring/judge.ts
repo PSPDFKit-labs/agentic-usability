@@ -1,6 +1,33 @@
 import type { SolutionFile, JudgeScore, TestCase, AgentConfig } from '../core/types.js';
 import { createAdapter } from '../agents/adapter.js';
 
+const JUDGE_SCHEMA = {
+  type: 'object',
+  properties: {
+    functionalEquivalence: { type: 'number', minimum: 0, maximum: 100 },
+    apiCorrectness: { type: 'number', minimum: 0, maximum: 100 },
+    idiomaticUsage: { type: 'number', minimum: 0, maximum: 100 },
+    overallSimilarity: { type: 'number', minimum: 0, maximum: 100 },
+    functionalMatch: { type: 'boolean' },
+    notes: { type: 'string' },
+  },
+  required: ['functionalEquivalence', 'apiCorrectness', 'idiomaticUsage', 'overallSimilarity', 'functionalMatch', 'notes'],
+  additionalProperties: false,
+};
+
+const SCHEMA_DESCRIPTION = `
+Output ONLY a valid JSON object matching this schema:
+{
+  "functionalEquivalence": number (0-100),
+  "apiCorrectness": number (0-100),
+  "idiomaticUsage": number (0-100),
+  "overallSimilarity": number (0-100),
+  "functionalMatch": boolean,
+  "notes": string
+}
+
+No markdown fences, no explanation — just the raw JSON object.`;
+
 export function formatSolution(files: SolutionFile[]): string {
   return files
     .map((f) => `--- File: ${f.path} ---\n${f.content}`)
@@ -28,8 +55,7 @@ Compare the generated solution to the reference solution and score it on the fol
 4. **overallSimilarity** (0-100): Overall similarity to the reference solution in approach and quality.
 5. **functionalMatch** (boolean): Does the generated solution functionally achieve the same goal?
 6. **notes** (string): Brief explanation of your scoring rationale.
-
-Output ONLY a valid JSON object with these fields. No markdown fences, no explanation — just the raw JSON object.`;
+${SCHEMA_DESCRIPTION}`;
 }
 
 function buildRetryPrompt(originalPrompt: string, error: string): string {
@@ -81,6 +107,31 @@ function validateJudgeScore(obj: unknown): string[] {
   return errors;
 }
 
+function parseJudgeOutput(stdout: string, supportsSchema: boolean): { parsed: unknown } | { error: string } {
+  if (supportsSchema) {
+    // Schema-supporting agents should return clean JSON
+    try {
+      return { parsed: JSON.parse(stdout) };
+    } catch (err) {
+      // Fall through to extraction as a safety net
+      const extracted = extractJsonObject(stdout);
+      try {
+        return { parsed: JSON.parse(extracted) };
+      } catch {
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+  }
+
+  // Non-schema agents: extract JSON from free-form text
+  const extracted = extractJsonObject(stdout);
+  try {
+    return { parsed: JSON.parse(extracted) };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function runJudge(
   testCase: TestCase,
   generatedSolution: SolutionFile[],
@@ -94,34 +145,28 @@ export async function runJudge(
 
   const prompt = buildJudgePrompt(testCase, referenceSolutionText, generatedSolutionText);
 
-  let result = await adapter.execute(prompt, process.cwd());
+  // Use schema-constrained output when available
+  let result = await adapter.executeWithSchema(prompt, JUDGE_SCHEMA, process.cwd());
 
-  let jsonText = extractJsonObject(result.stdout);
-  let parsed: unknown;
+  let parseResult = parseJudgeOutput(result.stdout, adapter.supportsSchema);
 
-  try {
-    parsed = JSON.parse(jsonText);
-  } catch (err) {
-    const parseError = err instanceof Error ? err.message : String(err);
-
-    const retryPrompt = buildRetryPrompt(prompt, parseError);
-    result = await adapter.execute(retryPrompt, process.cwd());
-
-    jsonText = extractJsonObject(result.stdout);
-    try {
-      parsed = JSON.parse(jsonText);
-    } catch (retryErr) {
-      const retryParseError = retryErr instanceof Error ? retryErr.message : String(retryErr);
-      throw new Error(`Judge output is not valid JSON after retry: ${retryParseError}`);
-    }
+  // Retry for non-schema agents on parse failure
+  if ('error' in parseResult && !adapter.supportsSchema) {
+    const retryPrompt = buildRetryPrompt(prompt, parseResult.error);
+    result = await adapter.executeWithSchema(retryPrompt, JUDGE_SCHEMA, process.cwd());
+    parseResult = parseJudgeOutput(result.stdout, adapter.supportsSchema);
   }
 
-  const validationErrors = validateJudgeScore(parsed);
+  if ('error' in parseResult) {
+    throw new Error(`Judge output is not valid JSON: ${parseResult.error}`);
+  }
+
+  const validationErrors = validateJudgeScore(parseResult.parsed);
   if (validationErrors.length > 0) {
     throw new Error(`Judge output validation failed:\n${validationErrors.join('\n')}`);
   }
 
-  const score = parsed as Record<string, unknown>;
+  const score = parseResult.parsed as Record<string, unknown>;
 
   return {
     testId: testCase.id,

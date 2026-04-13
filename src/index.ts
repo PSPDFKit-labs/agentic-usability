@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
+import chalk from 'chalk';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { loadDotenv } from './core/env.js';
 import { initCommand } from './commands/init.js';
 import { generateCommand } from './commands/generate.js';
 import { editCommand } from './commands/edit.js';
@@ -113,4 +115,11 @@ program
     await exportResultsCommand({ output: opts.output });
   });
 
-program.parse();
+// Load .env file before running commands (shell env takes precedence)
+await loadDotenv();
+
+program.parseAsync().catch((err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(chalk.red(`Error: ${message}`));
+  process.exitCode = 1;
+});

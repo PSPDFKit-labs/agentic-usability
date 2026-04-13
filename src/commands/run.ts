@@ -1,54 +1,22 @@
 import chalk from 'chalk';
 import { createInterface } from 'node:readline/promises';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
 import { loadConfig, ensureWorkingDir } from '../core/config.js';
 import { PipelineStateManager } from '../core/pipeline.js';
+import { loadTestSuite, loadSolution, saveResult, formatElapsed } from '../core/suite-io.js';
 import { generateCommand } from './generate.js';
 import { reportCommand } from './report.js';
-import { executeTestCase, loadTestSuite } from './execute.js';
+import { executeTestCase } from './execute.js';
 import { SandboxClient } from '../sandbox/opensandbox.js';
 import { fetchAndCacheDocs } from '../sandbox/docs-fetcher.js';
 import { WorkerPool } from '../sandbox/worker-pool.js';
 import { analyzeTokens } from '../scoring/tokens.js';
 import { runJudge } from '../scoring/judge.js';
-import type { SolutionFile } from '../core/types.js';
 
-const RESULTS_DIR = '.agentic-usability/results';
 const STAGE_ORDER = ['generate', 'execute', 'analyze', 'judge', 'report'];
 
 function stageIndex(stage: string): number {
   const idx = STAGE_ORDER.indexOf(stage);
   return idx === -1 ? 0 : idx;
-}
-
-function formatElapsed(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return minutes > 0 ? `${minutes}m${secs}s` : `${secs}s`;
-}
-
-async function saveResult(
-  testId: string,
-  filename: string,
-  content: string,
-): Promise<void> {
-  const dir = resolve(join(RESULTS_DIR, testId));
-  await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, filename), content, 'utf-8');
-}
-
-async function loadSolution(testId: string): Promise<SolutionFile[] | null> {
-  try {
-    const raw = await readFile(
-      resolve(join(RESULTS_DIR, testId, 'generated-solution.json')),
-      'utf-8',
-    );
-    return JSON.parse(raw) as SolutionFile[];
-  } catch {
-    return null;
-  }
 }
 
 export async function runCommand(options: {
@@ -103,25 +71,30 @@ export async function runCommand(options: {
   stateManager.getState().testCases = testCases.length;
   await stateManager.save();
 
-  // Stage 2: Execute
+  // Stage 2: Execute (per target)
   const execStageNum = 2;
   if (stageIndex(stateManager.getState().stage) <= stageIndex('execute')) {
     console.log(
       chalk.bold.blue(`\n[Stage ${execStageNum}/${totalStages}] Executing test cases...`),
     );
 
-    const incomplete = stateManager.getIncompleteTests('execute', allTestIds);
-    if (incomplete.length === 0) {
-      console.log(chalk.dim('  All tests already executed'));
-    } else {
-      await SandboxClient.checkConnectivity(config.sandbox);
+    await SandboxClient.checkConnectivity(config.sandbox);
 
-      const docsContent = config.publicInfo
-        ? await fetchAndCacheDocs(config.publicInfo)
-        : '';
+    const docsContent = config.publicInfo
+      ? await fetchAndCacheDocs(config.publicInfo)
+      : '';
 
-      const target = config.targets[0];
-      const concurrency = config.sandbox.concurrency ?? 3;
+    const concurrency = config.sandbox.concurrency ?? 3;
+
+    for (const target of config.targets) {
+      const stageKey = `execute:${target.name}`;
+      const incomplete = stateManager.getIncompleteTests('execute', allTestIds);
+
+      if (incomplete.length === 0) {
+        console.log(chalk.dim(`  ${target.name}: All tests already executed`));
+        continue;
+      }
+
       console.log(
         chalk.dim(`  Target: ${target.name} | Concurrency: ${concurrency} | Tests: ${incomplete.length}`),
       );
@@ -141,8 +114,8 @@ export async function runCommand(options: {
             await stateManager.save();
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            await saveResult(tc.id, 'error.log', message);
-            throw err; // let WorkerPool handle retry
+            await saveResult(tc.id, 'error.log', message, target.name);
+            throw err;
           }
         },
         (info, tc, event) => {
@@ -172,7 +145,7 @@ export async function runCommand(options: {
     );
   }
 
-  // Stage 3: Analyze
+  // Stage 3: Analyze (per target)
   const analyzeStageNum = 3;
   if (stageIndex(stateManager.getState().stage) <= stageIndex('analyze')) {
     console.log(
@@ -180,38 +153,42 @@ export async function runCommand(options: {
     );
 
     const incomplete = stateManager.getIncompleteTests('analyze', allTestIds);
-    const target = config.targets[0];
 
-    for (const tc of testCases) {
-      if (!incomplete.includes(tc.id)) continue;
+    for (const target of config.targets) {
+      for (const tc of testCases) {
+        if (!incomplete.includes(tc.id)) continue;
 
-      const solution = await loadSolution(tc.id);
-      const analysis = analyzeTokens(
-        solution ?? [],
-        tc.targetApis,
-        tc.expectedTokens,
-        tc.id,
-        target.name,
-      );
-
-      await saveResult(
-        tc.id,
-        'token-analysis.json',
-        JSON.stringify(analysis, null, 2),
-      );
-
-      if (!solution) {
-        console.log(chalk.yellow(`  ${tc.id}: No solution found (0% coverage)`));
-      } else {
-        const apiFound = analysis.apis.filter((a) => a.found).length;
-        const tokenFound = analysis.tokens.filter((t) => t.found).length;
-        console.log(
-          `  ${tc.id}: API ${Math.round(analysis.apiCoverage)}% (${apiFound}/${tc.targetApis.length}), Tokens ${Math.round(analysis.tokenCoverage)}% (${tokenFound}/${tc.expectedTokens.length})`,
+        const solution = await loadSolution(tc.id, target.name);
+        const analysis = analyzeTokens(
+          solution ?? [],
+          tc.targetApis,
+          tc.expectedTokens,
+          tc.id,
+          target.name,
         );
-      }
 
-      stateManager.markTestComplete('analyze', tc.id);
-      await stateManager.save();
+        await saveResult(
+          tc.id,
+          'token-analysis.json',
+          JSON.stringify(analysis, null, 2),
+          target.name,
+        );
+
+        if (!solution) {
+          console.log(chalk.yellow(`  ${tc.id} [${target.name}]: No solution found (0% coverage)`));
+        } else {
+          const apiFound = analysis.apis.filter((a) => a.found).length;
+          const tokenFound = analysis.tokens.filter((t) => t.found).length;
+          console.log(
+            `  ${tc.id} [${target.name}]: API ${Math.round(analysis.apiCoverage)}% (${apiFound}/${tc.targetApis.length}), Tokens ${Math.round(analysis.tokenCoverage)}% (${tokenFound}/${tc.expectedTokens.length})`,
+          );
+        }
+      }
+    }
+
+    // Mark all as complete after processing all targets
+    for (const id of incomplete) {
+      stateManager.markTestComplete('analyze', id);
     }
 
     stateManager.advanceStage('judge');
@@ -222,7 +199,7 @@ export async function runCommand(options: {
     );
   }
 
-  // Stage 4: Judge (optional)
+  // Stage 4: Judge (optional, per target)
   if (!options.skipJudge) {
     const judgeStageNum = 4;
     if (stageIndex(stateManager.getState().stage) <= stageIndex('judge')) {
@@ -231,44 +208,46 @@ export async function runCommand(options: {
       );
 
       const incomplete = stateManager.getIncompleteTests('judge', allTestIds);
-      const target = config.targets[0];
       const judgeConfig = config.agents?.judge ?? { command: 'claude' };
 
-      for (const tc of testCases) {
-        if (!incomplete.includes(tc.id)) continue;
+      for (const target of config.targets) {
+        for (const tc of testCases) {
+          if (!incomplete.includes(tc.id)) continue;
 
-        const solution = await loadSolution(tc.id);
-        if (!solution) {
-          console.log(
-            chalk.yellow(`  ${tc.id}: No solution found — skipping judge`),
-          );
-          stateManager.markTestComplete('judge', tc.id);
-          await stateManager.save();
-          continue;
+          const solution = await loadSolution(tc.id, target.name);
+          if (!solution) {
+            console.log(
+              chalk.yellow(`  ${tc.id} [${target.name}]: No solution found — skipping judge`),
+            );
+            continue;
+          }
+
+          try {
+            const score = await runJudge(tc, solution, judgeConfig, target.name);
+            await saveResult(
+              tc.id,
+              'judge.json',
+              JSON.stringify(score, null, 2),
+              target.name,
+            );
+
+            const matchIcon = score.functionalMatch
+              ? chalk.green('MATCH')
+              : chalk.red('NO MATCH');
+            console.log(
+              `  ${tc.id} [${target.name}]: Similarity ${score.overallSimilarity}% [${matchIcon}]`,
+            );
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.log(chalk.red(`  ${tc.id} [${target.name}]: Judge failed — ${message}`));
+            await saveResult(tc.id, 'judge-error.log', message, target.name);
+          }
         }
+      }
 
-        try {
-          const score = await runJudge(tc, solution, judgeConfig, target.name);
-          await saveResult(
-            tc.id,
-            'judge.json',
-            JSON.stringify(score, null, 2),
-          );
-
-          const matchIcon = score.functionalMatch
-            ? chalk.green('MATCH')
-            : chalk.red('NO MATCH');
-          console.log(
-            `  ${tc.id}: Similarity ${score.overallSimilarity}% [${matchIcon}]`,
-          );
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          console.log(chalk.red(`  ${tc.id}: Judge failed — ${message}`));
-          await saveResult(tc.id, 'judge-error.log', message);
-        }
-
-        stateManager.markTestComplete('judge', tc.id);
-        await stateManager.save();
+      // Mark all as complete after processing all targets
+      for (const id of incomplete) {
+        stateManager.markTestComplete('judge', id);
       }
 
       stateManager.advanceStage('report');

@@ -6,7 +6,9 @@ import { CustomAdapter } from './custom.js';
 
 export interface AgentAdapter {
   name: string;
+  supportsSchema: boolean;
   execute(prompt: string, workDir: string, env?: Record<string, string>): Promise<AgentResult>;
+  executeWithSchema(prompt: string, schema: object, workDir: string, env?: Record<string, string>): Promise<AgentResult>;
 }
 
 const KNOWN_ADAPTERS: Record<string, new (config: AgentConfig) => AgentAdapter> = {

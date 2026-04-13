@@ -1,17 +1,35 @@
 import chalk from 'chalk';
 import ora from 'ora';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
 import { loadConfig, ensureWorkingDir } from '../core/config.js';
-import { createAdapter } from '../agents/adapter.js';
+import { loadTestSuite, saveResult, formatElapsed } from '../core/suite-io.js';
 import { SandboxClient } from '../sandbox/opensandbox.js';
 import { fetchAndCacheDocs } from '../sandbox/docs-fetcher.js';
 import { scaffoldWorkspace } from '../sandbox/scaffolding.js';
 import { WorkerPool } from '../sandbox/worker-pool.js';
-import type { Config, TestCase, SolutionFile } from '../core/types.js';
+import type { AgentConfig, Config, TestCase, SolutionFile, TargetConfig } from '../core/types.js';
 
-const DEFAULT_SUITE_FILE = '.agentic-usability/suite.json';
-const RESULTS_DIR = '.agentic-usability/results';
+function resolveEnv(
+  env: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!env) return undefined;
+
+  const resolved: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value.startsWith('$')) {
+      const hostVar = value.slice(1);
+      const hostValue = process.env[hostVar];
+      if (hostValue === undefined) {
+        throw new Error(
+          `Environment variable '${hostVar}' referenced in workspace.env.${key} is not set on the host`,
+        );
+      }
+      resolved[key] = hostValue;
+    } else {
+      resolved[key] = value;
+    }
+  }
+  return resolved;
+}
 
 function interpolateSystemPrompt(
   template: string,
@@ -41,31 +59,36 @@ Implement the solution and write all output files to the /workspace/solution/ di
 Make sure to create the /workspace/solution/ directory first if it does not exist.`;
 }
 
-export async function loadTestSuite(config: Config): Promise<TestCase[]> {
-  const suiteFile = resolve(config.output?.suiteFile ?? DEFAULT_SUITE_FILE);
-  let raw: string;
-  try {
-    raw = await readFile(suiteFile, 'utf-8');
-  } catch {
-    throw new Error(
-      `Test suite not found at ${suiteFile}. Run 'agentic-usability generate' first.`,
-    );
+function buildSandboxAgentCommand(
+  executorConfig: AgentConfig,
+  prompt: string,
+): string {
+  const escapedPrompt = prompt.replace(/'/g, "'\\''");
+  const args = executorConfig.args ?? [];
+
+  switch (executorConfig.command) {
+    case 'claude':
+      return `claude --print -p '${escapedPrompt}' --workdir /workspace ${args.join(' ')}`;
+    case 'codex':
+      return `codex -q --full-auto '${escapedPrompt}' /workspace ${args.join(' ')}`;
+    case 'gemini':
+      return `gemini -p '${escapedPrompt}' --workdir /workspace ${args.join(' ')}`;
+    default:
+      return `${executorConfig.command} ${args.join(' ')} '${escapedPrompt}'`;
   }
-  const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed)) {
-    throw new Error(`Test suite at ${suiteFile} is not a JSON array`);
-  }
-  return parsed as TestCase[];
 }
 
-async function saveResult(
-  testId: string,
-  filename: string,
-  content: string,
-): Promise<void> {
-  const dir = resolve(join(RESULTS_DIR, testId));
-  await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, filename), content, 'utf-8');
+function getAgentInstallCommand(command: string): string | null {
+  switch (command) {
+    case 'claude':
+      return 'npm i -g @anthropic-ai/claude-code';
+    case 'codex':
+      return 'npm i -g @openai/codex';
+    case 'gemini':
+      return 'npm i -g @google/gemini-cli';
+    default:
+      return null;
+  }
 }
 
 async function extractSolution(
@@ -96,24 +119,25 @@ async function extractSolution(
 
 export async function executeTestCase(
   testCase: TestCase,
-  target: { name: string; image: string; timeout?: number },
+  target: TargetConfig,
   config: Config,
   docsContent: string,
 ): Promise<void> {
   const client = new SandboxClient(config.sandbox);
 
   try {
-    // Create sandbox
+    // Resolve env vars ($VAR → host value) and create sandbox
+    const sandboxEnv = resolveEnv(config.workspace?.env);
     await client.create(
       target.image,
-      config.workspace?.env,
+      sandboxEnv,
       target.timeout ?? config.sandbox.defaultTimeout,
     );
 
     // Scaffold workspace
     const setupLog = await scaffoldWorkspace(client, config, testCase);
     if (setupLog) {
-      await saveResult(testCase.id, 'setup.log', setupLog);
+      await saveResult(testCase.id, 'setup.log', setupLog, target.name);
     }
 
     // Upload PROBLEM.md and DOCS.md
@@ -122,17 +146,17 @@ export async function executeTestCase(
       { path: '/workspace/DOCS.md', data: docsContent },
     ]);
 
-    // Install agent CLI
+    // Install agent CLI inside the sandbox
     const executorConfig = config.agents?.executor ?? { command: 'claude' };
     const installCmd = getAgentInstallCommand(executorConfig.command);
     if (installCmd) {
       await client.runCommand(installCmd);
     }
 
-    // Run agent
-    const adapter = createAdapter(executorConfig);
+    // Run agent inside the sandbox
     const prompt = buildAgentPrompt(testCase, config);
-    const agentResult = await adapter.execute(prompt, '/workspace', config.workspace?.env);
+    const agentCmd = buildSandboxAgentCommand(executorConfig, prompt);
+    const agentResult = await client.runCommandTimed(agentCmd);
 
     // Save agent output
     const agentLog = [
@@ -145,7 +169,7 @@ export async function executeTestCase(
       '=== STDERR ===',
       agentResult.stderr,
     ].join('\n');
-    await saveResult(testCase.id, 'agent-output.log', agentLog);
+    await saveResult(testCase.id, 'agent-output.log', agentLog, target.name);
 
     // Extract solution
     const solution = await extractSolution(client);
@@ -153,22 +177,10 @@ export async function executeTestCase(
       testCase.id,
       'generated-solution.json',
       JSON.stringify(solution, null, 2),
+      target.name,
     );
   } finally {
     await client.destroy();
-  }
-}
-
-function getAgentInstallCommand(command: string): string | null {
-  switch (command) {
-    case 'claude':
-      return 'npm i -g @anthropic-ai/claude-code';
-    case 'codex':
-      return 'npm i -g @openai/codex';
-    case 'gemini':
-      return 'npm i -g @google/gemini-cli';
-    default:
-      return null;
   }
 }
 
@@ -194,49 +206,43 @@ export async function executeCommand(options: {
     : '';
   spinner.succeed('Documentation ready');
 
-  const target = config.targets[0];
   const concurrency = config.sandbox.concurrency ?? 3;
-  console.log(chalk.bold(`\nTarget: ${target.name} (${target.image})`));
-  console.log(chalk.dim(`Concurrency: ${concurrency}\n`));
 
-  const startTime = Date.now();
-  const pool = new WorkerPool(concurrency);
+  for (const target of config.targets) {
+    console.log(chalk.bold(`\nTarget: ${target.name} (${target.image})`));
+    console.log(chalk.dim(`Concurrency: ${concurrency}\n`));
 
-  const executeFn = async (tc: TestCase): Promise<void> => {
-    try {
-      await executeTestCase(tc, target, config, docsContent);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      await saveResult(tc.id, 'error.log', message);
-      throw err;
+    const startTime = Date.now();
+    const pool = new WorkerPool(concurrency);
+
+    const executeFn = async (tc: TestCase): Promise<void> => {
+      try {
+        await executeTestCase(tc, target, config, docsContent);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await saveResult(tc.id, 'error.log', message, target.name);
+        throw err;
+      }
+    };
+
+    const { passed, failed } = await pool.run(testCases, executeFn, (info, tc, event) => {
+      const elapsed = formatElapsed(Date.now() - startTime);
+      if (event === 'start') {
+        console.log(chalk.dim(`[${info.completed + info.running}/${info.total}] ${tc.id} (${tc.difficulty}) — running... [${elapsed}]`));
+      } else if (event === 'done') {
+        console.log(chalk.green(`[${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — done [${elapsed}]`));
+      } else {
+        console.log(chalk.red(`[${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — failed [${elapsed}]`));
+      }
+    });
+
+    console.log('');
+    console.log(chalk.bold(`Execution Summary (${target.name})`));
+    console.log(`  Total:  ${testCases.length}`);
+    console.log(chalk.green(`  Passed: ${passed}`));
+    if (failed > 0) {
+      console.log(chalk.red(`  Failed: ${failed}`));
     }
-  };
-
-  const { passed, failed } = await pool.run(testCases, executeFn, (info, tc, event) => {
-    const elapsed = formatElapsed(Date.now() - startTime);
-    if (event === 'start') {
-      console.log(chalk.dim(`[${info.completed + info.running}/${info.total}] ${tc.id} (${tc.difficulty}) — running... [${elapsed}]`));
-    } else if (event === 'done') {
-      console.log(chalk.green(`[${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — done [${elapsed}]`));
-    } else {
-      console.log(chalk.red(`[${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — failed [${elapsed}]`));
-    }
-  });
-
-  console.log('');
-  console.log(chalk.bold('Execution Summary'));
-  console.log(`  Total:  ${testCases.length}`);
-  console.log(chalk.green(`  Passed: ${passed}`));
-  if (failed > 0) {
-    console.log(chalk.red(`  Failed: ${failed}`));
+    console.log(chalk.dim(`  Elapsed: ${formatElapsed(Date.now() - startTime)}`));
   }
-  console.log(chalk.dim(`  Elapsed: ${formatElapsed(Date.now() - startTime)}`));
-  console.log(`  Results saved to ${resolve(RESULTS_DIR)}`);
-}
-
-function formatElapsed(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return minutes > 0 ? `${minutes}m${secs}s` : `${secs}s`;
 }

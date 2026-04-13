@@ -10,6 +10,48 @@ import { printSuiteTable } from './suite-utils.js';
 
 const DEFAULT_SUITE_FILE = '.agentic-usability/suite.json';
 
+const TEST_SUITE_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      problemStatement: { type: 'string' },
+      referenceSolution: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: { path: { type: 'string' }, content: { type: 'string' } },
+          required: ['path', 'content'],
+        },
+      },
+      difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
+      targetApis: { type: 'array', items: { type: 'string' } },
+      expectedTokens: { type: 'array', items: { type: 'string' } },
+      tags: { type: 'array', items: { type: 'string' } },
+      setupInstructions: { type: 'string' },
+    },
+    required: ['problemStatement', 'referenceSolution', 'difficulty', 'targetApis', 'expectedTokens', 'tags'],
+  },
+};
+
+const SCHEMA_DESCRIPTION = `
+Output ONLY a valid JSON array of test case objects matching this schema:
+[
+  {
+    "id": string (optional, e.g. "TC-001"),
+    "problemStatement": string (required),
+    "referenceSolution": [{ "path": string, "content": string }] (required),
+    "difficulty": "easy" | "medium" | "hard" (required),
+    "targetApis": string[] (required),
+    "expectedTokens": string[] (required),
+    "tags": string[] (required),
+    "setupInstructions": string (optional)
+  }
+]
+
+No markdown fences, no explanation — just the raw JSON array.`;
+
 function buildPrompt(sourcePath: string, config: Config): string {
   const packageName = config.publicInfo?.packageName ?? 'the SDK';
   const docsUrl = config.publicInfo?.docsUrl ?? '';
@@ -36,8 +78,7 @@ Guidelines:
 - Reference solutions should be correct, idiomatic usage of the SDK.
 - Target APIs should be the specific SDK functions/classes the solution needs.
 - Expected tokens should match patterns that indicate correct SDK usage.
-
-Output ONLY a valid JSON array of test case objects. No markdown fences, no explanation — just the raw JSON array.`;
+${SCHEMA_DESCRIPTION}`;
 }
 
 function buildRetryPrompt(originalPrompt: string, error: string): string {
@@ -93,13 +134,11 @@ function validateTestCase(tc: unknown, index: number): string[] {
 }
 
 function extractJson(text: string): string {
-  // Try to extract JSON array from the output, handling markdown fences
   const fencedMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
   if (fencedMatch) {
     return fencedMatch[1].trim();
   }
 
-  // Try to find a JSON array in the raw text
   const arrayStart = text.indexOf('[');
   const arrayEnd = text.lastIndexOf(']');
   if (arrayStart !== -1 && arrayEnd !== -1 && arrayEnd > arrayStart) {
@@ -107,6 +146,28 @@ function extractJson(text: string): string {
   }
 
   return text.trim();
+}
+
+function parseGenerateOutput(stdout: string, supportsSchema: boolean): { parsed: unknown } | { error: string } {
+  if (supportsSchema) {
+    try {
+      return { parsed: JSON.parse(stdout) };
+    } catch (err) {
+      const extracted = extractJson(stdout);
+      try {
+        return { parsed: JSON.parse(extracted) };
+      } catch {
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+  }
+
+  const extracted = extractJson(stdout);
+  try {
+    return { parsed: JSON.parse(extracted) };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 function assignIds(testCases: TestCase[]): void {
@@ -151,39 +212,35 @@ export async function generateCommand(options: { fresh?: boolean } = {}): Promis
   const sourcePath = await resolveSource(config, { fresh: options.fresh });
   spinner.succeed(`Source resolved: ${sourcePath}`);
 
-  // Determine generator agent config — default to 'claude' if not set
   const generatorConfig = config.agents?.generator ?? { command: 'claude' };
   const adapter = createAdapter(generatorConfig);
 
   const prompt = buildPrompt(sourcePath, config);
 
   spinner.start(`Running generator agent (${adapter.name})...`);
-  let result = await adapter.execute(prompt, sourcePath);
+  let result = await adapter.executeWithSchema(prompt, TEST_SUITE_SCHEMA, sourcePath);
   spinner.succeed(`Agent finished (${result.durationMs}ms, exit code ${result.exitCode})`);
 
-  let jsonText = extractJson(result.stdout);
-  let parsed: unknown;
+  let parseResult = parseGenerateOutput(result.stdout, adapter.supportsSchema);
 
-  try {
-    parsed = JSON.parse(jsonText);
-  } catch (err) {
-    const parseError = err instanceof Error ? err.message : String(err);
-    console.log(chalk.yellow(`First attempt produced malformed JSON: ${parseError}`));
+  // Retry for non-schema agents on parse failure
+  if ('error' in parseResult && !adapter.supportsSchema) {
+    console.log(chalk.yellow(`First attempt produced malformed JSON: ${parseResult.error}`));
     console.log(chalk.yellow('Retrying with correction prompt...'));
 
-    const retryPrompt = buildRetryPrompt(prompt, parseError);
+    const retryPrompt = buildRetryPrompt(prompt, parseResult.error);
     spinner.start(`Retrying generator agent (${adapter.name})...`);
-    result = await adapter.execute(retryPrompt, sourcePath);
+    result = await adapter.executeWithSchema(retryPrompt, TEST_SUITE_SCHEMA, sourcePath);
     spinner.succeed(`Retry finished (${result.durationMs}ms, exit code ${result.exitCode})`);
 
-    jsonText = extractJson(result.stdout);
-    try {
-      parsed = JSON.parse(jsonText);
-    } catch (retryErr) {
-      const retryParseError = retryErr instanceof Error ? retryErr.message : String(retryErr);
-      throw new Error(`Agent output is not valid JSON after retry: ${retryParseError}`);
-    }
+    parseResult = parseGenerateOutput(result.stdout, adapter.supportsSchema);
   }
+
+  if ('error' in parseResult) {
+    throw new Error(`Agent output is not valid JSON: ${parseResult.error}`);
+  }
+
+  const parsed = parseResult.parsed;
 
   if (!Array.isArray(parsed)) {
     throw new Error('Agent output is not a JSON array of test cases');

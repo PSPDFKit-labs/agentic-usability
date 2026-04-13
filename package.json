@@ -12,6 +12,9 @@
     "lint": "eslint src/",
     "test": "echo \"No tests yet\" && exit 0"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",

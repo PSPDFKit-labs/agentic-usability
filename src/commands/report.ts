@@ -4,10 +4,8 @@ import ora from 'ora';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { loadConfig, ensureWorkingDir } from '../core/config.js';
+import { loadTestSuite, RESULTS_DIR } from '../core/suite-io.js';
 import type { Config, TestCase, TokenAnalysis, JudgeScore, SolutionFile } from '../core/types.js';
-
-const DEFAULT_SUITE_FILE = '.agentic-usability/suite.json';
-const RESULTS_DIR = '.agentic-usability/results';
 
 interface TestResult {
   testId: string;
@@ -21,6 +19,7 @@ interface TestResult {
 }
 
 interface AggregateResults {
+  target: string;
   testResults: TestResult[];
   avgApiCoverage: number;
   avgTokenCoverage: number;
@@ -28,23 +27,6 @@ interface AggregateResults {
   byDifficulty: Record<string, { avgApiCoverage: number; avgTokenCoverage: number; avgSimilarity: number; count: number }>;
   worstApis: Array<{ api: string; missRate: number; missCount: number; totalCount: number }>;
   missedTokens: Array<{ token: string; missRate: number; missCount: number; totalCount: number }>;
-}
-
-async function loadTestSuite(config: Config): Promise<TestCase[]> {
-  const suiteFile = resolve(config.output?.suiteFile ?? DEFAULT_SUITE_FILE);
-  let raw: string;
-  try {
-    raw = await readFile(suiteFile, 'utf-8');
-  } catch {
-    throw new Error(
-      `Test suite not found at ${suiteFile}. Run 'agentic-usability generate' first.`,
-    );
-  }
-  const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed)) {
-    throw new Error(`Test suite at ${suiteFile} is not a JSON array`);
-  }
-  return parsed as TestCase[];
 }
 
 async function loadJsonFile<T>(filePath: string): Promise<T | null> {
@@ -56,11 +38,11 @@ async function loadJsonFile<T>(filePath: string): Promise<T | null> {
   }
 }
 
-async function loadAllResults(testCases: TestCase[]): Promise<TestResult[]> {
+async function loadAllResults(testCases: TestCase[], target: string): Promise<TestResult[]> {
   const results: TestResult[] = [];
 
   for (const tc of testCases) {
-    const dir = resolve(join(RESULTS_DIR, tc.id));
+    const dir = resolve(join(RESULTS_DIR, target, tc.id));
 
     const tokenAnalysis = await loadJsonFile<TokenAnalysis>(join(dir, 'token-analysis.json'));
     const judgeScore = await loadJsonFile<JudgeScore>(join(dir, 'judge.json'));
@@ -81,7 +63,7 @@ async function loadAllResults(testCases: TestCase[]): Promise<TestResult[]> {
   return results;
 }
 
-function computeAggregates(testResults: TestResult[]): AggregateResults {
+function computeAggregates(testResults: TestResult[], target: string): AggregateResults {
   const withAnalysis = testResults.filter((r) => r.tokenAnalysis !== null);
   const withJudge = testResults.filter((r) => r.judgeScore !== null);
 
@@ -165,6 +147,7 @@ function computeAggregates(testResults: TestResult[]): AggregateResults {
     .sort((a, b) => b.missRate - a.missRate);
 
   return {
+    target,
     testResults,
     avgApiCoverage,
     avgTokenCoverage,
@@ -180,6 +163,8 @@ function formatPercent(value: number): string {
 }
 
 function printScorecard(aggregates: AggregateResults): void {
+  console.log(chalk.bold(`\nScorecard — ${aggregates.target}\n`));
+
   // Main results table
   const table = new Table({
     head: [
@@ -203,7 +188,6 @@ function printScorecard(aggregates: AggregateResults): void {
     table.push([r.testId, r.difficulty, apiCov, tokenCov, similarity, problem]);
   }
 
-  console.log(chalk.bold('\nScorecard\n'));
   console.log(table.toString());
 
   // Aggregates
@@ -261,24 +245,27 @@ function printScorecard(aggregates: AggregateResults): void {
   }
 }
 
-function buildJsonOutput(aggregates: AggregateResults): object {
+function buildJsonOutput(allAggregates: AggregateResults[]): object {
   return {
-    testResults: aggregates.testResults.map((r) => ({
-      testId: r.testId,
-      difficulty: r.difficulty,
-      problemStatement: r.problemStatement,
-      tokenAnalysis: r.tokenAnalysis,
-      judgeScore: r.judgeScore,
-      generatedSolution: r.generatedSolution,
+    targets: allAggregates.map((agg) => ({
+      target: agg.target,
+      testResults: agg.testResults.map((r) => ({
+        testId: r.testId,
+        difficulty: r.difficulty,
+        problemStatement: r.problemStatement,
+        tokenAnalysis: r.tokenAnalysis,
+        judgeScore: r.judgeScore,
+        generatedSolution: r.generatedSolution,
+      })),
+      aggregates: {
+        avgApiCoverage: agg.avgApiCoverage,
+        avgTokenCoverage: agg.avgTokenCoverage,
+        avgSimilarity: agg.avgSimilarity,
+        byDifficulty: agg.byDifficulty,
+      },
+      worstApis: agg.worstApis,
+      missedTokens: agg.missedTokens,
     })),
-    aggregates: {
-      avgApiCoverage: aggregates.avgApiCoverage,
-      avgTokenCoverage: aggregates.avgTokenCoverage,
-      avgSimilarity: aggregates.avgSimilarity,
-      byDifficulty: aggregates.byDifficulty,
-    },
-    worstApis: aggregates.worstApis,
-    missedTokens: aggregates.missedTokens,
   };
 }
 
@@ -288,16 +275,23 @@ export async function reportCommand(options: { json?: boolean } = {}): Promise<v
 
   const spinner = ora('Loading test suite and results...').start();
   const testCases = await loadTestSuite(config);
-  const testResults = await loadAllResults(testCases);
-  spinner.succeed(`Loaded results for ${testCases.length} test case(s)`);
+  spinner.succeed(`Loaded ${testCases.length} test case(s)`);
 
-  const aggregates = computeAggregates(testResults);
+  const allAggregates: AggregateResults[] = [];
+
+  for (const target of config.targets) {
+    const testResults = await loadAllResults(testCases, target.name);
+    const aggregates = computeAggregates(testResults, target.name);
+    allAggregates.push(aggregates);
+
+    if (!options.json) {
+      printScorecard(aggregates);
+    }
+  }
 
   if (options.json) {
-    const output = buildJsonOutput(aggregates);
+    const output = buildJsonOutput(allAggregates);
     console.log(JSON.stringify(output, null, 2));
-  } else {
-    printScorecard(aggregates);
   }
 }
 
@@ -307,11 +301,17 @@ export async function exportResultsCommand(options: { output: string }): Promise
 
   const spinner = ora('Loading test suite and results...').start();
   const testCases = await loadTestSuite(config);
-  const testResults = await loadAllResults(testCases);
-  spinner.succeed(`Loaded results for ${testCases.length} test case(s)`);
+  spinner.succeed(`Loaded ${testCases.length} test case(s)`);
 
-  const aggregates = computeAggregates(testResults);
-  const output = buildJsonOutput(aggregates);
+  const allAggregates: AggregateResults[] = [];
+
+  for (const target of config.targets) {
+    const testResults = await loadAllResults(testCases, target.name);
+    const aggregates = computeAggregates(testResults, target.name);
+    allAggregates.push(aggregates);
+  }
+
+  const output = buildJsonOutput(allAggregates);
   const outputPath = resolve(options.output);
 
   await writeFile(outputPath, JSON.stringify(output, null, 2), 'utf-8');
