@@ -278,6 +278,22 @@ ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 ```
 
+#### 1Password support
+
+Instead of storing plain-text secrets in `.env`, you can use [1Password CLI](https://developer.1password.com/docs/cli/) references. Values starting with `op://` are resolved at startup via `op read`:
+
+```bash
+# .env — secrets stay in 1Password, never on disk
+ANTHROPIC_API_KEY=op://Engineering/Anthropic/api-key
+OPENAI_API_KEY=op://Shared/OpenAI/credential
+```
+
+Requirements:
+- Install the `op` CLI: https://developer.1password.com/docs/cli/get-started/
+- Sign in: `op signin`
+
+The resolution happens once at CLI startup. If a reference can't be resolved, the CLI exits with a clear error. Shell environment variables still take precedence over `.env` values (including `op://` references).
+
 ### Sandbox
 
 OpenSandbox server connection:

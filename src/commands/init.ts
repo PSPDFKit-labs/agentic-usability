@@ -119,10 +119,14 @@ export async function initCommand(paths: ProjectPaths): Promise<void> {
     hint("Shell command to install the SDK inside a sandbox (e.g. npm install @example/sdk)");
     const installCommand = await prompt(rl, 'Install command');
 
+    hint("Extra context appended to sandbox docs (e.g. usage notes, common patterns)");
+    const publicAdditionalContext = await prompt(rl, 'Additional context for sandbox agents (optional)');
+
     const publicInfo: Config['publicInfo'] = {};
     if (docsUrl) publicInfo.docsUrl = docsUrl;
     if (packageName) publicInfo.packageName = packageName;
     if (installCommand) publicInfo.installCommand = installCommand;
+    if (publicAdditionalContext) publicInfo.additionalContext = publicAdditionalContext;
 
     // ── Agent configuration ───────────────────────────────────────────
     console.log(chalk.bold('\n3. Agent Configuration'));

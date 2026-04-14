@@ -1,18 +1,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { loadDotenv } from '../env.js';
 
 vi.mock('node:fs/promises', () => ({
   readFile: vi.fn(),
 }));
 
+vi.mock('node:child_process', () => ({
+  execFileSync: vi.fn(),
+}));
+
 const mockReadFile = vi.mocked(readFile);
+const mockExecFileSync = vi.mocked(execFileSync);
 
 describe('loadDotenv', () => {
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
     originalEnv = { ...process.env };
+    mockExecFileSync.mockReset();
   });
 
   afterEach(() => {
@@ -89,5 +96,57 @@ describe('loadDotenv', () => {
     delete process.env.KEY;
     await loadDotenv('/tmp');
     expect(process.env.KEY).toBe('value');
+  });
+
+  describe('1Password (op://) references', () => {
+    it('resolves op:// values via op read', async () => {
+      mockReadFile.mockResolvedValue('API_KEY=op://Vault/Item/field');
+      mockExecFileSync.mockReturnValue('resolved-secret\n');
+      delete process.env.API_KEY;
+
+      await loadDotenv('/tmp');
+
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'op', ['read', 'op://Vault/Item/field'],
+        expect.objectContaining({ encoding: 'utf-8', timeout: 10_000 }),
+      );
+      expect(process.env.API_KEY).toBe('resolved-secret');
+    });
+
+    it('resolves op:// values inside quotes', async () => {
+      mockReadFile.mockResolvedValue('API_KEY="op://Vault/Item/field"');
+      mockExecFileSync.mockReturnValue('secret\n');
+      delete process.env.API_KEY;
+
+      await loadDotenv('/tmp');
+      expect(process.env.API_KEY).toBe('secret');
+    });
+
+    it('does not call op for non-op:// values', async () => {
+      mockReadFile.mockResolvedValue('PLAIN=hello');
+      delete process.env.PLAIN;
+
+      await loadDotenv('/tmp');
+      expect(mockExecFileSync).not.toHaveBeenCalled();
+      expect(process.env.PLAIN).toBe('hello');
+    });
+
+    it('throws a clear error when op read fails', async () => {
+      mockReadFile.mockResolvedValue('KEY=op://Vault/Missing/field');
+      mockExecFileSync.mockImplementation(() => { throw new Error('item not found'); });
+      delete process.env.KEY;
+
+      await expect(loadDotenv('/tmp')).rejects.toThrow(/Failed to resolve 1Password reference for KEY/);
+      await expect(loadDotenv('/tmp')).rejects.toThrow(/op signin/);
+    });
+
+    it('skips op:// resolution when shell env already has the key', async () => {
+      process.env.EXISTING_KEY = 'from-shell';
+      mockReadFile.mockResolvedValue('EXISTING_KEY=op://Vault/Item/field');
+
+      await loadDotenv('/tmp');
+      expect(mockExecFileSync).not.toHaveBeenCalled();
+      expect(process.env.EXISTING_KEY).toBe('from-shell');
+    });
   });
 });
