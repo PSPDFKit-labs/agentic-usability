@@ -124,8 +124,8 @@ export class SandboxClient {
       apiKey: config.apiKey,
     });
     try {
-      const baseUrl = conn.getBaseUrl();
-      const response = await fetch(`${baseUrl}/health`, {
+      const healthUrl = `http://${config.domain}/health`;
+      const response = await fetch(healthUrl, {
         method: 'GET',
         signal: AbortSignal.timeout(5000),
       });
