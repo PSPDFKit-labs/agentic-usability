@@ -22,7 +22,7 @@ export class WorkerPool {
     testCases: TestCase[],
     executeFn: (testCase: TestCase) => Promise<void>,
     onProgress?: ProgressCallback,
-  ): Promise<{ passed: number; failed: number }> {
+  ): Promise<{ passed: number; failed: number; aborted: boolean }> {
     const total = testCases.length;
     const queue = [...testCases];
     let completed = 0;
@@ -96,7 +96,7 @@ export class WorkerPool {
 
     process.removeListener('SIGINT', onShutdown);
 
-    return { passed: completed - failed, failed };
+    return { passed: completed - failed, failed, aborted: this.aborted };
   }
 }
 

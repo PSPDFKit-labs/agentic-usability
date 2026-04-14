@@ -45,11 +45,11 @@ describe('formatSolution', () => {
 
 describe('runJudge', () => {
   const validScore = JSON.stringify({
-    functionalEquivalence: 90,
-    apiCorrectness: 85,
-    idiomaticUsage: 80,
-    overallSimilarity: 88,
-    functionalMatch: true,
+    apiDiscovery: 90,
+    callCorrectness: 85,
+    completeness: 80,
+    functionalCorrectness: 88,
+    overallVerdict: true,
     notes: 'Good implementation',
   });
 
@@ -63,8 +63,8 @@ describe('runJudge', () => {
 
     expect(result.testId).toBe('TC-001');
     expect(result.target).toBe('claude');
-    expect(result.functionalEquivalence).toBe(90);
-    expect(result.functionalMatch).toBe(true);
+    expect(result.apiDiscovery).toBe(90);
+    expect(result.overallVerdict).toBe(true);
   });
 
   it('extracts JSON from markdown fenced blocks', async () => {
@@ -73,7 +73,7 @@ describe('runJudge', () => {
     mockCreateAdapter.mockReturnValue(adapter);
 
     const result = await runJudge(makeTestCase(), [makeSolutionFile()], { command: 'gemini' }, 'gemini');
-    expect(result.functionalEquivalence).toBe(90);
+    expect(result.apiDiscovery).toBe(90);
   });
 
   it('extracts JSON object from mixed text', async () => {
@@ -82,7 +82,7 @@ describe('runJudge', () => {
     mockCreateAdapter.mockReturnValue(adapter);
 
     const result = await runJudge(makeTestCase(), [makeSolutionFile()], { command: 'gemini' }, 'gemini');
-    expect(result.functionalEquivalence).toBe(90);
+    expect(result.apiDiscovery).toBe(90);
   });
 
   it('throws when output is not valid JSON', async () => {
@@ -95,11 +95,11 @@ describe('runJudge', () => {
 
   it('throws when validation fails (out-of-range numbers)', async () => {
     const badScore = JSON.stringify({
-      functionalEquivalence: 150,
-      apiCorrectness: 85,
-      idiomaticUsage: 80,
-      overallSimilarity: 88,
-      functionalMatch: true,
+      apiDiscovery: 150,
+      callCorrectness: 85,
+      completeness: 80,
+      functionalCorrectness: 88,
+      overallVerdict: true,
       notes: 'ok',
     });
     const adapter = makeMockAdapter({ stdout: badScore });
@@ -110,7 +110,7 @@ describe('runJudge', () => {
   });
 
   it('throws when validation fails (missing fields)', async () => {
-    const incomplete = JSON.stringify({ functionalEquivalence: 90 });
+    const incomplete = JSON.stringify({ apiDiscovery: 90 });
     const adapter = makeMockAdapter({ stdout: incomplete });
     mockCreateAdapter.mockReturnValue(adapter);
 

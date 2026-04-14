@@ -29,7 +29,14 @@ export class PipelineStateManager {
   async load(): Promise<PipelineState> {
     try {
       const raw = await readFile(this.statePath, 'utf-8');
-      this.state = JSON.parse(raw) as PipelineState;
+      const parsed = JSON.parse(raw) as PipelineState;
+      // Ensure all completed arrays exist (guards against older state files)
+      const fresh = PipelineStateManager.freshState();
+      parsed.completed = {
+        ...fresh.completed,
+        ...parsed.completed,
+      };
+      this.state = parsed;
     } catch {
       this.state = PipelineStateManager.freshState();
     }

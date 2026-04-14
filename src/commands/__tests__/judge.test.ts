@@ -37,10 +37,11 @@ const paths = makeProjectPaths();
 
 function makeJudgeScore() {
   return {
-    overallSimilarity: 90,
-    apiCorrectness: 100,
-    idiomaticUsage: 80,
-    functionalMatch: true,
+    apiDiscovery: 90,
+    callCorrectness: 100,
+    completeness: 80,
+    functionalCorrectness: 88,
+    overallVerdict: true,
   };
 }
 

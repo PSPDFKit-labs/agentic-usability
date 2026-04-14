@@ -56,10 +56,6 @@ vi.mock('../../sandbox/opensandbox.js', () => {
   return { SandboxClient: MockSandboxClient };
 });
 
-vi.mock('../../sandbox/docs-fetcher.js', () => ({
-  fetchAndCacheDocs: vi.fn().mockResolvedValue('docs content'),
-}));
-
 vi.mock('../../sandbox/worker-pool.js', () => ({
   WorkerPool: vi.fn(function (this: any) {
     this.run = vi.fn().mockImplementation(async (items: any[], executeFn: any, _onProgress: any) => {
@@ -86,11 +82,11 @@ vi.mock('../../scoring/judge.js', () => ({
   runJudge: vi.fn().mockResolvedValue({
     testId: 'TC-001',
     target: 'claude',
-    functionalEquivalence: 90,
-    apiCorrectness: 85,
-    idiomaticUsage: 80,
-    overallSimilarity: 88,
-    functionalMatch: true,
+    apiDiscovery: 90,
+    callCorrectness: 85,
+    completeness: 80,
+    functionalCorrectness: 88,
+    overallVerdict: true,
     notes: 'good',
   }),
 }));

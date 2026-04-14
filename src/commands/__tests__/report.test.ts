@@ -49,11 +49,11 @@ function makeJudgeJson() {
   return JSON.stringify({
     testId: 'TC-001',
     target: 'claude',
-    functionalEquivalence: 90,
-    apiCorrectness: 85,
-    idiomaticUsage: 80,
-    overallSimilarity: 88,
-    functionalMatch: true,
+    apiDiscovery: 90,
+    callCorrectness: 85,
+    completeness: 80,
+    functionalCorrectness: 88,
+    overallVerdict: true,
     notes: 'good',
   });
 }
@@ -134,7 +134,11 @@ describe('reportCommand', () => {
     const agg = parsed.targets[0].aggregates;
     expect(agg.avgApiCoverage).toBe(100);
     expect(agg.avgTokenCoverage).toBe(100);
-    expect(agg.avgSimilarity).toBe(88);
+    expect(agg.avgApiDiscovery).toBe(90);
+    expect(agg.avgCallCorrectness).toBe(85);
+    expect(agg.avgCompleteness).toBe(80);
+    expect(agg.avgFunctionalCorrectness).toBe(88);
+    expect(agg.passRate).toBe(100);
   });
 
   it('includes byDifficulty breakdown in JSON output', async () => {
@@ -174,7 +178,11 @@ describe('reportCommand', () => {
     const agg = parsed.targets[0].aggregates;
     expect(agg.avgApiCoverage).toBe(0);
     expect(agg.avgTokenCoverage).toBe(0);
-    expect(agg.avgSimilarity).toBe(0);
+    expect(agg.avgApiDiscovery).toBe(0);
+    expect(agg.avgCallCorrectness).toBe(0);
+    expect(agg.avgCompleteness).toBe(0);
+    expect(agg.avgFunctionalCorrectness).toBe(0);
+    expect(agg.passRate).toBe(0);
   });
 
   it('reports worstApis when some APIs are missed', async () => {

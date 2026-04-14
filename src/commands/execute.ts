@@ -3,7 +3,6 @@ import ora from 'ora';
 import { loadConfig } from '../core/config.js';
 import { loadTestSuite, saveResult, formatElapsed } from '../core/suite-io.js';
 import { SandboxClient } from '../sandbox/opensandbox.js';
-import { fetchAndCacheDocs } from '../sandbox/docs-fetcher.js';
 import { scaffoldWorkspace } from '../sandbox/scaffolding.js';
 import { WorkerPool } from '../sandbox/worker-pool.js';
 import { createAdapter } from '../agents/adapter.js';
@@ -54,8 +53,34 @@ function buildAgentPrompt(
 
   const prefix = systemPrompt ? `${systemPrompt}\n\n` : '';
 
-  return `${prefix}Read the problem statement in /workspace/PROBLEM.md and the SDK documentation in /workspace/DOCS.md.
+  const langInstruction = config.publicInfo?.language
+    ? `\nIMPORTANT: Write your solution in ${config.publicInfo.language}.\n`
+    : '';
 
+  // Build docs context: URLs + lightweight hints
+  const docsLines: string[] = [];
+  if (config.publicInfo?.packageName) {
+    docsLines.push(`Package: ${config.publicInfo.packageName}`);
+  }
+  if (config.publicInfo?.installCommand) {
+    docsLines.push(`Install: ${config.publicInfo.installCommand}`);
+  }
+  if (config.publicInfo?.docsUrl) {
+    docsLines.push(`Documentation: ${config.publicInfo.docsUrl}`);
+  }
+  if (config.publicInfo?.guides?.length) {
+    docsLines.push(`Guides:\n${config.publicInfo.guides.map((u) => `  - ${u}`).join('\n')}`);
+  }
+  if (config.publicInfo?.additionalContext) {
+    docsLines.push(`\n${config.publicInfo.additionalContext}`);
+  }
+
+  const docsSection = docsLines.length > 0
+    ? `\n## SDK Reference\n${docsLines.join('\n')}\n`
+    : '';
+
+  return `${prefix}Read the problem statement in /workspace/PROBLEM.md.
+${docsSection}${langInstruction}
 Implement the solution and write all output files to the /workspace/solution/ directory.
 
 Make sure to create the /workspace/solution/ directory first if it does not exist.`;
@@ -92,7 +117,6 @@ export async function executeTestCase(
   testCase: TestCase,
   target: TargetConfig,
   config: Config,
-  docsContent: string,
   paths: ProjectPaths,
 ): Promise<void> {
   const client = new SandboxClient(config.sandbox);
@@ -112,10 +136,9 @@ export async function executeTestCase(
       await saveResult(paths, testCase.id, 'setup.log', setupLog, target.name);
     }
 
-    // Upload PROBLEM.md and DOCS.md
+    // Upload PROBLEM.md
     await client.uploadFiles([
       { path: '/workspace/PROBLEM.md', data: testCase.problemStatement },
-      { path: '/workspace/DOCS.md', data: docsContent },
     ]);
 
     // Create non-root user (agents like Claude refuse to run as root)
@@ -163,9 +186,7 @@ export async function executeTestCase(
   }
 }
 
-export async function executeCommand(paths: ProjectPaths, options: {
-  freshDocs?: boolean;
-} = {}): Promise<void> {
+export async function executeCommand(paths: ProjectPaths): Promise<void> {
   const config = await loadConfig(paths.config);
 
   const spinner = ora('Loading test suite...').start();
@@ -176,13 +197,6 @@ export async function executeCommand(paths: ProjectPaths, options: {
   spinner.start('Checking OpenSandbox connectivity...');
   await SandboxClient.checkConnectivity(config.sandbox);
   spinner.succeed('OpenSandbox server is reachable');
-
-  // Fetch and cache docs
-  spinner.start('Fetching SDK documentation...');
-  const docsContent = config.publicInfo
-    ? await fetchAndCacheDocs(config.publicInfo, { freshDocs: options.freshDocs, cacheDocs: paths.cacheDocs })
-    : '';
-  spinner.succeed('Documentation ready');
 
   const concurrency = config.sandbox.concurrency ?? 3;
 
@@ -195,7 +209,7 @@ export async function executeCommand(paths: ProjectPaths, options: {
 
     const executeFn = async (tc: TestCase): Promise<void> => {
       try {
-        await executeTestCase(tc, target, config, docsContent, paths);
+        await executeTestCase(tc, target, config, paths);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         await saveResult(paths, tc.id, 'error.log', message, target.name);

@@ -8,7 +8,7 @@ import { generateCommand } from './generate.js';
 import { reportCommand } from './report.js';
 import { executeTestCase } from './execute.js';
 import { SandboxClient } from '../sandbox/opensandbox.js';
-import { fetchAndCacheDocs } from '../sandbox/docs-fetcher.js';
+
 import { WorkerPool } from '../sandbox/worker-pool.js';
 import { analyzeTokens } from '../scoring/tokens.js';
 import { runJudge } from '../scoring/judge.js';
@@ -25,6 +25,10 @@ export async function runCommand(paths: ProjectPaths, options: {
   fresh?: boolean;
   skipJudge?: boolean;
 } = {}): Promise<void> {
+  let pipelineAborted = false;
+  const onSigint = () => { pipelineAborted = true; };
+  process.on('SIGINT', onSigint);
+
   const config = await loadConfig(paths.config);
   await ensureProjectDirs(paths);
   const stateManager = new PipelineStateManager(paths.pipelineState);
@@ -81,10 +85,6 @@ export async function runCommand(paths: ProjectPaths, options: {
 
     await SandboxClient.checkConnectivity(config.sandbox);
 
-    const docsContent = config.publicInfo
-      ? await fetchAndCacheDocs(config.publicInfo, { cacheDocs: paths.cacheDocs })
-      : '';
-
     const concurrency = config.sandbox.concurrency ?? 3;
 
     for (const target of config.targets) {
@@ -105,11 +105,11 @@ export async function runCommand(paths: ProjectPaths, options: {
       const pool = new WorkerPool(concurrency);
       const startTime = Date.now();
 
-      await pool.run(
+      const poolResult = await pool.run(
         incompleteTestCases,
         async (tc) => {
           try {
-            await executeTestCase(tc, target, config, docsContent, paths);
+            await executeTestCase(tc, target, config, paths);
             stateManager.markTestComplete('execute', tc.id);
             await stateManager.save();
           } catch (err) {
@@ -135,6 +135,13 @@ export async function runCommand(paths: ProjectPaths, options: {
           }
         },
       );
+
+      if (poolResult.aborted || pipelineAborted) {
+        console.log(chalk.yellow('\nPipeline aborted by user (Ctrl+C). State saved — use --resume to continue.'));
+        await stateManager.save();
+        process.removeListener('SIGINT', onSigint);
+        return;
+      }
     }
 
     stateManager.advanceStage('analyze');
@@ -233,11 +240,11 @@ export async function runCommand(paths: ProjectPaths, options: {
               target.name,
             );
 
-            const matchIcon = score.functionalMatch
-              ? chalk.green('MATCH')
-              : chalk.red('NO MATCH');
+            const matchIcon = score.overallVerdict
+              ? chalk.green('PASS')
+              : chalk.red('FAIL');
             console.log(
-              `  ${tc.id} [${target.name}]: Similarity ${score.overallSimilarity}% [${matchIcon}]`,
+              `  ${tc.id} [${target.name}]: Discovery ${score.apiDiscovery}%, Correctness ${score.callCorrectness}%, Complete ${score.completeness}%, Functional ${score.functionalCorrectness}% [${matchIcon}]`,
             );
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
@@ -271,5 +278,6 @@ export async function runCommand(paths: ProjectPaths, options: {
   );
   await reportCommand(paths);
 
+  process.removeListener('SIGINT', onSigint);
   console.log(chalk.bold.green('\nPipeline complete!'));
 }

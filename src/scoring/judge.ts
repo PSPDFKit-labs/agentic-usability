@@ -4,25 +4,25 @@ import { createAdapter } from '../agents/adapter.js';
 const JUDGE_SCHEMA = {
   type: 'object',
   properties: {
-    functionalEquivalence: { type: 'number', minimum: 0, maximum: 100 },
-    apiCorrectness: { type: 'number', minimum: 0, maximum: 100 },
-    idiomaticUsage: { type: 'number', minimum: 0, maximum: 100 },
-    overallSimilarity: { type: 'number', minimum: 0, maximum: 100 },
-    functionalMatch: { type: 'boolean' },
+    apiDiscovery: { type: 'number', minimum: 0, maximum: 100 },
+    callCorrectness: { type: 'number', minimum: 0, maximum: 100 },
+    completeness: { type: 'number', minimum: 0, maximum: 100 },
+    functionalCorrectness: { type: 'number', minimum: 0, maximum: 100 },
+    overallVerdict: { type: 'boolean' },
     notes: { type: 'string' },
   },
-  required: ['functionalEquivalence', 'apiCorrectness', 'idiomaticUsage', 'overallSimilarity', 'functionalMatch', 'notes'],
+  required: ['apiDiscovery', 'callCorrectness', 'completeness', 'functionalCorrectness', 'overallVerdict', 'notes'],
   additionalProperties: false,
 };
 
 const SCHEMA_DESCRIPTION = `
 Output ONLY a valid JSON object matching this schema:
 {
-  "functionalEquivalence": number (0-100),
-  "apiCorrectness": number (0-100),
-  "idiomaticUsage": number (0-100),
-  "overallSimilarity": number (0-100),
-  "functionalMatch": boolean,
+  "apiDiscovery": number (0-100),
+  "callCorrectness": number (0-100),
+  "completeness": number (0-100),
+  "functionalCorrectness": number (0-100),
+  "overallVerdict": boolean,
   "notes": string
 }
 
@@ -35,7 +35,13 @@ export function formatSolution(files: SolutionFile[]): string {
 }
 
 function buildJudgePrompt(testCase: TestCase, referenceSolution: string, generatedSolution: string): string {
-  return `You are an expert code reviewer judging the quality of an AI-generated solution compared to a reference solution.
+  return `You are an expert code reviewer judging an AI-generated solution's use of an SDK/API compared to a reference solution.
+
+IMPORTANT: Focus your evaluation on SDK/API usage. Ignore cosmetic differences in:
+- Variable naming and code formatting
+- Comment style or absence of comments
+- Import ordering or module organization
+- Output formatting (print vs logging style)
 
 ## Problem Statement
 ${testCase.problemStatement}
@@ -49,37 +55,37 @@ ${generatedSolution}
 ## Your Task
 Compare the generated solution to the reference solution and score it on the following criteria:
 
-1. **functionalEquivalence** (0-100): Does the generated solution produce the same behavior/output as the reference?
-   - 0-20: Completely broken or unrelated — does not compile/run or solves a different problem entirely.
-   - 21-40: Attempts the right problem but produces mostly incorrect output or crashes on typical inputs.
-   - 41-60: Partially correct — handles some cases but has significant logic errors or missing branches.
-   - 61-80: Mostly correct — produces the right output for common cases but fails on edge cases or error paths.
-   - 81-100: Fully equivalent — produces identical behavior to the reference across all inputs and edge cases.
+1. **apiDiscovery** (0-100): Did the agent find and use the correct SDK endpoints/methods?
+   - 0-20: Used completely wrong or unrelated APIs.
+   - 21-40: Found some correct APIs but missed major ones.
+   - 41-60: Found most APIs but used wrong alternatives for some.
+   - 61-80: Found all major APIs, missed minor helper methods.
+   - 81-100: Found exactly the right APIs matching the reference.
 
-2. **apiCorrectness** (0-100): Does it use the correct SDK APIs as intended?
-   - 0-20: Does not use the target SDK at all, or uses entirely wrong APIs (e.g. raw HTTP instead of the SDK client).
-   - 21-40: Uses some SDK APIs but mostly the wrong ones, or calls them with incorrect arguments/signatures.
-   - 41-60: Uses the right APIs but with notable misuse — wrong method overloads, missing required options, or deprecated APIs.
-   - 61-80: Correct API selection with minor issues — e.g. slightly suboptimal method choice or unnecessary extra calls.
-   - 81-100: Uses exactly the right APIs with correct arguments, options, and call sequences matching the reference.
+2. **callCorrectness** (0-100): Are the API calls constructed correctly (parameters, headers, body)?
+   - 0-20: Wrong parameters, missing required fields, incorrect types.
+   - 21-40: Some correct parameters but major issues (wrong field names, missing headers).
+   - 41-60: Mostly correct but notable mistakes (wrong content type, incorrect body format).
+   - 61-80: Correct parameters with minor issues (extra unnecessary fields, slightly different but valid options).
+   - 81-100: Correct parameters, headers, request body, and call sequences.
 
-3. **idiomaticUsage** (0-100): Does it follow idiomatic patterns for the SDK?
-   - 0-20: Anti-patterns throughout — fights the SDK's design, reimplements built-in functionality, or ignores conventions.
-   - 21-40: Works but written as if the developer never read the docs — manual workarounds for things the SDK handles natively.
-   - 41-60: Acceptable but not idiomatic — uses the SDK correctly but misses helper utilities, builder patterns, or recommended approaches.
-   - 61-80: Good usage with minor style gaps — e.g. manual error handling where the SDK provides middleware, or verbose config where defaults suffice.
-   - 81-100: Textbook idiomatic usage — leverages SDK conventions, utilities, and patterns exactly as the documentation recommends.
+3. **completeness** (0-100): Does the solution handle all requirements?
+   - 0-20: Only addresses a fraction of the problem.
+   - 21-40: Handles the main task but misses most secondary requirements.
+   - 41-60: Covers the primary flow but skips error handling or edge cases.
+   - 61-80: Handles most requirements including basic error paths.
+   - 81-100: Fully complete — all requirements, edge cases, and error handling.
 
-4. **overallSimilarity** (0-100): Overall similarity to the reference solution in approach and quality.
-   - 0-20: Entirely different approach with poor quality — would not pass code review.
-   - 21-40: Recognizably attempts the same task but takes a fundamentally different (and worse) approach.
-   - 41-60: Similar high-level approach but diverges significantly in implementation details or quality.
-   - 61-80: Close to the reference — same approach and structure with minor differences in style or completeness.
-   - 81-100: Nearly identical to the reference in approach, structure, and quality — differences are cosmetic at most.
+4. **functionalCorrectness** (0-100): Does the code actually run and produce correct output?
+   - 0-20: Does not run — syntax errors, missing imports, crashes on start.
+   - 21-40: Runs but produces mostly wrong output.
+   - 41-60: Partially works — correct for some inputs, wrong for others.
+   - 61-80: Works correctly for common cases, fails on edge cases.
+   - 81-100: Runs correctly and produces expected output for all cases.
 
-5. **functionalMatch** (boolean): Does the generated solution functionally achieve the same goal? Set to true if the solution would pass the same acceptance tests as the reference, even if the implementation differs. Set to false if it fails to meet the core requirements.
+5. **overallVerdict** (boolean): Does the generated solution meet the core requirements? Set to true if it would pass acceptance tests, even if the implementation differs. Set to false if it fails to meet the core requirements.
 
-6. **notes** (string): Brief explanation of your scoring rationale. Mention specific strengths or gaps that drove the scores.
+6. **notes** (string): Brief explanation of your scoring. Mention which APIs were found/missed, any parameter issues, missing requirements, and functional problems.
 ${SCHEMA_DESCRIPTION}`;
 }
 
@@ -107,14 +113,14 @@ function validateJudgeScore(obj: unknown): string[] {
 
   const score = obj as Record<string, unknown>;
 
-  for (const field of ['functionalEquivalence', 'apiCorrectness', 'idiomaticUsage', 'overallSimilarity']) {
+  for (const field of ['apiDiscovery', 'callCorrectness', 'completeness', 'functionalCorrectness']) {
     if (typeof score[field] !== 'number' || score[field] < 0 || score[field] > 100) {
       errors.push(`${field} must be a number between 0 and 100`);
     }
   }
 
-  if (typeof score.functionalMatch !== 'boolean') {
-    errors.push('functionalMatch must be a boolean');
+  if (typeof score.overallVerdict !== 'boolean') {
+    errors.push('overallVerdict must be a boolean');
   }
 
   if (typeof score.notes !== 'string') {
@@ -159,11 +165,11 @@ export async function runJudge(
   return {
     testId: testCase.id,
     target,
-    functionalEquivalence: score.functionalEquivalence as number,
-    apiCorrectness: score.apiCorrectness as number,
-    idiomaticUsage: score.idiomaticUsage as number,
-    overallSimilarity: score.overallSimilarity as number,
-    functionalMatch: score.functionalMatch as boolean,
+    apiDiscovery: score.apiDiscovery as number,
+    callCorrectness: score.callCorrectness as number,
+    completeness: score.completeness as number,
+    functionalCorrectness: score.functionalCorrectness as number,
+    overallVerdict: score.overallVerdict as boolean,
     notes: score.notes as string,
   };
 }

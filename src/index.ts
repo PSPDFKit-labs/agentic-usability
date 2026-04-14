@@ -56,11 +56,10 @@ program
 program
   .command('execute')
   .description('Execute test cases in sandboxed environments with AI agents')
-  .option('--fresh-docs', 'Bypass documentation cache')
-  .action(async (opts: { freshDocs?: boolean }) => {
+  .action(async () => {
     const paths = getPaths();
     await ensureProjectDirs(paths);
-    await executeCommand(paths, { freshDocs: opts.freshDocs });
+    await executeCommand(paths);
   });
 
 program

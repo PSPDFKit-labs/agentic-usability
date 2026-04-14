@@ -45,9 +45,9 @@ export async function judgeCommand(paths: ProjectPaths, options: { skipJudge?: b
           target.name,
         );
 
-        const matchIcon = score.functionalMatch ? chalk.green('MATCH') : chalk.red('NO MATCH');
+        const matchIcon = score.overallVerdict ? chalk.green('PASS') : chalk.red('FAIL');
         judgeSpinner.succeed(
-          `${tc.id}: Similarity ${score.overallSimilarity}%, API ${score.apiCorrectness}%, Idiomatic ${score.idiomaticUsage}% [${matchIcon}]`,
+          `${tc.id}: Discovery ${score.apiDiscovery}%, Correctness ${score.callCorrectness}%, Complete ${score.completeness}%, Functional ${score.functionalCorrectness}% [${matchIcon}]`,
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

@@ -58,7 +58,7 @@ export function makeProjectPaths(overrides?: Partial<ProjectPaths>): ProjectPath
     logs: '/fake/project/logs',
     cache: '/fake/project/cache',
     cacheRepos: '/fake/project/cache/repos',
-    cacheDocs: '/fake/project/cache/docs',
+
     pipelineState: '/fake/project/logs/pipeline-state.json',
     ...overrides,
   };

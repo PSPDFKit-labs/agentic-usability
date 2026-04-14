@@ -82,4 +82,50 @@ describe('analyzeTokens', () => {
     expect(result.testId).toBe('TC-042');
     expect(result.target).toBe('gemini');
   });
+
+  it('matches REST-style APIs like "POST /build" by decomposing method and path', () => {
+    const sol: SolutionFile[] = [{
+      path: 'solution.py',
+      content: 'response = requests.post("https://api.nutrient.io/build", files=files)',
+    }];
+    const result = analyzeTokens(sol, ['POST /build'], [], 'TC-001', 'claude');
+    expect(result.apis[0].found).toBe(true);
+    expect(result.apiCoverage).toBe(100);
+  });
+
+  it('does not match REST-style API when method is wrong', () => {
+    const sol: SolutionFile[] = [{
+      path: 'solution.py',
+      content: 'response = requests.get("https://api.nutrient.io/build")',
+    }];
+    const result = analyzeTokens(sol, ['POST /build'], [], 'TC-001', 'claude');
+    expect(result.apis[0].found).toBe(false);
+  });
+
+  it('does not match REST-style API when path is missing', () => {
+    const sol: SolutionFile[] = [{
+      path: 'solution.py',
+      content: 'response = requests.post("https://api.nutrient.io/other")',
+    }];
+    const result = analyzeTokens(sol, ['POST /build'], [], 'TC-001', 'claude');
+    expect(result.apis[0].found).toBe(false);
+  });
+
+  it('matches REST-style API in Node.js http options style', () => {
+    const sol: SolutionFile[] = [{
+      path: 'solution.js',
+      content: `const options = {\n  method: 'POST',\n  hostname: 'api.nutrient.io',\n  path: '/build',\n};`,
+    }];
+    const result = analyzeTokens(sol, ['POST /build'], [], 'TC-001', 'claude');
+    expect(result.apis[0].found).toBe(true);
+  });
+
+  it('matches expectedTokens across multiple lines with dotAll flag', () => {
+    const sol: SolutionFile[] = [{
+      path: 'solution.js',
+      content: `hostname: 'api.nutrient.io',\n  path: '/build',`,
+    }];
+    const result = analyzeTokens(sol, [], ['api\\.nutrient\\.io.*build'], 'TC-001', 'claude');
+    expect(result.tokens[0].found).toBe(true);
+  });
 });

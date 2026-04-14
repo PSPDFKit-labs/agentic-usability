@@ -39,11 +39,11 @@ export interface TokenAnalysis {
 export interface JudgeScore {
   testId: string;
   target: string;
-  functionalEquivalence: number;
-  apiCorrectness: number;
-  idiomaticUsage: number;
-  overallSimilarity: number;
-  functionalMatch: boolean;
+  apiDiscovery: number;
+  callCorrectness: number;
+  completeness: number;
+  functionalCorrectness: number;
+  overallVerdict: boolean;
   notes: string;
 }
 
@@ -65,6 +65,8 @@ export interface PublicInfo {
   packageName?: string;
   installCommand?: string;
   additionalContext?: string;
+  /** Preferred solution language (e.g. "python"). When set, both generator and executor will use this. */
+  language?: string;
 }
 
 export interface AgentConfig {

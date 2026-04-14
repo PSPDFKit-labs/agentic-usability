@@ -33,10 +33,6 @@ vi.mock('../../sandbox/opensandbox.js', () => {
   return { SandboxClient: MockSandboxClient };
 });
 
-vi.mock('../../sandbox/docs-fetcher.js', () => ({
-  fetchAndCacheDocs: vi.fn().mockResolvedValue('docs content'),
-}));
-
 vi.mock('../../sandbox/scaffolding.js', () => ({
   scaffoldWorkspace: vi.fn().mockResolvedValue('setup log'),
 }));
@@ -59,7 +55,6 @@ vi.mock('ora', () => ({
 import { loadConfig } from '../../core/config.js';
 import { loadTestSuite, saveResult } from '../../core/suite-io.js';
 import { SandboxClient } from '../../sandbox/opensandbox.js';
-import { fetchAndCacheDocs } from '../../sandbox/docs-fetcher.js';
 import { scaffoldWorkspace } from '../../sandbox/scaffolding.js';
 import { executeTestCase, executeCommand } from '../execute.js';
 
@@ -73,7 +68,6 @@ const defaultConfig = makeConfig({
 
 const defaultTarget = { name: 'claude', image: 'node:20' };
 const defaultTestCase = makeTestCase({ id: 'TC-001' });
-const defaultDocs = 'docs content';
 
 describe('executeTestCase', () => {
   beforeEach(() => {
@@ -93,8 +87,8 @@ describe('executeTestCase', () => {
     vi.mocked(saveResult).mockResolvedValue(undefined);
   });
 
-  it('creates sandbox, scaffolds, uploads files, runs agent, extracts solution, destroys sandbox', async () => {
-    await executeTestCase(defaultTestCase, defaultTarget, defaultConfig, defaultDocs, paths);
+  it('creates sandbox, scaffolds, uploads PROBLEM.md, runs agent, extracts solution, destroys sandbox', async () => {
+    await executeTestCase(defaultTestCase, defaultTarget, defaultConfig, paths);
 
     expect(SandboxClient).toHaveBeenCalledWith(defaultConfig.sandbox);
     expect(mockSandboxInstance.create).toHaveBeenCalled();
@@ -106,7 +100,6 @@ describe('executeTestCase', () => {
     expect(mockSandboxInstance.uploadFiles).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({ path: '/workspace/PROBLEM.md' }),
-        expect.objectContaining({ path: '/workspace/DOCS.md' }),
       ]),
     );
     expect(mockSandboxInstance.runCommandTimed).toHaveBeenCalled();
@@ -116,7 +109,7 @@ describe('executeTestCase', () => {
   });
 
   it('creates non-root sandbox user and installs agent CLI', async () => {
-    await executeTestCase(defaultTestCase, defaultTarget, defaultConfig, defaultDocs, paths);
+    await executeTestCase(defaultTestCase, defaultTarget, defaultConfig, paths);
 
     // First call: create sandbox user
     expect(mockSandboxInstance.runCommand).toHaveBeenCalledWith(
@@ -135,7 +128,7 @@ describe('executeTestCase', () => {
       agents: { executor: { command: 'my-custom-agent' } },
     });
 
-    await executeTestCase(defaultTestCase, defaultTarget, config, defaultDocs, paths);
+    await executeTestCase(defaultTestCase, defaultTarget, config, paths);
 
     // runCommand is called for user setup but NOT for install
     expect(mockSandboxInstance.runCommand).toHaveBeenCalledTimes(1);
@@ -148,14 +141,14 @@ describe('executeTestCase', () => {
     vi.mocked(scaffoldWorkspace).mockRejectedValue(new Error('scaffold failed'));
 
     await expect(
-      executeTestCase(defaultTestCase, defaultTarget, defaultConfig, defaultDocs, paths),
+      executeTestCase(defaultTestCase, defaultTarget, defaultConfig, paths),
     ).rejects.toThrow('scaffold failed');
 
     expect(mockSandboxInstance.destroy).toHaveBeenCalled();
   });
 
   it('saves agent output log and generated solution JSON', async () => {
-    await executeTestCase(defaultTestCase, defaultTarget, defaultConfig, defaultDocs, paths);
+    await executeTestCase(defaultTestCase, defaultTarget, defaultConfig, paths);
 
     expect(saveResult).toHaveBeenCalledWith(
       paths,
@@ -174,7 +167,7 @@ describe('executeTestCase', () => {
   });
 
   it('saves setup log when scaffoldWorkspace returns log content', async () => {
-    await executeTestCase(defaultTestCase, defaultTarget, defaultConfig, defaultDocs, paths);
+    await executeTestCase(defaultTestCase, defaultTarget, defaultConfig, paths);
 
     expect(saveResult).toHaveBeenCalledWith(
       paths,
@@ -194,15 +187,13 @@ describe('executeCommand', () => {
     vi.mocked(loadConfig).mockResolvedValue(defaultConfig);
     vi.mocked(loadTestSuite).mockResolvedValue([defaultTestCase]);
     (SandboxClient.checkConnectivity as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
-    vi.mocked(fetchAndCacheDocs).mockResolvedValue('docs content');
   });
 
-  it('loads config, test suite, checks connectivity, fetches docs', async () => {
+  it('loads config, test suite, and checks connectivity', async () => {
     await executeCommand(paths);
 
     expect(loadConfig).toHaveBeenCalledWith(paths.config);
     expect(loadTestSuite).toHaveBeenCalledWith(paths);
     expect(SandboxClient.checkConnectivity).toHaveBeenCalledWith(defaultConfig.sandbox);
-    expect(fetchAndCacheDocs).toHaveBeenCalled();
   });
 });

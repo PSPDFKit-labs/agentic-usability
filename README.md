@@ -124,8 +124,7 @@ pipelines/my-sdk-eval/           # project root (= CWD or -p target)
   reports/                       # scorecard exports
   logs/                          # pipeline state for resume
     pipeline-state.json
-  cache/                         # docs cache + git repo clones
-    docs/
+  cache/                         # git repo clones
     repos/
 ```
 
@@ -137,7 +136,7 @@ All commands accept the global `-p/--project <dir>` option to scope to a project
 |---------|-------------|-------|
 | `init` | Create a new pipeline project (interactive wizard) | `-p <dir>` |
 | `generate` | Generate test suite from SDK source | `--fresh`, `--non-interactive` |
-| `execute` | Run agents in sandboxes to solve test cases | `--fresh-docs` |
+| `execute` | Run agents in sandboxes to solve test cases | |
 | `analyze` | Regex-based token analysis of generated solutions | |
 | `judge` | LLM comparison of reference vs generated solutions | `--skip-judge` |
 | `report` | Display terminal scorecard | `--json` |
@@ -209,9 +208,11 @@ Fetch documentation pages directly:
 }
 ```
 
+> **Note:** URL fetching only retrieves the initial HTML response — it does not execute JavaScript. Sites that rely on client-side rendering (SPAs, React-based docs, etc.) will return empty or incomplete content. For JS-rendered docs, use the `local` or `git` source type instead.
+
 ### Public information
 
-SDK metadata injected into sandboxes. Agents see this as `DOCS.md`:
+SDK metadata provided to sandbox agents. Documentation URLs are passed directly in the agent prompt so agents can browse them — no pre-fetched docs dump.
 
 ```json
 {
@@ -220,7 +221,8 @@ SDK metadata injected into sandboxes. Agents see this as `DOCS.md`:
     "guides": ["https://docs.example.com/quickstart"],
     "packageName": "@example/sdk",
     "installCommand": "npm install @example/sdk",
-    "additionalContext": "Extra context appended to docs"
+    "language": "python",
+    "additionalContext": "Extra context appended to agent prompt"
   }
 }
 ```
@@ -367,20 +369,20 @@ agentic-usability import -p pipelines/my-sdk-eval --input my-suite.json
 
 Deterministic regex matching against the generated solution files:
 
-- **API Coverage**: Word-boundary match for each entry in `targetApis`
-- **Token Coverage**: Full regex match for each entry in `expectedTokens` (invalid regex falls back to escaped literal)
+- **API Coverage**: Word-boundary match for each entry in `targetApis`. REST-style APIs (e.g. `POST /build`) are automatically decomposed into separate HTTP method + URL path checks.
+- **Token Coverage**: Full regex match (with dotAll/multiline support) for each entry in `expectedTokens` (invalid regex falls back to escaped literal)
 
 ### LLM Judge
 
-An AI agent compares the reference solution to the generated solution and scores:
+An AI agent compares the reference solution to the generated solution across four orthogonal dimensions, focusing on SDK/API usage (not general code style):
 
 | Metric | Description |
 |--------|-------------|
-| Functional Equivalence | Does the generated code achieve the same outcome? |
-| API Correctness | Are the correct SDK APIs used with proper parameters? |
-| Idiomatic Usage | Does the code follow SDK conventions and best practices? |
-| Overall Similarity | Holistic 0-100% score |
-| Functional Match | Boolean pass/fail |
+| API Discovery | Did the agent find and use the correct SDK endpoints/methods? |
+| Call Correctness | Are API calls constructed correctly (parameters, headers, body)? |
+| Completeness | Does the solution handle all requirements, edge cases, and errors? |
+| Functional Correctness | Does the code actually run and produce correct output? |
+| Overall Verdict | Boolean pass/fail — would it pass acceptance tests? |
 
 ## Project Structure
 
@@ -388,7 +390,7 @@ An AI agent compares the reference solution to the generated solution and scores
 src/
   core/           types, config, paths, pipeline state, source resolver, suite I/O
   agents/         adapter pattern: claude, codex, gemini, custom + spawn utility
-  sandbox/        OpenSandbox client, docs fetcher, workspace scaffolding, worker pool
+  sandbox/        OpenSandbox client, workspace scaffolding, worker pool
   scoring/        token analysis, LLM judge
   commands/       one file per CLI command
 ```

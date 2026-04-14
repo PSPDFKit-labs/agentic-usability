@@ -24,8 +24,12 @@ interface AggregateResults {
   testResults: TestResult[];
   avgApiCoverage: number;
   avgTokenCoverage: number;
-  avgSimilarity: number;
-  byDifficulty: Record<string, { avgApiCoverage: number; avgTokenCoverage: number; avgSimilarity: number; count: number }>;
+  avgApiDiscovery: number;
+  avgCallCorrectness: number;
+  avgCompleteness: number;
+  avgFunctionalCorrectness: number;
+  passRate: number;
+  byDifficulty: Record<string, { avgApiCoverage: number; avgTokenCoverage: number; avgApiDiscovery: number; avgCallCorrectness: number; avgCompleteness: number; avgFunctionalCorrectness: number; passRate: number; count: number }>;
   worstApis: Array<{ api: string; missRate: number; missCount: number; totalCount: number }>;
   missedTokens: Array<{ token: string; missRate: number; missCount: number; totalCount: number }>;
 }
@@ -76,8 +80,24 @@ function computeAggregates(testResults: TestResult[], target: string): Aggregate
     ? withAnalysis.reduce((sum, r) => sum + r.tokenAnalysis!.tokenCoverage, 0) / withAnalysis.length
     : 0;
 
-  const avgSimilarity = withJudge.length > 0
-    ? withJudge.reduce((sum, r) => sum + r.judgeScore!.overallSimilarity, 0) / withJudge.length
+  const avgApiDiscovery = withJudge.length > 0
+    ? withJudge.reduce((sum, r) => sum + r.judgeScore!.apiDiscovery, 0) / withJudge.length
+    : 0;
+
+  const avgCallCorrectness = withJudge.length > 0
+    ? withJudge.reduce((sum, r) => sum + r.judgeScore!.callCorrectness, 0) / withJudge.length
+    : 0;
+
+  const avgCompleteness = withJudge.length > 0
+    ? withJudge.reduce((sum, r) => sum + r.judgeScore!.completeness, 0) / withJudge.length
+    : 0;
+
+  const avgFunctionalCorrectness = withJudge.length > 0
+    ? withJudge.reduce((sum, r) => sum + r.judgeScore!.functionalCorrectness, 0) / withJudge.length
+    : 0;
+
+  const passRate = withJudge.length > 0
+    ? (withJudge.filter((r) => r.judgeScore!.overallVerdict).length / withJudge.length) * 100
     : 0;
 
   // Breakdown by difficulty
@@ -96,8 +116,20 @@ function computeAggregates(testResults: TestResult[], target: string): Aggregate
         avgTokenCoverage: diffAnalysis.length > 0
           ? diffAnalysis.reduce((sum, r) => sum + r.tokenAnalysis!.tokenCoverage, 0) / diffAnalysis.length
           : 0,
-        avgSimilarity: diffJudge.length > 0
-          ? diffJudge.reduce((sum, r) => sum + r.judgeScore!.overallSimilarity, 0) / diffJudge.length
+        avgApiDiscovery: diffJudge.length > 0
+          ? diffJudge.reduce((sum, r) => sum + r.judgeScore!.apiDiscovery, 0) / diffJudge.length
+          : 0,
+        avgCallCorrectness: diffJudge.length > 0
+          ? diffJudge.reduce((sum, r) => sum + r.judgeScore!.callCorrectness, 0) / diffJudge.length
+          : 0,
+        avgCompleteness: diffJudge.length > 0
+          ? diffJudge.reduce((sum, r) => sum + r.judgeScore!.completeness, 0) / diffJudge.length
+          : 0,
+        avgFunctionalCorrectness: diffJudge.length > 0
+          ? diffJudge.reduce((sum, r) => sum + r.judgeScore!.functionalCorrectness, 0) / diffJudge.length
+          : 0,
+        passRate: diffJudge.length > 0
+          ? (diffJudge.filter((r) => r.judgeScore!.overallVerdict).length / diffJudge.length) * 100
           : 0,
       };
     }
@@ -152,7 +184,11 @@ function computeAggregates(testResults: TestResult[], target: string): Aggregate
     testResults,
     avgApiCoverage,
     avgTokenCoverage,
-    avgSimilarity,
+    avgApiDiscovery,
+    avgCallCorrectness,
+    avgCompleteness,
+    avgFunctionalCorrectness,
+    passRate,
     byDifficulty,
     worstApis,
     missedTokens,
@@ -170,32 +206,42 @@ function printScorecard(aggregates: AggregateResults): void {
   const table = new Table({
     head: [
       chalk.cyan('Test ID'),
-      chalk.cyan('Difficulty'),
+      chalk.cyan('Diff.'),
       chalk.cyan('API Cov.'),
       chalk.cyan('Token Cov.'),
-      chalk.cyan('Similarity'),
-      chalk.cyan('Problem'),
+      chalk.cyan('Discovery'),
+      chalk.cyan('Correct.'),
+      chalk.cyan('Complete.'),
+      chalk.cyan('Func.'),
+      chalk.cyan('Verdict'),
     ],
   });
 
   for (const r of aggregates.testResults) {
     const apiCov = r.tokenAnalysis ? formatPercent(r.tokenAnalysis.apiCoverage) : chalk.dim('N/A');
     const tokenCov = r.tokenAnalysis ? formatPercent(r.tokenAnalysis.tokenCoverage) : chalk.dim('N/A');
-    const similarity = r.judgeScore ? formatPercent(r.judgeScore.overallSimilarity) : chalk.dim('N/A');
-    const problem = r.problemStatement.length > 50
-      ? r.problemStatement.slice(0, 47) + '...'
-      : r.problemStatement;
+    const discovery = r.judgeScore ? formatPercent(r.judgeScore.apiDiscovery) : chalk.dim('N/A');
+    const correctness = r.judgeScore ? formatPercent(r.judgeScore.callCorrectness) : chalk.dim('N/A');
+    const completeness = r.judgeScore ? formatPercent(r.judgeScore.completeness) : chalk.dim('N/A');
+    const functional = r.judgeScore ? formatPercent(r.judgeScore.functionalCorrectness) : chalk.dim('N/A');
+    const verdict = r.judgeScore
+      ? (r.judgeScore.overallVerdict ? chalk.green('PASS') : chalk.red('FAIL'))
+      : chalk.dim('N/A');
 
-    table.push([r.testId, r.difficulty, apiCov, tokenCov, similarity, problem]);
+    table.push([r.testId, r.difficulty, apiCov, tokenCov, discovery, correctness, completeness, functional, verdict]);
   }
 
   console.log(table.toString());
 
   // Aggregates
   console.log(chalk.bold('\nAggregates'));
-  console.log(`  Average API Coverage:   ${formatPercent(aggregates.avgApiCoverage)}`);
-  console.log(`  Average Token Coverage: ${formatPercent(aggregates.avgTokenCoverage)}`);
-  console.log(`  Average Similarity:     ${formatPercent(aggregates.avgSimilarity)}`);
+  console.log(`  API Coverage:          ${formatPercent(aggregates.avgApiCoverage)}`);
+  console.log(`  Token Coverage:        ${formatPercent(aggregates.avgTokenCoverage)}`);
+  console.log(`  API Discovery:         ${formatPercent(aggregates.avgApiDiscovery)}`);
+  console.log(`  Call Correctness:      ${formatPercent(aggregates.avgCallCorrectness)}`);
+  console.log(`  Completeness:          ${formatPercent(aggregates.avgCompleteness)}`);
+  console.log(`  Functional Correct.:   ${formatPercent(aggregates.avgFunctionalCorrectness)}`);
+  console.log(`  Pass Rate:             ${formatPercent(aggregates.passRate)}`);
 
   // Breakdown by difficulty
   if (Object.keys(aggregates.byDifficulty).length > 0) {
@@ -204,9 +250,13 @@ function printScorecard(aggregates: AggregateResults): void {
       head: [
         chalk.cyan('Difficulty'),
         chalk.cyan('Count'),
-        chalk.cyan('Avg API Cov.'),
-        chalk.cyan('Avg Token Cov.'),
-        chalk.cyan('Avg Similarity'),
+        chalk.cyan('API Cov.'),
+        chalk.cyan('Token Cov.'),
+        chalk.cyan('Discovery'),
+        chalk.cyan('Correct.'),
+        chalk.cyan('Complete.'),
+        chalk.cyan('Func.'),
+        chalk.cyan('Pass Rate'),
       ],
     });
     for (const [difficulty, stats] of Object.entries(aggregates.byDifficulty)) {
@@ -215,7 +265,11 @@ function printScorecard(aggregates: AggregateResults): void {
         stats.count.toString(),
         formatPercent(stats.avgApiCoverage),
         formatPercent(stats.avgTokenCoverage),
-        formatPercent(stats.avgSimilarity),
+        formatPercent(stats.avgApiDiscovery),
+        formatPercent(stats.avgCallCorrectness),
+        formatPercent(stats.avgCompleteness),
+        formatPercent(stats.avgFunctionalCorrectness),
+        formatPercent(stats.passRate),
       ]);
     }
     console.log(diffTable.toString());
@@ -261,7 +315,11 @@ function buildJsonOutput(allAggregates: AggregateResults[]): object {
       aggregates: {
         avgApiCoverage: agg.avgApiCoverage,
         avgTokenCoverage: agg.avgTokenCoverage,
-        avgSimilarity: agg.avgSimilarity,
+        avgApiDiscovery: agg.avgApiDiscovery,
+        avgCallCorrectness: agg.avgCallCorrectness,
+        avgCompleteness: agg.avgCompleteness,
+        avgFunctionalCorrectness: agg.avgFunctionalCorrectness,
+        passRate: agg.passRate,
         byDifficulty: agg.byDifficulty,
       },
       worstApis: agg.worstApis,

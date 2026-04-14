@@ -18,8 +18,7 @@ export interface ProjectPaths {
   cache: string;
   /** Absolute path to the git repos cache directory. */
   cacheRepos: string;
-  /** Absolute path to the docs cache directory. */
-  cacheDocs: string;
+
   /** Absolute path to the pipeline state file. */
   pipelineState: string;
 }
@@ -43,7 +42,7 @@ export function resolveProjectPaths(projectDir?: string): ProjectPaths {
     logs: join(root, 'logs'),
     cache: join(root, 'cache'),
     cacheRepos: join(root, 'cache', 'repos'),
-    cacheDocs: join(root, 'cache', 'docs'),
+
     pipelineState: join(root, 'logs', 'pipeline-state.json'),
   };
 }
@@ -59,6 +58,5 @@ export async function ensureProjectDirs(paths: ProjectPaths): Promise<void> {
     mkdir(paths.logs, { recursive: true }),
     mkdir(paths.cache, { recursive: true }),
     mkdir(paths.cacheRepos, { recursive: true }),
-    mkdir(paths.cacheDocs, { recursive: true }),
   ]);
 }

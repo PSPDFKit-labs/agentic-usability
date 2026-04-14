@@ -50,7 +50,18 @@ Output ONLY a valid JSON array of test case objects matching this schema:
 
 No markdown fences, no explanation — just the raw JSON array.`;
 
-function buildPrompt(sourcePath: string, config: Config): string {
+function summarizeExistingTests(testCases: TestCase[]): string {
+  if (testCases.length === 0) return '';
+
+  const lines = testCases.map((tc) => {
+    const apis = tc.targetApis.join(', ');
+    return `- ${tc.id} (${tc.difficulty}): ${tc.problemStatement.slice(0, 100)}${tc.problemStatement.length > 100 ? '...' : ''} [APIs: ${apis}]`;
+  });
+
+  return `\n## Existing Test Cases (DO NOT DUPLICATE)\nThe suite already contains ${testCases.length} test case(s). Do NOT generate test cases that overlap with these:\n${lines.join('\n')}\n\nGenerate new, complementary test cases that cover different APIs and scenarios.\n`;
+}
+
+function buildPrompt(sourcePath: string, config: Config, existingTests: TestCase[] = []): string {
   const packageName = config.publicInfo?.packageName ?? 'the SDK';
   const docsUrl = config.publicInfo?.docsUrl ?? '';
 
@@ -59,7 +70,7 @@ function buildPrompt(sourcePath: string, config: Config): string {
 Your task: Explore the codebase at "${sourcePath}" and generate a JSON array of programming test cases that evaluate an AI agent's ability to use ${packageName}.
 
 ${docsUrl ? `Documentation: ${docsUrl}` : ''}
-
+${summarizeExistingTests(existingTests)}
 Each test case must be a JSON object with these fields:
 - "id" (string, optional): A unique ID like "TC-001". If omitted, one will be auto-assigned.
 - "problemStatement" (string, required): A clear description of the programming task. This is what an AI agent will receive as instructions.
@@ -76,7 +87,7 @@ Guidelines:
 - Reference solutions should be correct, idiomatic usage of the SDK.
 - Target APIs should be the specific SDK functions/classes the solution needs.
 - Expected tokens should match patterns that indicate correct SDK usage.
-${config.source.additionalContext ? `\nAdditional context:\n${config.source.additionalContext}\n` : ''}${SCHEMA_DESCRIPTION}`;
+${config.publicInfo?.language ? `\nIMPORTANT: All test cases and reference solutions MUST use ${config.publicInfo.language}. Write solutions using standard ${config.publicInfo.language} HTTP libraries (e.g. requests for Python).\n` : ''}${config.source.additionalContext ? `\nAdditional context:\n${config.source.additionalContext}\n` : ''}${SCHEMA_DESCRIPTION}`;
 }
 
 
@@ -140,9 +151,18 @@ function extractJson(text: string): string {
 
 
 function assignIds(testCases: TestCase[]): void {
+  const existingIds = new Set(testCases.filter((tc) => tc.id && tc.id.trim() !== '').map((tc) => tc.id));
+  let nextNum = 0;
+
   for (let i = 0; i < testCases.length; i++) {
     if (!testCases[i].id || testCases[i].id.trim() === '') {
-      testCases[i].id = `TC-${String(i + 1).padStart(3, '0')}`;
+      let candidate: string;
+      do {
+        nextNum++;
+        candidate = `TC-${String(nextNum).padStart(3, '0')}`;
+      } while (existingIds.has(candidate));
+      testCases[i].id = candidate;
+      existingIds.add(candidate);
     }
   }
 }
@@ -184,12 +204,30 @@ export async function generateCommand(paths: ProjectPaths, options: { fresh?: bo
   const adapter = createAdapter(generatorConfig);
   const suiteFile = paths.suite;
 
-  const prompt = buildPrompt(sourcePath, config)
+  // Load existing tests to avoid duplicates
+  let existingTests: TestCase[] = [];
+  if (!options.fresh) {
+    try {
+      const raw = await readFile(suiteFile, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        existingTests = parsed as TestCase[];
+      }
+    } catch {
+      // No existing suite — that's fine
+    }
+  }
+
+  if (existingTests.length > 0) {
+    console.log(chalk.dim(`Found ${existingTests.length} existing test case(s) — agent will avoid duplicates.`));
+  }
+
+  const prompt = buildPrompt(sourcePath, config, existingTests)
     + `\n\nWhen you are done, write the final JSON array to: ${suiteFile}`;
 
   if (options.nonInteractive) {
     // Non-interactive mode: use adapter with piped stdio (for CI or automation)
-    return generateNonInteractive(adapter, prompt, sourcePath, suiteFile);
+    return generateNonInteractive(adapter, prompt, sourcePath, suiteFile, existingTests);
   }
 
   // Interactive mode: launch the agent with inherited stdio so the user can collaborate
@@ -211,6 +249,7 @@ async function generateNonInteractive(
   prompt: string,
   sourcePath: string,
   suiteFile: string,
+  existingTests: TestCase[] = [],
 ): Promise<void> {
   const spinner = ora(`Running generator agent (${adapter.name})...`).start();
 
@@ -242,14 +281,15 @@ async function generateNonInteractive(
     throw new Error(`Test suite validation failed:\n${allErrors.join('\n')}`);
   }
 
-  const testCases = parsed as TestCase[];
-  assignIds(testCases);
+  const newTests = parsed as TestCase[];
+  const merged = [...existingTests, ...newTests];
+  assignIds(merged);
 
-  await writeFile(suiteFile, JSON.stringify(testCases, null, 2), 'utf-8');
-  console.log(chalk.green(`\nSuite saved to ${suiteFile}`));
+  await writeFile(suiteFile, JSON.stringify(merged, null, 2), 'utf-8');
+  console.log(chalk.green(`\nSuite saved to ${suiteFile} (${existingTests.length} existing + ${newTests.length} new = ${merged.length} total)`));
 
-  printSummary(testCases);
-  printSuiteTable(testCases);
+  printSummary(merged);
+  printSuiteTable(merged);
 }
 
 async function validateAndFinalize(suiteFile: string): Promise<void> {
