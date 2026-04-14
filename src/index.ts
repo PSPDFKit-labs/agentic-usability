@@ -39,8 +39,9 @@ program
   .command('generate')
   .description('Generate test suite by having an AI agent explore the SDK source')
   .option('--fresh', 'Force re-resolve source (bypass cache)')
-  .action(async (opts: { fresh?: boolean }) => {
-    await generateCommand({ fresh: opts.fresh });
+  .option('--non-interactive', 'Run in non-interactive mode (piped stdio, no human feedback)')
+  .action(async (opts: { fresh?: boolean; nonInteractive?: boolean }) => {
+    await generateCommand({ fresh: opts.fresh, nonInteractive: opts.nonInteractive });
   });
 
 program

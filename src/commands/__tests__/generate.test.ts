@@ -1,0 +1,177 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { makeConfig, makeAgentResult } from '../../__tests__/helpers/fixtures.js';
+
+vi.mock('../../core/config.js', () => ({
+  loadConfig: vi.fn(),
+  ensureWorkingDir: vi.fn(),
+}));
+
+vi.mock('../../core/source-resolver.js', () => ({
+  resolveSource: vi.fn(),
+}));
+
+vi.mock('../../agents/adapter.js', () => ({
+  createAdapter: vi.fn(),
+}));
+
+vi.mock('node:fs/promises', () => ({
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+}));
+
+vi.mock('ora', () => ({
+  default: vi.fn(() => ({
+    start: vi.fn().mockReturnThis(),
+    succeed: vi.fn().mockReturnThis(),
+    fail: vi.fn().mockReturnThis(),
+    stop: vi.fn().mockReturnThis(),
+  })),
+}));
+
+vi.mock('../suite-utils.js', () => ({
+  printSuiteTable: vi.fn(),
+}));
+
+const VALID_TC = [
+  {
+    problemStatement: 'task',
+    referenceSolution: [{ path: 'a.ts', content: 'code' }],
+    difficulty: 'easy',
+    targetApis: ['fn'],
+    expectedTokens: ['import'],
+    tags: ['test'],
+  },
+];
+const VALID_TC_JSON = JSON.stringify(VALID_TC);
+
+function makeAdapter(overrides: Record<string, unknown> = {}) {
+  return {
+    name: 'test',
+    installCommand: null,
+    run: vi.fn(),
+    interactive: vi.fn(),
+    sandboxCommand: vi.fn().mockReturnValue(''),
+    ...overrides,
+  };
+}
+
+import { loadConfig, ensureWorkingDir } from '../../core/config.js';
+import { resolveSource } from '../../core/source-resolver.js';
+import { createAdapter } from '../../agents/adapter.js';
+import { readFile, writeFile } from 'node:fs/promises';
+import { generateCommand } from '../generate.js';
+
+describe('generateCommand (non-interactive)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    vi.mocked(loadConfig).mockResolvedValue(makeConfig());
+    vi.mocked(ensureWorkingDir).mockResolvedValue('/working');
+    vi.mocked(resolveSource).mockResolvedValue('/tmp/sdk');
+  });
+
+  it('loads config, resolves source, runs adapter, saves suite JSON', async () => {
+    const adapter = makeAdapter();
+    adapter.run.mockResolvedValue(
+      makeAgentResult({ stdout: VALID_TC_JSON }),
+    );
+    vi.mocked(createAdapter).mockReturnValue(adapter as any);
+
+    await generateCommand({ nonInteractive: true });
+
+    expect(loadConfig).toHaveBeenCalled();
+    expect(ensureWorkingDir).toHaveBeenCalled();
+    expect(resolveSource).toHaveBeenCalled();
+    expect(createAdapter).toHaveBeenCalled();
+    expect(adapter.run).toHaveBeenCalled();
+    expect(writeFile).toHaveBeenCalledWith(
+      expect.stringContaining('suite.json'),
+      expect.any(String),
+      'utf-8',
+    );
+  });
+
+  it('auto-assigns IDs to test cases without IDs', async () => {
+    const adapter = makeAdapter();
+    adapter.run.mockResolvedValue(
+      makeAgentResult({ stdout: VALID_TC_JSON }),
+    );
+    vi.mocked(createAdapter).mockReturnValue(adapter as any);
+
+    await generateCommand({ nonInteractive: true });
+
+    const written = vi.mocked(writeFile).mock.calls[0][1] as string;
+    const parsed = JSON.parse(written);
+    expect(parsed[0].id).toBe('TC-001');
+  });
+
+  it('throws when adapter output is not valid JSON', async () => {
+    const adapter = makeAdapter();
+    adapter.run.mockResolvedValue(
+      makeAgentResult({ stdout: 'not json at all' }),
+    );
+    vi.mocked(createAdapter).mockReturnValue(adapter as any);
+
+    await expect(generateCommand({ nonInteractive: true })).rejects.toThrow(/not valid JSON/);
+  });
+
+  it('throws when adapter output is not a JSON array', async () => {
+    const adapter = makeAdapter();
+    adapter.run.mockResolvedValue(
+      makeAgentResult({ stdout: JSON.stringify({ not: 'an array' }) }),
+    );
+    vi.mocked(createAdapter).mockReturnValue(adapter as any);
+
+    await expect(generateCommand({ nonInteractive: true })).rejects.toThrow(/not a JSON array/);
+  });
+});
+
+describe('generateCommand (interactive)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    vi.mocked(loadConfig).mockResolvedValue(makeConfig());
+    vi.mocked(ensureWorkingDir).mockResolvedValue('/working');
+    vi.mocked(resolveSource).mockResolvedValue('/tmp/sdk');
+  });
+
+  it('calls adapter.interactive and saves suite JSON', async () => {
+    const adapter = makeAdapter();
+    adapter.interactive.mockResolvedValue({ exitCode: 0, durationMs: 5000 });
+    vi.mocked(createAdapter).mockReturnValue(adapter as any);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify(VALID_TC));
+
+    await generateCommand();
+
+    expect(createAdapter).toHaveBeenCalled();
+    expect(adapter.interactive).toHaveBeenCalledWith(
+      expect.stringContaining('test case generator'),
+      '/tmp/sdk',
+    );
+    expect(writeFile).toHaveBeenCalledWith(
+      expect.stringContaining('suite.json'),
+      expect.any(String),
+      'utf-8',
+    );
+  });
+
+  it('throws when agent does not write the suite file', async () => {
+    const adapter = makeAdapter();
+    adapter.interactive.mockResolvedValue({ exitCode: 0, durationMs: 1000 });
+    vi.mocked(createAdapter).mockReturnValue(adapter as any);
+    vi.mocked(readFile).mockRejectedValue(new Error('ENOENT'));
+
+    await expect(generateCommand()).rejects.toThrow(/Suite file not found/);
+  });
+
+  it('throws when agent writes invalid JSON', async () => {
+    const adapter = makeAdapter();
+    adapter.interactive.mockResolvedValue({ exitCode: 0, durationMs: 1000 });
+    vi.mocked(createAdapter).mockReturnValue(adapter as any);
+    vi.mocked(readFile).mockResolvedValue('not json {{{');
+
+    await expect(generateCommand()).rejects.toThrow(/not valid JSON/);
+  });
+});

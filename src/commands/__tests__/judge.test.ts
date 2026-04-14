@@ -1,0 +1,105 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { makeConfig, makeTestCase, makeSolutionFile } from '../../__tests__/helpers/fixtures.js';
+
+vi.mock('../../core/config.js', () => ({
+  loadConfig: vi.fn(),
+  ensureWorkingDir: vi.fn(),
+}));
+
+vi.mock('../../core/suite-io.js', () => ({
+  loadTestSuite: vi.fn(),
+  loadSolution: vi.fn(),
+  saveResult: vi.fn(),
+  RESULTS_DIR: 'results',
+}));
+
+vi.mock('../../scoring/judge.js', () => ({
+  runJudge: vi.fn(),
+}));
+
+vi.mock('ora', () => ({
+  default: vi.fn(() => ({
+    start: vi.fn().mockReturnThis(),
+    succeed: vi.fn().mockReturnThis(),
+    fail: vi.fn().mockReturnThis(),
+    stop: vi.fn().mockReturnThis(),
+  })),
+}));
+
+import { loadConfig, ensureWorkingDir } from '../../core/config.js';
+import { loadTestSuite, loadSolution, saveResult } from '../../core/suite-io.js';
+import { runJudge } from '../../scoring/judge.js';
+import { judgeCommand } from '../judge.js';
+
+function makeJudgeScore() {
+  return {
+    overallSimilarity: 90,
+    apiCorrectness: 100,
+    idiomaticUsage: 80,
+    functionalMatch: true,
+  };
+}
+
+describe('judgeCommand', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    vi.mocked(loadConfig).mockResolvedValue(makeConfig());
+    vi.mocked(ensureWorkingDir).mockResolvedValue('/working');
+    vi.mocked(loadTestSuite).mockResolvedValue([makeTestCase()]);
+    vi.mocked(loadSolution).mockResolvedValue([makeSolutionFile()]);
+    vi.mocked(runJudge).mockResolvedValue(makeJudgeScore() as any);
+  });
+
+  it('skips when skipJudge option is true', async () => {
+    await judgeCommand({ skipJudge: true });
+
+    expect(loadConfig).not.toHaveBeenCalled();
+    expect(loadTestSuite).not.toHaveBeenCalled();
+  });
+
+  it('runs judge for each target and test case', async () => {
+    await judgeCommand();
+
+    expect(loadSolution).toHaveBeenCalledWith('TC-001', 'claude');
+    expect(runJudge).toHaveBeenCalledWith(
+      makeTestCase(),
+      [makeSolutionFile()],
+      expect.objectContaining({ command: 'claude' }),
+      'claude',
+    );
+  });
+
+  it('skips test cases with no generated solution', async () => {
+    vi.mocked(loadSolution).mockResolvedValue(null);
+
+    await judgeCommand();
+
+    expect(runJudge).not.toHaveBeenCalled();
+  });
+
+  it('saves judge.json on success', async () => {
+    await judgeCommand();
+
+    expect(saveResult).toHaveBeenCalledWith(
+      'TC-001',
+      'judge.json',
+      expect.any(String),
+      'claude',
+    );
+  });
+
+  it('saves judge-error.log and continues on judge failure', async () => {
+    vi.mocked(runJudge).mockRejectedValue(new Error('judge crashed'));
+
+    await judgeCommand();
+
+    expect(saveResult).toHaveBeenCalledWith(
+      'TC-001',
+      'judge-error.log',
+      'judge crashed',
+      'claude',
+    );
+  });
+});

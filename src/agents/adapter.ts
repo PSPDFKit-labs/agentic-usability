@@ -5,10 +5,20 @@ import { GeminiAdapter } from './gemini.js';
 import { CustomAdapter } from './custom.js';
 
 export interface AgentAdapter {
-  name: string;
-  supportsSchema: boolean;
-  execute(prompt: string, workDir: string, env?: Record<string, string>): Promise<AgentResult>;
-  executeWithSchema(prompt: string, schema: object, workDir: string, env?: Record<string, string>): Promise<AgentResult>;
+  readonly name: string;
+  readonly installCommand: string | null;
+
+  /** Full lifecycle: spawn with schema args → envelope unwrap → retry on parse failure → return clean result. */
+  run(prompt: string, schema: object, workDir: string, options?: {
+    env?: Record<string, string>;
+    retries?: number;
+  }): Promise<AgentResult>;
+
+  /** Launch interactive agent session with inherited stdio. Resolves when agent exits. */
+  interactive(prompt: string, workDir: string): Promise<{ exitCode: number; durationMs: number }>;
+
+  /** Build a complete shell command string for sandbox execution. */
+  sandboxCommand(prompt: string, workDir?: string): string;
 }
 
 const KNOWN_ADAPTERS: Record<string, new (config: AgentConfig) => AgentAdapter> = {

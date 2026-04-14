@@ -6,7 +6,8 @@ import { SandboxClient } from '../sandbox/opensandbox.js';
 import { fetchAndCacheDocs } from '../sandbox/docs-fetcher.js';
 import { scaffoldWorkspace } from '../sandbox/scaffolding.js';
 import { WorkerPool } from '../sandbox/worker-pool.js';
-import type { AgentConfig, Config, TestCase, SolutionFile, TargetConfig } from '../core/types.js';
+import { createAdapter } from '../agents/adapter.js';
+import type { Config, TestCase, SolutionFile, TargetConfig } from '../core/types.js';
 
 function resolveEnv(
   env: Record<string, string> | undefined,
@@ -59,37 +60,6 @@ Implement the solution and write all output files to the /workspace/solution/ di
 Make sure to create the /workspace/solution/ directory first if it does not exist.`;
 }
 
-function buildSandboxAgentCommand(
-  executorConfig: AgentConfig,
-  prompt: string,
-): string {
-  const escapedPrompt = prompt.replace(/'/g, "'\\''");
-  const args = executorConfig.args ?? [];
-
-  switch (executorConfig.command) {
-    case 'claude':
-      return `claude --print -p '${escapedPrompt}' --workdir /workspace ${args.join(' ')}`;
-    case 'codex':
-      return `codex -q --full-auto '${escapedPrompt}' /workspace ${args.join(' ')}`;
-    case 'gemini':
-      return `gemini -p '${escapedPrompt}' --workdir /workspace ${args.join(' ')}`;
-    default:
-      return `${executorConfig.command} ${args.join(' ')} '${escapedPrompt}'`;
-  }
-}
-
-function getAgentInstallCommand(command: string): string | null {
-  switch (command) {
-    case 'claude':
-      return 'npm i -g @anthropic-ai/claude-code';
-    case 'codex':
-      return 'npm i -g @openai/codex';
-    case 'gemini':
-      return 'npm i -g @google/gemini-cli';
-    default:
-      return null;
-  }
-}
 
 async function extractSolution(
   client: SandboxClient,
@@ -148,14 +118,15 @@ export async function executeTestCase(
 
     // Install agent CLI inside the sandbox
     const executorConfig = config.agents?.executor ?? { command: 'claude' };
-    const installCmd = getAgentInstallCommand(executorConfig.command);
+    const adapter = createAdapter(executorConfig);
+    const installCmd = adapter.installCommand;
     if (installCmd) {
       await client.runCommand(installCmd);
     }
 
     // Run agent inside the sandbox
     const prompt = buildAgentPrompt(testCase, config);
-    const agentCmd = buildSandboxAgentCommand(executorConfig, prompt);
+    const agentCmd = adapter.sandboxCommand(prompt);
     const agentResult = await client.runCommandTimed(agentCmd);
 
     // Save agent output

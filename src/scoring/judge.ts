@@ -50,22 +50,39 @@ ${generatedSolution}
 Compare the generated solution to the reference solution and score it on the following criteria:
 
 1. **functionalEquivalence** (0-100): Does the generated solution produce the same behavior/output as the reference?
+   - 0-20: Completely broken or unrelated — does not compile/run or solves a different problem entirely.
+   - 21-40: Attempts the right problem but produces mostly incorrect output or crashes on typical inputs.
+   - 41-60: Partially correct — handles some cases but has significant logic errors or missing branches.
+   - 61-80: Mostly correct — produces the right output for common cases but fails on edge cases or error paths.
+   - 81-100: Fully equivalent — produces identical behavior to the reference across all inputs and edge cases.
+
 2. **apiCorrectness** (0-100): Does it use the correct SDK APIs as intended?
+   - 0-20: Does not use the target SDK at all, or uses entirely wrong APIs (e.g. raw HTTP instead of the SDK client).
+   - 21-40: Uses some SDK APIs but mostly the wrong ones, or calls them with incorrect arguments/signatures.
+   - 41-60: Uses the right APIs but with notable misuse — wrong method overloads, missing required options, or deprecated APIs.
+   - 61-80: Correct API selection with minor issues — e.g. slightly suboptimal method choice or unnecessary extra calls.
+   - 81-100: Uses exactly the right APIs with correct arguments, options, and call sequences matching the reference.
+
 3. **idiomaticUsage** (0-100): Does it follow idiomatic patterns for the SDK?
+   - 0-20: Anti-patterns throughout — fights the SDK's design, reimplements built-in functionality, or ignores conventions.
+   - 21-40: Works but written as if the developer never read the docs — manual workarounds for things the SDK handles natively.
+   - 41-60: Acceptable but not idiomatic — uses the SDK correctly but misses helper utilities, builder patterns, or recommended approaches.
+   - 61-80: Good usage with minor style gaps — e.g. manual error handling where the SDK provides middleware, or verbose config where defaults suffice.
+   - 81-100: Textbook idiomatic usage — leverages SDK conventions, utilities, and patterns exactly as the documentation recommends.
+
 4. **overallSimilarity** (0-100): Overall similarity to the reference solution in approach and quality.
-5. **functionalMatch** (boolean): Does the generated solution functionally achieve the same goal?
-6. **notes** (string): Brief explanation of your scoring rationale.
+   - 0-20: Entirely different approach with poor quality — would not pass code review.
+   - 21-40: Recognizably attempts the same task but takes a fundamentally different (and worse) approach.
+   - 41-60: Similar high-level approach but diverges significantly in implementation details or quality.
+   - 61-80: Close to the reference — same approach and structure with minor differences in style or completeness.
+   - 81-100: Nearly identical to the reference in approach, structure, and quality — differences are cosmetic at most.
+
+5. **functionalMatch** (boolean): Does the generated solution functionally achieve the same goal? Set to true if the solution would pass the same acceptance tests as the reference, even if the implementation differs. Set to false if it fails to meet the core requirements.
+
+6. **notes** (string): Brief explanation of your scoring rationale. Mention specific strengths or gaps that drove the scores.
 ${SCHEMA_DESCRIPTION}`;
 }
 
-function buildRetryPrompt(originalPrompt: string, error: string): string {
-  return `${originalPrompt}
-
-IMPORTANT: Your previous response was not valid JSON. The error was:
-${error}
-
-Please output ONLY a valid JSON object. No markdown code fences, no explanation text — just the raw JSON object starting with { and ending with }.`;
-}
 
 function extractJsonObject(text: string): string {
   const fencedMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
@@ -107,31 +124,6 @@ function validateJudgeScore(obj: unknown): string[] {
   return errors;
 }
 
-function parseJudgeOutput(stdout: string, supportsSchema: boolean): { parsed: unknown } | { error: string } {
-  if (supportsSchema) {
-    // Schema-supporting agents should return clean JSON
-    try {
-      return { parsed: JSON.parse(stdout) };
-    } catch (err) {
-      // Fall through to extraction as a safety net
-      const extracted = extractJsonObject(stdout);
-      try {
-        return { parsed: JSON.parse(extracted) };
-      } catch {
-        return { error: err instanceof Error ? err.message : String(err) };
-      }
-    }
-  }
-
-  // Non-schema agents: extract JSON from free-form text
-  const extracted = extractJsonObject(stdout);
-  try {
-    return { parsed: JSON.parse(extracted) };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
 export async function runJudge(
   testCase: TestCase,
   generatedSolution: SolutionFile[],
@@ -145,28 +137,24 @@ export async function runJudge(
 
   const prompt = buildJudgePrompt(testCase, referenceSolutionText, generatedSolutionText);
 
-  // Use schema-constrained output when available
-  let result = await adapter.executeWithSchema(prompt, JUDGE_SCHEMA, process.cwd());
+  // adapter.run() handles envelope unwrapping and retry internally
+  const result = await adapter.run(prompt, JUDGE_SCHEMA, process.cwd());
 
-  let parseResult = parseJudgeOutput(result.stdout, adapter.supportsSchema);
-
-  // Retry for non-schema agents on parse failure
-  if ('error' in parseResult && !adapter.supportsSchema) {
-    const retryPrompt = buildRetryPrompt(prompt, parseResult.error);
-    result = await adapter.executeWithSchema(retryPrompt, JUDGE_SCHEMA, process.cwd());
-    parseResult = parseJudgeOutput(result.stdout, adapter.supportsSchema);
+  // Parse the clean stdout — try direct parse, then extract JSON object from text
+  const extracted = extractJsonObject(result.stdout);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(extracted);
+  } catch (err) {
+    throw new Error(`Judge output is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  if ('error' in parseResult) {
-    throw new Error(`Judge output is not valid JSON: ${parseResult.error}`);
-  }
-
-  const validationErrors = validateJudgeScore(parseResult.parsed);
+  const validationErrors = validateJudgeScore(parsed);
   if (validationErrors.length > 0) {
     throw new Error(`Judge output validation failed:\n${validationErrors.join('\n')}`);
   }
 
-  const score = parseResult.parsed as Record<string, unknown>;
+  const score = parsed as Record<string, unknown>;
 
   return {
     testId: testCase.id,

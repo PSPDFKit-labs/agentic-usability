@@ -1,10 +1,10 @@
 import chalk from 'chalk';
 import ora from 'ora';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { loadConfig, ensureWorkingDir } from '../core/config.js';
 import { resolveSource } from '../core/source-resolver.js';
-import { createAdapter } from '../agents/adapter.js';
+import { createAdapter, type AgentAdapter } from '../agents/adapter.js';
 import { TestCase, Config } from '../core/types.js';
 import { printSuiteTable } from './suite-utils.js';
 
@@ -81,14 +81,6 @@ Guidelines:
 ${SCHEMA_DESCRIPTION}`;
 }
 
-function buildRetryPrompt(originalPrompt: string, error: string): string {
-  return `${originalPrompt}
-
-IMPORTANT: Your previous response was not valid JSON. The error was:
-${error}
-
-Please output ONLY a valid JSON array. No markdown code fences, no explanation text — just the raw JSON array starting with [ and ending with ].`;
-}
 
 function validateTestCase(tc: unknown, index: number): string[] {
   const errors: string[] = [];
@@ -148,27 +140,6 @@ function extractJson(text: string): string {
   return text.trim();
 }
 
-function parseGenerateOutput(stdout: string, supportsSchema: boolean): { parsed: unknown } | { error: string } {
-  if (supportsSchema) {
-    try {
-      return { parsed: JSON.parse(stdout) };
-    } catch (err) {
-      const extracted = extractJson(stdout);
-      try {
-        return { parsed: JSON.parse(extracted) };
-      } catch {
-        return { error: err instanceof Error ? err.message : String(err) };
-      }
-    }
-  }
-
-  const extracted = extractJson(stdout);
-  try {
-    return { parsed: JSON.parse(extracted) };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) };
-  }
-}
 
 function assignIds(testCases: TestCase[]): void {
   for (let i = 0; i < testCases.length; i++) {
@@ -204,7 +175,7 @@ function printSummary(testCases: TestCase[]): void {
   }
 }
 
-export async function generateCommand(options: { fresh?: boolean } = {}): Promise<void> {
+export async function generateCommand(options: { fresh?: boolean; nonInteractive?: boolean } = {}): Promise<void> {
   const config = await loadConfig();
   await ensureWorkingDir();
 
@@ -214,33 +185,50 @@ export async function generateCommand(options: { fresh?: boolean } = {}): Promis
 
   const generatorConfig = config.agents?.generator ?? { command: 'claude' };
   const adapter = createAdapter(generatorConfig);
+  const suiteFile = resolve(config.output?.suiteFile ?? DEFAULT_SUITE_FILE);
 
-  const prompt = buildPrompt(sourcePath, config);
+  const prompt = buildPrompt(sourcePath, config)
+    + `\n\nWhen you are done, write the final JSON array to: ${suiteFile}`;
 
-  spinner.start(`Running generator agent (${adapter.name})...`);
-  let result = await adapter.executeWithSchema(prompt, TEST_SUITE_SCHEMA, sourcePath);
+  if (options.nonInteractive) {
+    // Non-interactive mode: use adapter with piped stdio (for CI or automation)
+    return generateNonInteractive(adapter, prompt, sourcePath, suiteFile);
+  }
+
+  // Interactive mode: launch the agent with inherited stdio so the user can collaborate
+  console.log(chalk.bold(`\nLaunching interactive ${adapter.name} session...`));
+  console.log(chalk.dim(`The agent will explore ${sourcePath} and generate test cases.`));
+  console.log(chalk.dim(`You can give feedback, ask for changes, and guide the generation.`));
+  console.log(chalk.dim(`The agent will write the suite to ${suiteFile} when done.\n`));
+
+  const { exitCode, durationMs } = await adapter.interactive(prompt, sourcePath);
+
+  console.log(chalk.dim(`\nAgent exited (code ${exitCode}, ${Math.round(durationMs / 1000)}s)`));
+
+  // Validate the suite file the agent wrote
+  await validateAndFinalize(suiteFile);
+}
+
+async function generateNonInteractive(
+  adapter: AgentAdapter,
+  prompt: string,
+  sourcePath: string,
+  suiteFile: string,
+): Promise<void> {
+  const spinner = ora(`Running generator agent (${adapter.name})...`).start();
+
+  // adapter.run() handles envelope unwrapping and retry internally
+  const result = await adapter.run(prompt, TEST_SUITE_SCHEMA, sourcePath);
   spinner.succeed(`Agent finished (${result.durationMs}ms, exit code ${result.exitCode})`);
 
-  let parseResult = parseGenerateOutput(result.stdout, adapter.supportsSchema);
-
-  // Retry for non-schema agents on parse failure
-  if ('error' in parseResult && !adapter.supportsSchema) {
-    console.log(chalk.yellow(`First attempt produced malformed JSON: ${parseResult.error}`));
-    console.log(chalk.yellow('Retrying with correction prompt...'));
-
-    const retryPrompt = buildRetryPrompt(prompt, parseResult.error);
-    spinner.start(`Retrying generator agent (${adapter.name})...`);
-    result = await adapter.executeWithSchema(retryPrompt, TEST_SUITE_SCHEMA, sourcePath);
-    spinner.succeed(`Retry finished (${result.durationMs}ms, exit code ${result.exitCode})`);
-
-    parseResult = parseGenerateOutput(result.stdout, adapter.supportsSchema);
+  // Parse the clean stdout from the adapter
+  const extracted = extractJson(result.stdout);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(extracted);
+  } catch (err) {
+    throw new Error(`Agent output is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
   }
-
-  if ('error' in parseResult) {
-    throw new Error(`Agent output is not valid JSON: ${parseResult.error}`);
-  }
-
-  const parsed = parseResult.parsed;
 
   if (!Array.isArray(parsed)) {
     throw new Error('Agent output is not a JSON array of test cases');
@@ -260,11 +248,52 @@ export async function generateCommand(options: { fresh?: boolean } = {}): Promis
   const testCases = parsed as TestCase[];
   assignIds(testCases);
 
-  // Save suite
-  const suiteFile = resolve(config.output?.suiteFile ?? DEFAULT_SUITE_FILE);
   await writeFile(suiteFile, JSON.stringify(testCases, null, 2), 'utf-8');
   console.log(chalk.green(`\nSuite saved to ${suiteFile}`));
 
+  printSummary(testCases);
+  printSuiteTable(testCases);
+}
+
+async function validateAndFinalize(suiteFile: string): Promise<void> {
+  // Read and validate the suite file the agent wrote
+  let raw: string;
+  try {
+    raw = await readFile(suiteFile, 'utf-8');
+  } catch {
+    throw new Error(
+      `Suite file not found at ${suiteFile}.\nThe agent may not have written the file. Try running again or use --non-interactive.`,
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`Suite file at ${suiteFile} is not valid JSON. Please fix it manually or regenerate.`);
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Suite file at ${suiteFile} is not a JSON array.`);
+  }
+
+  const allErrors: string[] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const errors = validateTestCase(parsed[i], i);
+    allErrors.push(...errors);
+  }
+
+  if (allErrors.length > 0) {
+    throw new Error(`Test suite validation failed:\n${allErrors.join('\n')}`);
+  }
+
+  const testCases = parsed as TestCase[];
+  assignIds(testCases);
+
+  // Re-write with assigned IDs and consistent formatting
+  await writeFile(suiteFile, JSON.stringify(testCases, null, 2), 'utf-8');
+
+  console.log(chalk.green(`\nSuite validated and saved to ${suiteFile}`));
   printSummary(testCases);
   printSuiteTable(testCases);
 }

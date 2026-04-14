@@ -1,36 +1,33 @@
 import { writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { AgentConfig, AgentResult } from '../core/types.js';
-import { AgentAdapter } from './adapter.js';
-import { spawnAgent } from './spawn.js';
+import type { AgentConfig, AgentResult } from '../core/types.js';
+import { BaseAdapter } from './base.js';
 
-export class CodexAdapter implements AgentAdapter {
+export class CodexAdapter extends BaseAdapter {
   readonly name = 'codex';
-  readonly supportsSchema = true;
-  private readonly config: AgentConfig;
+  readonly installCommand = 'npm i -g @openai/codex';
 
   constructor(config: AgentConfig) {
-    this.config = config;
+    super(config);
   }
 
-  async execute(prompt: string, workDir: string, env?: Record<string, string>): Promise<AgentResult> {
-    const args = [
-      '--quiet',
-      '--prompt',
-      prompt,
-      '--cwd',
-      workDir,
-      ...(this.config.args ?? []),
-    ];
-
-    return spawnAgent('codex', args, {
-      cwd: workDir,
-      env,
-    });
+  sandboxCommand(prompt: string, workDir = '/workspace'): string {
+    const escaped = this.escapeForShell(prompt);
+    const args = this.config.args ?? [];
+    return `codex -q --full-auto --dangerously-bypass-approvals-and-sandbox --prompt '${escaped}' --cwd ${workDir} ${args.join(' ')}`.trimEnd();
   }
 
-  async executeWithSchema(prompt: string, schema: object, workDir: string, env?: Record<string, string>): Promise<AgentResult> {
+  protected buildInteractiveArgs(prompt: string, workDir: string): string[] {
+    return ['--prompt', prompt, '--cwd', workDir, ...(this.config.args ?? [])];
+  }
+
+  protected async spawnWithSchema(
+    prompt: string,
+    schema: object,
+    workDir: string,
+    env?: Record<string, string>,
+  ): Promise<AgentResult> {
     const timestamp = Date.now();
     const schemaPath = join(tmpdir(), `codex-schema-${timestamp}.json`);
     const outputPath = join(tmpdir(), `codex-output-${timestamp}.json`);
@@ -50,10 +47,7 @@ export class CodexAdapter implements AgentAdapter {
       ...(this.config.args ?? []),
     ];
 
-    const result = await spawnAgent('codex', args, {
-      cwd: workDir,
-      env,
-    });
+    const result = await this.spawn(args, workDir, env);
 
     // Read structured output from the output file
     try {
@@ -67,5 +61,16 @@ export class CodexAdapter implements AgentAdapter {
     await rm(outputPath, { force: true }).catch(() => {});
 
     return result;
+  }
+
+  protected parseEnvelope(result: AgentResult): AgentResult | null {
+    // Codex with schema writes structured output to a file (already read in spawnWithSchema).
+    // Try to parse as JSON to validate it's well-formed.
+    try {
+      JSON.parse(result.stdout);
+      return result;
+    } catch {
+      return null;
+    }
   }
 }

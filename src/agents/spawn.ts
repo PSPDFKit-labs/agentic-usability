@@ -3,6 +3,44 @@ import { AgentResult } from '../core/types.js';
 
 const DEFAULT_TIMEOUT = 300_000; // 5 minutes
 
+/**
+ * Spawn a command with stdio inherited so the user can interact with it directly.
+ * Returns exit code and duration when the process exits.
+ */
+export function spawnInteractive(
+  command: string,
+  args: string[],
+  options: {
+    cwd?: string;
+    env?: Record<string, string>;
+  } = {}
+): Promise<{ exitCode: number; durationMs: number }> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: { ...process.env, ...options.env },
+      stdio: 'inherit',
+    });
+
+    child.on('close', (code) => {
+      resolve({
+        exitCode: code ?? 1,
+        durationMs: Date.now() - start,
+      });
+    });
+
+    child.on('error', (err) => {
+      console.error(`Failed to spawn '${command}': ${err.message}`);
+      resolve({
+        exitCode: 1,
+        durationMs: Date.now() - start,
+      });
+    });
+  });
+}
+
 export function spawnAgent(
   command: string,
   args: string[],

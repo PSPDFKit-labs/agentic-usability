@@ -1,33 +1,30 @@
-import { AgentConfig, AgentResult } from '../core/types.js';
-import { AgentAdapter } from './adapter.js';
-import { spawnAgent } from './spawn.js';
+import type { AgentConfig, AgentResult } from '../core/types.js';
+import { BaseAdapter } from './base.js';
 
-export class ClaudeAdapter implements AgentAdapter {
+export class ClaudeAdapter extends BaseAdapter {
   readonly name = 'claude';
-  readonly supportsSchema = true;
-  private readonly config: AgentConfig;
+  readonly installCommand = 'npm i -g @anthropic-ai/claude-code';
 
   constructor(config: AgentConfig) {
-    this.config = config;
+    super(config);
   }
 
-  async execute(prompt: string, workDir: string, env?: Record<string, string>): Promise<AgentResult> {
-    const args = [
-      '--print',
-      '-p',
-      prompt,
-      '--workdir',
-      workDir,
-      ...(this.config.args ?? []),
-    ];
-
-    return spawnAgent('claude', args, {
-      cwd: workDir,
-      env,
-    });
+  sandboxCommand(prompt: string, workDir = '/workspace'): string {
+    const escaped = this.escapeForShell(prompt);
+    const args = this.config.args ?? [];
+    return `claude --print --dangerously-skip-permissions -p '${escaped}' --workdir ${workDir} ${args.join(' ')}`.trimEnd();
   }
 
-  async executeWithSchema(prompt: string, schema: object, workDir: string, env?: Record<string, string>): Promise<AgentResult> {
+  protected buildInteractiveArgs(prompt: string, workDir: string): string[] {
+    return ['-p', prompt, '--workdir', workDir, ...(this.config.args ?? [])];
+  }
+
+  protected async spawnWithSchema(
+    prompt: string,
+    schema: object,
+    workDir: string,
+    env?: Record<string, string>,
+  ): Promise<AgentResult> {
     const args = [
       '--print',
       '-p',
@@ -41,23 +38,22 @@ export class ClaudeAdapter implements AgentAdapter {
       ...(this.config.args ?? []),
     ];
 
-    const result = await spawnAgent('claude', args, {
-      cwd: workDir,
-      env,
-    });
+    return this.spawn(args, workDir, env);
+  }
 
-    // Parse the JSON envelope and extract structured output
+  protected parseEnvelope(result: AgentResult): AgentResult | null {
     try {
       const envelope = JSON.parse(result.stdout);
       if (envelope.structured_output !== undefined) {
-        result.stdout = JSON.stringify(envelope.structured_output);
-      } else if (envelope.result !== undefined) {
-        result.stdout = envelope.result;
+        return { ...result, stdout: JSON.stringify(envelope.structured_output) };
       }
+      if (envelope.result !== undefined) {
+        return { ...result, stdout: envelope.result };
+      }
+      // Valid JSON but no known envelope field — return as-is
+      return result;
     } catch {
-      // If envelope parsing fails, leave stdout as-is for downstream fallback
+      return null;
     }
-
-    return result;
   }
 }

@@ -1,32 +1,30 @@
-import { AgentConfig, AgentResult } from '../core/types.js';
-import { AgentAdapter } from './adapter.js';
-import { spawnAgent } from './spawn.js';
+import type { AgentConfig, AgentResult } from '../core/types.js';
+import { BaseAdapter } from './base.js';
 
-export class GeminiAdapter implements AgentAdapter {
+export class GeminiAdapter extends BaseAdapter {
   readonly name = 'gemini';
-  readonly supportsSchema = false;
-  private readonly config: AgentConfig;
+  readonly installCommand = 'npm i -g @google/gemini-cli';
 
   constructor(config: AgentConfig) {
-    this.config = config;
+    super(config);
   }
 
-  async execute(prompt: string, workDir: string, env?: Record<string, string>): Promise<AgentResult> {
-    const args = [
-      '--prompt',
-      prompt,
-      '--cwd',
-      workDir,
-      ...(this.config.args ?? []),
-    ];
-
-    return spawnAgent('gemini', args, {
-      cwd: workDir,
-      env,
-    });
+  sandboxCommand(prompt: string, workDir = '/workspace'): string {
+    const escaped = this.escapeForShell(prompt);
+    const args = this.config.args ?? [];
+    return `gemini --yolo -p '${escaped}' --cwd ${workDir} ${args.join(' ')}`.trimEnd();
   }
 
-  async executeWithSchema(prompt: string, _schema: object, workDir: string, env?: Record<string, string>): Promise<AgentResult> {
+  protected buildInteractiveArgs(prompt: string, workDir: string): string[] {
+    return ['--prompt', prompt, '--cwd', workDir, ...(this.config.args ?? [])];
+  }
+
+  protected async spawnWithSchema(
+    prompt: string,
+    _schema: object,
+    workDir: string,
+    env?: Record<string, string>,
+  ): Promise<AgentResult> {
     const args = [
       '--prompt',
       prompt,
@@ -37,21 +35,19 @@ export class GeminiAdapter implements AgentAdapter {
       ...(this.config.args ?? []),
     ];
 
-    const result = await spawnAgent('gemini', args, {
-      cwd: workDir,
-      env,
-    });
+    return this.spawn(args, workDir, env);
+  }
 
-    // Parse Gemini's JSON envelope to extract the response content
+  protected parseEnvelope(result: AgentResult): AgentResult | null {
     try {
       const envelope = JSON.parse(result.stdout);
       if (typeof envelope.response === 'string') {
-        result.stdout = envelope.response;
+        return { ...result, stdout: envelope.response };
       }
+      // Valid JSON but no known envelope — return as-is
+      return result;
     } catch {
-      // If envelope parsing fails, leave stdout as-is
+      return null;
     }
-
-    return result;
   }
 }
