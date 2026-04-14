@@ -71,7 +71,9 @@ describe('scaffoldWorkspace', () => {
     expect(client.uploadFiles).toHaveBeenCalledWith([
       expect.objectContaining({ path: '/workspace/.setup.sh' }),
     ]);
-    expect(client.runCommand).toHaveBeenCalledWith('chmod +x /workspace/.setup.sh && /workspace/.setup.sh');
+    expect(client.runCommand).toHaveBeenCalledWith(
+      'chmod +x /workspace/.setup.sh && /workspace/.setup.sh',
+    );
     expect(log).toContain('[Layer 3]');
   });
 

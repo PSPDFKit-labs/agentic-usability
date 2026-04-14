@@ -59,10 +59,10 @@ export class SandboxClient {
     }
   }
 
-  async runCommand(cmd: string): Promise<CommandResult> {
+  async runCommand(cmd: string, opts?: { envs?: Record<string, string> }): Promise<CommandResult> {
     const sbx = this.requireSandbox();
     try {
-      const execution = await sbx.commands.run(cmd);
+      const execution = await sbx.commands.run(cmd, opts?.envs ? { envs: opts.envs } : undefined);
       const stdout = execution.logs.stdout.map((m) => m.text).join('');
       const stderr = execution.logs.stderr.map((m) => m.text).join('');
       const exitCode = execution.exitCode ?? 1;
@@ -74,9 +74,9 @@ export class SandboxClient {
     }
   }
 
-  async runCommandTimed(cmd: string): Promise<CommandResult & { durationMs: number }> {
+  async runCommandTimed(cmd: string, opts?: { envs?: Record<string, string> }): Promise<CommandResult & { durationMs: number }> {
     const start = Date.now();
-    const result = await this.runCommand(cmd);
+    const result = await this.runCommand(cmd, opts);
     return { ...result, durationMs: Date.now() - start };
   }
 

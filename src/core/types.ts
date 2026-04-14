@@ -105,6 +105,8 @@ export interface SandboxConfig {
   concurrency?: number;
   defaultTimeout?: number;
   systemPrompt?: string;
+  /** Secret env vars for sandbox infrastructure (e.g. agent CLI auth). Passed only to the agent command, never exposed to agent-generated code. */
+  env?: Record<string, string>;
 }
 
 export interface Config {

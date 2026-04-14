@@ -17,6 +17,7 @@ import { analyzeCommand } from './commands/analyze.js';
 import { judgeCommand } from './commands/judge.js';
 import { reportCommand, exportResultsCommand } from './commands/report.js';
 import { runCommand } from './commands/run.js';
+import { inspectCommand } from './commands/inspect.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -121,6 +122,14 @@ program
   .description('Open the test suite in your editor for manual curation')
   .action(async () => {
     await editCommand(getPaths());
+  });
+
+program
+  .command('inspect')
+  .description('Open the web UI to inspect, edit, and run the pipeline')
+  .option('--port <number>', 'Port for the local server', '7373')
+  .action(async (opts: { port?: string }) => {
+    await inspectCommand(getPaths(), { port: opts.port ? parseInt(opts.port, 10) : undefined });
   });
 
 program

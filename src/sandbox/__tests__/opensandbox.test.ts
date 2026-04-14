@@ -116,7 +116,7 @@ describe('SandboxClient', () => {
 
       const result = await client.runCommand('echo hello');
 
-      expect(mockSandbox.commands.run).toHaveBeenCalledWith('echo hello');
+      expect(mockSandbox.commands.run).toHaveBeenCalledWith('echo hello', undefined);
       expect(result).toEqual({
         stdout: 'hello world',
         stderr: 'warn',

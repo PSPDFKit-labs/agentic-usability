@@ -118,15 +118,23 @@ export async function executeTestCase(
   target: TargetConfig,
   config: Config,
   paths: ProjectPaths,
+  pool?: WorkerPool,
 ): Promise<void> {
   const client = new SandboxClient(config.sandbox);
+  // Register sandbox destruction as abort callback so Ctrl+C kills in-flight sandboxes
+  const unregisterAbort = pool?.onAbort(async () => {
+    await client.destroy();
+  });
 
   try {
-    // Resolve env vars ($VAR → host value) and create sandbox
-    const sandboxEnv = resolveEnv(config.workspace?.env);
+    // workspace.env → baked into the container (available to setup scripts + agent-generated code)
+    const workspaceEnv = resolveEnv(config.workspace?.env);
+    // sandbox.env → passed only to the agent command (secrets like auth tokens)
+    const sandboxEnv = resolveEnv(config.sandbox?.env);
+
     await client.create(
       target.image,
-      sandboxEnv,
+      workspaceEnv,
       target.timeout ?? config.sandbox.defaultTimeout,
     );
 
@@ -151,13 +159,22 @@ export async function executeTestCase(
     const adapter = createAdapter(executorConfig);
     const installCmd = adapter.installCommand;
     if (installCmd) {
-      await client.runCommand(installCmd);
+      const installResult = await client.runCommand(installCmd);
+      if (installResult.exitCode !== 0) {
+        const installLog = [
+          `Install command failed: ${installCmd}`,
+          `Exit code: ${installResult.exitCode}`,
+          installResult.stderr,
+        ].filter(Boolean).join('\n');
+        await saveResult(paths, testCase.id, 'install-error.log', installLog, target.name);
+        throw new Error(`Agent install failed (exit ${installResult.exitCode}): ${installResult.stderr || installResult.stdout}`);
+      }
     }
 
-    // Run agent inside the sandbox
+    // Run agent with sandbox.env scoped to this command only (not leaked to agent-generated code)
     const prompt = buildAgentPrompt(testCase, config);
     const agentCmd = adapter.sandboxCommand(prompt);
-    const agentResult = await client.runCommandTimed(agentCmd);
+    const agentResult = await client.runCommandTimed(agentCmd, { envs: sandboxEnv });
 
     // Save agent output
     const agentLog = [
@@ -172,6 +189,13 @@ export async function executeTestCase(
     ].join('\n');
     await saveResult(paths, testCase.id, 'agent-output.log', agentLog, target.name);
 
+    // Fail early if agent exited with an error
+    if (agentResult.exitCode !== 0) {
+      throw new Error(
+        `Agent exited with code ${agentResult.exitCode}: ${agentResult.stderr || agentResult.stdout}`.slice(0, 500),
+      );
+    }
+
     // Extract solution
     const solution = await extractSolution(client);
     await saveResult(
@@ -182,6 +206,7 @@ export async function executeTestCase(
       target.name,
     );
   } finally {
+    unregisterAbort?.();
     await client.destroy();
   }
 }
@@ -209,7 +234,7 @@ export async function executeCommand(paths: ProjectPaths): Promise<void> {
 
     const executeFn = async (tc: TestCase): Promise<void> => {
       try {
-        await executeTestCase(tc, target, config, paths);
+        await executeTestCase(tc, target, config, paths, pool);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         await saveResult(paths, tc.id, 'error.log', message, target.name);

@@ -109,7 +109,7 @@ export async function runCommand(paths: ProjectPaths, options: {
         incompleteTestCases,
         async (tc) => {
           try {
-            await executeTestCase(tc, target, config, paths);
+            await executeTestCase(tc, target, config, paths, pool);
             stateManager.markTestComplete('execute', tc.id);
             await stateManager.save();
           } catch (err) {

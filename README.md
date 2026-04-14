@@ -141,6 +141,7 @@ All commands accept the global `-p/--project <dir>` option to scope to a project
 | `judge` | LLM comparison of reference vs generated solutions | `--skip-judge` |
 | `report` | Display terminal scorecard | `--json` |
 | `run` | Full pipeline end-to-end | `--resume`, `--fresh`, `--skip-judge` |
+| `inspect` | Open web UI to inspect, edit, and run the pipeline | `--port <number>` |
 | `edit` | Open test suite in `$EDITOR` | |
 | `export` | Export test suite to a file | `--output <path>` (required) |
 | `import` | Import test suite from a file | `--input <path>` (required) |
@@ -274,7 +275,7 @@ Docker environments where agents solve problems. Each target runs independently 
 
 ### Workspace
 
-Template files, setup scripts, and environment variables for sandboxes:
+Template files, setup scripts, and environment variables for the test workspace:
 
 ```json
 {
@@ -282,12 +283,18 @@ Template files, setup scripts, and environment variables for sandboxes:
     "template": "./templates/workspace",
     "setupScript": "./scripts/setup.sh",
     "env": {
-      "ANTHROPIC_API_KEY": "$ANTHROPIC_API_KEY",
+      "API_KEY": "$API_KEY",
       "NODE_ENV": "production"
     }
   }
 }
 ```
+
+| Field | Description |
+|-------|-------------|
+| `template` | Local directory uploaded to `/workspace/` in the sandbox |
+| `setupScript` | Script file uploaded and executed during scaffolding |
+| `env` | Environment variables baked into the sandbox container. Available to setup scripts **and** agent-generated code. Use this for non-secret config or test API keys that the solution code needs. |
 
 Values in `env` that start with `$` are resolved from your host environment at execution time. This keeps secrets out of your config file. If a referenced variable is not set, execution fails with a clear error.
 
@@ -316,7 +323,7 @@ The resolution happens once at CLI startup. If a reference can't be resolved, th
 
 ### Sandbox
 
-OpenSandbox server connection:
+OpenSandbox server connection and agent secrets:
 
 ```json
 {
@@ -325,7 +332,10 @@ OpenSandbox server connection:
     "apiKey": "optional-api-key",
     "concurrency": 3,
     "defaultTimeout": 600,
-    "systemPrompt": "You are solving a {{packageName}} problem."
+    "systemPrompt": "You are solving a {{packageName}} problem.",
+    "env": {
+      "CLAUDE_CODE_OAUTH_TOKEN": "$CLAUDE_CODE_OAUTH_TOKEN"
+    }
   }
 }
 ```
@@ -337,6 +347,30 @@ OpenSandbox server connection:
 | `concurrency` | Max parallel sandbox instances (default: 3) |
 | `defaultTimeout` | Seconds per sandbox if not set per-target (default: 600) |
 | `systemPrompt` | Prepended to agent prompt. `{{packageName}}` and `{{docsUrl}}` are interpolated. |
+| `env` | Secret env vars passed **only** to the agent command (e.g. auth tokens). These are scoped per-command via the OpenSandbox SDK and are **not** baked into the container — agent-generated code running in YOLO mode cannot access them. |
+
+> **`sandbox.env` vs `workspace.env`**: Use `sandbox.env` for agent infrastructure secrets (auth tokens, API keys for the agent CLI itself). Use `workspace.env` for variables that setup scripts or agent-generated code need (test API keys, config values). The distinction ensures that YOLO-mode agents cannot exfiltrate your agent auth credentials.
+
+## Web UI (Inspect)
+
+The `inspect` command launches a local web interface for browsing results, editing test suites, and running pipeline stages:
+
+```bash
+agentic-usability inspect -p pipelines/my-sdk-eval
+# Opens http://localhost:7373 in your browser
+
+agentic-usability inspect -p pipelines/my-sdk-eval --port 8888
+# Use a custom port
+```
+
+The UI includes:
+- **Dashboard** — scorecard overview with aggregate metrics per target
+- **Test Cases** — filterable list with per-test-case detail view, including side-by-side reference vs generated solution comparison
+- **Suite Editor** — add, edit, and delete test cases with a form-based editor
+- **Config Editor** — edit `config.json` with a Monaco JSON editor
+- **Pipeline Runner** — trigger individual stages or full runs with real-time streaming output
+
+The server reads and writes directly to the pipeline project directory. Press Ctrl+C in the terminal to stop.
 
 ## Pipeline and Resume
 
@@ -410,11 +444,13 @@ An AI agent compares the reference solution to the generated solution across fou
 
 ```
 src/
-  core/           types, config, paths, pipeline state, source resolver, suite I/O
+  core/           types, config, paths, pipeline state, source resolver, suite I/O, results
   agents/         adapter pattern: claude, codex, gemini, custom + spawn utility
   sandbox/        OpenSandbox client, workspace scaffolding, worker pool
   scoring/        token analysis, LLM judge
   commands/       one file per CLI command
+  server/         Express API server + WebSocket for the inspect UI
+ui/               React SPA (Vite + Monaco editor), built to dist-ui/
 ```
 
 ## License

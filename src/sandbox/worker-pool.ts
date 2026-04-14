@@ -13,9 +13,20 @@ export type ProgressCallback = (info: ProgressInfo, testCase: TestCase, event: '
 export class WorkerPool {
   private concurrency: number;
   private aborted = false;
+  private abortCallbacks = new Set<() => Promise<void>>();
 
   constructor(concurrency = 3) {
     this.concurrency = Math.max(1, concurrency);
+  }
+
+  /** Register a callback to be called on abort (e.g. destroy a sandbox). Returns an unregister function. */
+  onAbort(callback: () => Promise<void>): () => void {
+    this.abortCallbacks.add(callback);
+    return () => { this.abortCallbacks.delete(callback); };
+  }
+
+  get isAborted(): boolean {
+    return this.aborted;
   }
 
   async run(
@@ -29,8 +40,20 @@ export class WorkerPool {
     let failed = 0;
     let running = 0;
 
+    let sigintCount = 0;
     const onShutdown = () => {
-      this.aborted = true;
+      sigintCount++;
+      if (sigintCount === 1) {
+        this.aborted = true;
+        // Destroy all active sandboxes to unblock in-flight tasks
+        for (const cb of this.abortCallbacks) {
+          cb().catch(() => {});
+        }
+        this.abortCallbacks.clear();
+      } else {
+        // Second Ctrl+C = force exit
+        process.exit(1);
+      }
     };
     process.on('SIGINT', onShutdown);
 
@@ -55,27 +78,27 @@ export class WorkerPool {
         const backoffs = [1000, 3000];
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          if (this.aborted) break;
+
           try {
             await executeFn(tc);
             success = true;
             break;
           } catch (err) {
+            if (this.aborted) break;
             if (attempt < maxRetries) {
               await sleep(backoffs[attempt]);
             } else {
-              // Final attempt failed — record failure
               success = false;
-              // Re-throw is not needed; we track via success flag
-              // But we want the error available, so we store it on the last attempt
               const message = err instanceof Error ? err.message : String(err);
-              // Save error info — caller's executeFn already handles saveResult
-              // We just track the count here
-              void message; // suppress unused
+              void message;
             }
           }
         }
 
         running--;
+        if (this.aborted) break;
+
         if (success) {
           completed++;
           report(tc, 'done');
