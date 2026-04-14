@@ -4,19 +4,19 @@ import { createHash } from 'node:crypto';
 import TurndownService from 'turndown';
 import type { PublicInfo } from '../core/types.js';
 
-const CACHE_DIR = '.agentic-usability/cache/docs';
 const MAX_DOCS_BYTES = 100 * 1024; // 100KB
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export interface FetchDocsOptions {
   freshDocs?: boolean;
+  cacheDocs?: string;
 }
 
 export async function fetchAndCacheDocs(
   publicInfo: PublicInfo,
   options: FetchDocsOptions = {},
 ): Promise<string> {
-  const cacheDir = resolve(CACHE_DIR);
+  const cacheDir = resolve(options.cacheDocs ?? 'cache/docs');
   await mkdir(cacheDir, { recursive: true });
 
   const urls: string[] = [];

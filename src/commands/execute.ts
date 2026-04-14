@@ -1,12 +1,13 @@
 import chalk from 'chalk';
 import ora from 'ora';
-import { loadConfig, ensureWorkingDir } from '../core/config.js';
+import { loadConfig } from '../core/config.js';
 import { loadTestSuite, saveResult, formatElapsed } from '../core/suite-io.js';
 import { SandboxClient } from '../sandbox/opensandbox.js';
 import { fetchAndCacheDocs } from '../sandbox/docs-fetcher.js';
 import { scaffoldWorkspace } from '../sandbox/scaffolding.js';
 import { WorkerPool } from '../sandbox/worker-pool.js';
 import { createAdapter } from '../agents/adapter.js';
+import type { ProjectPaths } from '../core/paths.js';
 import type { Config, TestCase, SolutionFile, TargetConfig } from '../core/types.js';
 
 function resolveEnv(
@@ -92,6 +93,7 @@ export async function executeTestCase(
   target: TargetConfig,
   config: Config,
   docsContent: string,
+  paths: ProjectPaths,
 ): Promise<void> {
   const client = new SandboxClient(config.sandbox);
 
@@ -107,7 +109,7 @@ export async function executeTestCase(
     // Scaffold workspace
     const setupLog = await scaffoldWorkspace(client, config, testCase);
     if (setupLog) {
-      await saveResult(testCase.id, 'setup.log', setupLog, target.name);
+      await saveResult(paths, testCase.id, 'setup.log', setupLog, target.name);
     }
 
     // Upload PROBLEM.md and DOCS.md
@@ -140,11 +142,12 @@ export async function executeTestCase(
       '=== STDERR ===',
       agentResult.stderr,
     ].join('\n');
-    await saveResult(testCase.id, 'agent-output.log', agentLog, target.name);
+    await saveResult(paths, testCase.id, 'agent-output.log', agentLog, target.name);
 
     // Extract solution
     const solution = await extractSolution(client);
     await saveResult(
+      paths,
       testCase.id,
       'generated-solution.json',
       JSON.stringify(solution, null, 2),
@@ -155,14 +158,13 @@ export async function executeTestCase(
   }
 }
 
-export async function executeCommand(options: {
+export async function executeCommand(paths: ProjectPaths, options: {
   freshDocs?: boolean;
 } = {}): Promise<void> {
-  const config = await loadConfig();
-  await ensureWorkingDir();
+  const config = await loadConfig(paths.config);
 
   const spinner = ora('Loading test suite...').start();
-  const testCases = await loadTestSuite(config);
+  const testCases = await loadTestSuite(paths);
   spinner.succeed(`Loaded ${testCases.length} test case(s)`);
 
   // Validate connectivity
@@ -173,7 +175,7 @@ export async function executeCommand(options: {
   // Fetch and cache docs
   spinner.start('Fetching SDK documentation...');
   const docsContent = config.publicInfo
-    ? await fetchAndCacheDocs(config.publicInfo, { freshDocs: options.freshDocs })
+    ? await fetchAndCacheDocs(config.publicInfo, { freshDocs: options.freshDocs, cacheDocs: paths.cacheDocs })
     : '';
   spinner.succeed('Documentation ready');
 
@@ -188,10 +190,10 @@ export async function executeCommand(options: {
 
     const executeFn = async (tc: TestCase): Promise<void> => {
       try {
-        await executeTestCase(tc, target, config, docsContent);
+        await executeTestCase(tc, target, config, docsContent, paths);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        await saveResult(tc.id, 'error.log', message, target.name);
+        await saveResult(paths, tc.id, 'error.log', message, target.name);
         throw err;
       }
     };

@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeConfig, makeTestCase } from '../../__tests__/helpers/fixtures.js';
+import { makeConfig, makeTestCase, makeProjectPaths } from '../../__tests__/helpers/fixtures.js';
 
 vi.mock('../../core/config.js', () => ({
   loadConfig: vi.fn(),
-  ensureWorkingDir: vi.fn(),
+}));
+
+vi.mock('../../core/paths.js', () => ({
+  ensureProjectDirs: vi.fn(),
 }));
 
 vi.mock('../suite-utils.js', () => ({
@@ -24,10 +27,12 @@ vi.mock('node:readline/promises', () => ({
   })),
 }));
 
-import { loadConfig, ensureWorkingDir } from '../../core/config.js';
+import { loadConfig } from '../../core/config.js';
 import { validateTestSuite, printSuiteTable } from '../suite-utils.js';
 import { readFile, writeFile, stat } from 'node:fs/promises';
 import { importCommand } from '../import.js';
+
+const paths = makeProjectPaths();
 
 describe('importCommand', () => {
   const validSuite = [makeTestCase()];
@@ -37,7 +42,6 @@ describe('importCommand', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
 
     vi.mocked(loadConfig).mockResolvedValue(makeConfig());
-    vi.mocked(ensureWorkingDir).mockResolvedValue('/working');
     vi.mocked(readFile).mockResolvedValue(JSON.stringify(validSuite));
     vi.mocked(validateTestSuite).mockReturnValue(validSuite);
     vi.mocked(stat).mockRejectedValue(new Error('ENOENT'));
@@ -45,7 +49,7 @@ describe('importCommand', () => {
   });
 
   it('reads, validates, and writes imported suite file', async () => {
-    await importCommand({ input: '/tmp/suite.json' });
+    await importCommand(paths, { input: '/tmp/suite.json' });
 
     expect(readFile).toHaveBeenCalledWith(
       expect.stringContaining('suite.json'),
@@ -63,7 +67,7 @@ describe('importCommand', () => {
   it('throws when input file does not exist', async () => {
     vi.mocked(readFile).mockRejectedValue(new Error('ENOENT'));
 
-    await expect(importCommand({ input: '/tmp/missing.json' })).rejects.toThrow(
+    await expect(importCommand(paths, { input: '/tmp/missing.json' })).rejects.toThrow(
       /Input file not found/,
     );
   });
@@ -71,7 +75,7 @@ describe('importCommand', () => {
   it('throws when input file is not valid JSON', async () => {
     vi.mocked(readFile).mockResolvedValue('not json {{{');
 
-    await expect(importCommand({ input: '/tmp/bad.json' })).rejects.toThrow(
+    await expect(importCommand(paths, { input: '/tmp/bad.json' })).rejects.toThrow(
       /not valid JSON/,
     );
   });
@@ -81,7 +85,7 @@ describe('importCommand', () => {
       throw new Error('validation failed');
     });
 
-    await expect(importCommand({ input: '/tmp/suite.json' })).rejects.toThrow(
+    await expect(importCommand(paths, { input: '/tmp/suite.json' })).rejects.toThrow(
       /validation failed/,
     );
   });

@@ -16,7 +16,7 @@ describe('PipelineStateManager', () => {
   let manager: PipelineStateManager;
 
   beforeEach(() => {
-    manager = new PipelineStateManager('/working');
+    manager = new PipelineStateManager('/fake/project/logs/pipeline-state.json');
   });
 
   describe('constructor', () => {

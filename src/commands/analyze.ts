@@ -1,23 +1,22 @@
 import chalk from 'chalk';
 import ora from 'ora';
-import { loadConfig, ensureWorkingDir } from '../core/config.js';
-import { loadTestSuite, loadSolution, saveResult, RESULTS_DIR } from '../core/suite-io.js';
+import { loadConfig } from '../core/config.js';
+import { loadTestSuite, loadSolution, saveResult } from '../core/suite-io.js';
 import { analyzeTokens } from '../scoring/tokens.js';
-import { resolve } from 'node:path';
+import type { ProjectPaths } from '../core/paths.js';
 
-export async function analyzeCommand(): Promise<void> {
-  const config = await loadConfig();
-  await ensureWorkingDir();
+export async function analyzeCommand(paths: ProjectPaths): Promise<void> {
+  const config = await loadConfig(paths.config);
 
   const spinner = ora('Loading test suite...').start();
-  const testCases = await loadTestSuite(config);
+  const testCases = await loadTestSuite(paths);
   spinner.succeed(`Loaded ${testCases.length} test case(s)`);
 
   for (const target of config.targets) {
     console.log(chalk.bold(`\nAnalyzing solutions for target: ${target.name}\n`));
 
     for (const tc of testCases) {
-      const solution = await loadSolution(tc.id, target.name);
+      const solution = await loadSolution(paths, tc.id, target.name);
 
       if (!solution) {
         console.log(
@@ -33,6 +32,7 @@ export async function analyzeCommand(): Promise<void> {
         );
 
         await saveResult(
+          paths,
           tc.id,
           'token-analysis.json',
           JSON.stringify(emptyAnalysis, null, 2),
@@ -50,6 +50,7 @@ export async function analyzeCommand(): Promise<void> {
       );
 
       await saveResult(
+        paths,
         tc.id,
         'token-analysis.json',
         JSON.stringify(analysis, null, 2),
@@ -67,5 +68,5 @@ export async function analyzeCommand(): Promise<void> {
     }
   }
 
-  console.log(chalk.dim(`\nResults saved to ${resolve(RESULTS_DIR)}`));
+  console.log(chalk.dim(`\nResults saved to ${paths.results}`));
 }

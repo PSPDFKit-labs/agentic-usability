@@ -1,8 +1,5 @@
 import { readFile, writeFile, unlink } from 'node:fs/promises';
-import { join } from 'node:path';
 import { PipelineState } from './types.js';
-
-const STATE_FILENAME = 'pipeline-state.json';
 
 type PipelineStage = keyof PipelineState['completed'];
 
@@ -10,8 +7,8 @@ export class PipelineStateManager {
   private statePath: string;
   private state: PipelineState;
 
-  constructor(workingDir: string) {
-    this.statePath = join(workingDir, STATE_FILENAME);
+  constructor(statePath: string) {
+    this.statePath = statePath;
     this.state = PipelineStateManager.freshState();
   }
 

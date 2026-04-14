@@ -1,12 +1,10 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { writeFile, access } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import chalk from 'chalk';
-import { ensureWorkingDir } from '../core/config.js';
+import { ensureProjectDirs, type ProjectPaths } from '../core/paths.js';
 import type { Config } from '../core/types.js';
-
-const CONFIG_FILENAME = '.agentic-usability.json';
 
 async function prompt(rl: ReturnType<typeof createInterface>, question: string, defaultValue?: string): Promise<string> {
   const suffix = defaultValue ? ` ${chalk.dim(`(${defaultValue})`)}` : '';
@@ -47,8 +45,8 @@ async function pathExists(p: string): Promise<boolean> {
   }
 }
 
-export async function initCommand(): Promise<void> {
-  const configPath = join(process.cwd(), CONFIG_FILENAME);
+export async function initCommand(paths: ProjectPaths): Promise<void> {
+  const configPath = paths.config;
 
   if (await pathExists(configPath)) {
     console.log(chalk.yellow(`Config file already exists: ${configPath}`));
@@ -136,13 +134,11 @@ export async function initCommand(): Promise<void> {
       sandbox: { domain },
     };
 
-    // Write config file
+    // Create project directories and write config
+    await ensureProjectDirs(paths);
     await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
     console.log(chalk.green(`\nConfig written to ${configPath}`));
-
-    // Create working directory
-    await ensureWorkingDir();
-    console.log(chalk.green('Working directory created: .agentic-usability/'));
+    console.log(chalk.green(`Project directory: ${paths.root}`));
     console.log(chalk.dim('\nNext step: run `agentic-usability generate` to create a test suite.'));
   } catch (err) {
     rl.close();

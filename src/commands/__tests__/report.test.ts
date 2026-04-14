@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeConfig, makeTestCase } from '../../__tests__/helpers/fixtures.js';
+import { makeConfig, makeTestCase, makeProjectPaths } from '../../__tests__/helpers/fixtures.js';
 
 vi.mock('../../core/config.js', () => ({
   loadConfig: vi.fn(),
-  ensureWorkingDir: vi.fn(),
+}));
+
+vi.mock('../../core/paths.js', () => ({
+  ensureProjectDirs: vi.fn(),
 }));
 
 vi.mock('../../core/suite-io.js', () => ({
   loadTestSuite: vi.fn(),
-  RESULTS_DIR: '.agentic-usability/results',
 }));
 
 vi.mock('node:fs/promises', () => ({
@@ -25,10 +27,12 @@ vi.mock('ora', () => ({
   })),
 }));
 
-import { loadConfig, ensureWorkingDir } from '../../core/config.js';
+import { loadConfig } from '../../core/config.js';
 import { loadTestSuite } from '../../core/suite-io.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import { reportCommand, exportResultsCommand } from '../report.js';
+
+const paths = makeProjectPaths();
 
 function makeTokenAnalysisJson() {
   return JSON.stringify({
@@ -76,7 +80,6 @@ describe('reportCommand', () => {
     vi.mocked(loadConfig).mockResolvedValue(
       makeConfig({ targets: [{ name: 'claude', image: 'node:20' }] }),
     );
-    vi.mocked(ensureWorkingDir).mockResolvedValue('/working');
     vi.mocked(loadTestSuite).mockResolvedValue([
       makeTestCase({
         id: 'TC-001',
@@ -89,16 +92,15 @@ describe('reportCommand', () => {
   });
 
   it('loads config and test suite, displays scorecard', async () => {
-    await reportCommand();
+    await reportCommand(paths);
 
-    expect(loadConfig).toHaveBeenCalled();
-    expect(ensureWorkingDir).toHaveBeenCalled();
-    expect(loadTestSuite).toHaveBeenCalled();
+    expect(loadConfig).toHaveBeenCalledWith(paths.config);
+    expect(loadTestSuite).toHaveBeenCalledWith(paths);
     expect(console.log).toHaveBeenCalled();
   });
 
   it('outputs JSON when json option is true', async () => {
-    await reportCommand({ json: true });
+    await reportCommand(paths, { json: true });
 
     const calls = vi.mocked(console.log).mock.calls;
     const jsonCall = calls.find(([arg]) => {
@@ -117,7 +119,7 @@ describe('reportCommand', () => {
   });
 
   it('computes correct aggregate values from analysis and judge data', async () => {
-    await reportCommand({ json: true });
+    await reportCommand(paths, { json: true });
 
     const calls = vi.mocked(console.log).mock.calls;
     const jsonCall = calls.find(([arg]) => {
@@ -136,7 +138,7 @@ describe('reportCommand', () => {
   });
 
   it('includes byDifficulty breakdown in JSON output', async () => {
-    await reportCommand({ json: true });
+    await reportCommand(paths, { json: true });
 
     const calls = vi.mocked(console.log).mock.calls;
     const jsonCall = calls.find(([arg]) => {
@@ -157,7 +159,7 @@ describe('reportCommand', () => {
   it('handles missing analysis files gracefully', async () => {
     vi.mocked(readFile).mockRejectedValue(new Error('File not found'));
 
-    await reportCommand({ json: true });
+    await reportCommand(paths, { json: true });
 
     const calls = vi.mocked(console.log).mock.calls;
     const jsonCall = calls.find(([arg]) => {
@@ -196,7 +198,7 @@ describe('reportCommand', () => {
       throw new Error(`File not found: ${p}`);
     });
 
-    await reportCommand({ json: true });
+    await reportCommand(paths, { json: true });
 
     const calls = vi.mocked(console.log).mock.calls;
     const jsonCall = calls.find(([arg]) => {
@@ -222,7 +224,6 @@ describe('exportResultsCommand', () => {
     vi.mocked(loadConfig).mockResolvedValue(
       makeConfig({ targets: [{ name: 'claude', image: 'node:20' }] }),
     );
-    vi.mocked(ensureWorkingDir).mockResolvedValue('/working');
     vi.mocked(loadTestSuite).mockResolvedValue([
       makeTestCase({
         id: 'TC-001',
@@ -236,7 +237,7 @@ describe('exportResultsCommand', () => {
   });
 
   it('writes aggregated results to the specified output file', async () => {
-    await exportResultsCommand({ output: '/tmp/results.json' });
+    await exportResultsCommand(paths, { output: '/tmp/results.json' });
 
     expect(writeFile).toHaveBeenCalledWith(
       expect.stringContaining('results.json'),

@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { loadDotenv } from './core/env.js';
+import { resolveProjectPaths, ensureProjectDirs } from './core/paths.js';
 import { initCommand } from './commands/init.js';
 import { generateCommand } from './commands/generate.js';
 import { editCommand } from './commands/edit.js';
@@ -26,13 +27,19 @@ const program = new Command();
 program
   .name('agentic-usability')
   .description('SDK Usability Benchmark CLI — measures how well AI agents can use an SDK')
-  .version(pkg.version);
+  .version(pkg.version)
+  .option('-p, --project <dir>', 'Project directory (self-contained pipeline folder)');
+
+function getPaths(): ReturnType<typeof resolveProjectPaths> {
+  const opts = program.opts<{ project?: string }>();
+  return resolveProjectPaths(opts.project);
+}
 
 program
   .command('init')
-  .description('Initialize a new .agentic-usability.json config file')
+  .description('Initialize a new pipeline project')
   .action(async () => {
-    await initCommand();
+    await initCommand(getPaths());
   });
 
 program
@@ -41,7 +48,9 @@ program
   .option('--fresh', 'Force re-resolve source (bypass cache)')
   .option('--non-interactive', 'Run in non-interactive mode (piped stdio, no human feedback)')
   .action(async (opts: { fresh?: boolean; nonInteractive?: boolean }) => {
-    await generateCommand({ fresh: opts.fresh, nonInteractive: opts.nonInteractive });
+    const paths = getPaths();
+    await ensureProjectDirs(paths);
+    await generateCommand(paths, { fresh: opts.fresh, nonInteractive: opts.nonInteractive });
   });
 
 program
@@ -49,14 +58,18 @@ program
   .description('Execute test cases in sandboxed environments with AI agents')
   .option('--fresh-docs', 'Bypass documentation cache')
   .action(async (opts: { freshDocs?: boolean }) => {
-    await executeCommand({ freshDocs: opts.freshDocs });
+    const paths = getPaths();
+    await ensureProjectDirs(paths);
+    await executeCommand(paths, { freshDocs: opts.freshDocs });
   });
 
 program
   .command('analyze')
   .description('Analyze generated solutions for expected SDK API calls and patterns')
   .action(async () => {
-    await analyzeCommand();
+    const paths = getPaths();
+    await ensureProjectDirs(paths);
+    await analyzeCommand(paths);
   });
 
 program
@@ -64,7 +77,9 @@ program
   .description('Have an LLM compare reference and generated solutions')
   .option('--skip-judge', 'Skip the judge stage')
   .action(async (opts: { skipJudge?: boolean }) => {
-    await judgeCommand({ skipJudge: opts.skipJudge });
+    const paths = getPaths();
+    await ensureProjectDirs(paths);
+    await judgeCommand(paths, { skipJudge: opts.skipJudge });
   });
 
 program
@@ -72,7 +87,8 @@ program
   .description('Display a terminal scorecard of benchmark results')
   .option('--json', 'Output raw structured JSON instead of the table')
   .action(async (opts: { json?: boolean }) => {
-    await reportCommand({ json: opts.json });
+    const paths = getPaths();
+    await reportCommand(paths, { json: opts.json });
   });
 
 program
@@ -82,7 +98,7 @@ program
   .option('--fresh', 'Clear existing pipeline state before starting')
   .option('--skip-judge', 'Skip the LLM judge stage')
   .action(async (opts: { resume?: boolean; fresh?: boolean; skipJudge?: boolean }) => {
-    await runCommand({ resume: opts.resume, fresh: opts.fresh, skipJudge: opts.skipJudge });
+    await runCommand(getPaths(), { resume: opts.resume, fresh: opts.fresh, skipJudge: opts.skipJudge });
   });
 
 program
@@ -90,7 +106,7 @@ program
   .description('Export the test suite to a file')
   .requiredOption('--output <path>', 'Output file path')
   .action(async (opts: { output: string }) => {
-    await exportCommand({ output: opts.output });
+    await exportCommand(getPaths(), { output: opts.output });
   });
 
 program
@@ -98,14 +114,14 @@ program
   .description('Import a test suite from a file')
   .requiredOption('--input <path>', 'Input file path')
   .action(async (opts: { input: string }) => {
-    await importCommand({ input: opts.input });
+    await importCommand(getPaths(), { input: opts.input });
   });
 
 program
   .command('edit')
   .description('Open the test suite in your editor for manual curation')
   .action(async () => {
-    await editCommand();
+    await editCommand(getPaths());
   });
 
 program
@@ -113,7 +129,7 @@ program
   .description('Export all benchmark results to a single JSON file')
   .requiredOption('--output <path>', 'Output file path')
   .action(async (opts: { output: string }) => {
-    await exportResultsCommand({ output: opts.output });
+    await exportResultsCommand(getPaths(), { output: opts.output });
   });
 
 // Load .env file before running commands (shell env takes precedence)

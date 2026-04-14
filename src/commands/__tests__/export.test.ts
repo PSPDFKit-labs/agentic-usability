@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeConfig } from '../../__tests__/helpers/fixtures.js';
+import { makeConfig, makeProjectPaths } from '../../__tests__/helpers/fixtures.js';
 
 vi.mock('../../core/config.js', () => ({
   loadConfig: vi.fn(),
@@ -14,6 +14,8 @@ import { loadConfig } from '../../core/config.js';
 import { copyFile, stat } from 'node:fs/promises';
 import { exportCommand } from '../export.js';
 
+const paths = makeProjectPaths();
+
 describe('exportCommand', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -25,7 +27,7 @@ describe('exportCommand', () => {
   });
 
   it('copies suite file to the specified output path', async () => {
-    await exportCommand({ output: '/tmp/out.json' });
+    await exportCommand(paths, { output: '/tmp/out.json' });
 
     expect(stat).toHaveBeenCalledWith(expect.stringContaining('suite.json'));
     expect(copyFile).toHaveBeenCalledWith(
@@ -37,7 +39,7 @@ describe('exportCommand', () => {
   it('throws when suite file does not exist', async () => {
     vi.mocked(stat).mockRejectedValue(new Error('ENOENT'));
 
-    await expect(exportCommand({ output: '/tmp/out.json' })).rejects.toThrow(
+    await expect(exportCommand(paths, { output: '/tmp/out.json' })).rejects.toThrow(
       /Suite file not found/,
     );
   });

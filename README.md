@@ -92,10 +92,15 @@ npm link   # makes `agentic-usability` available globally
 ### 1. Initialize a project
 
 ```bash
+# Create a new pipeline project directory
+agentic-usability init -p pipelines/my-sdk-eval
+
+# Or cd into an existing directory and init there
+mkdir pipelines/my-sdk-eval && cd pipelines/my-sdk-eval
 agentic-usability init
 ```
 
-This walks you through creating a `.agentic-usability.json` config file. You'll provide:
+This walks you through creating a `config.json` file. You'll provide:
 - Source type (local path, git remote, or URL)
 - SDK package name and docs URL
 - Which AI agent to use
@@ -126,6 +131,11 @@ Then reference them in your config using `$VAR` syntax (see [Environment Variabl
 ### 3. Run the full pipeline
 
 ```bash
+# From anywhere, point to the project directory
+agentic-usability run -p pipelines/my-sdk-eval
+
+# Or cd into the project directory and run without -p
+cd pipelines/my-sdk-eval
 agentic-usability run
 ```
 
@@ -134,23 +144,53 @@ This executes all stages in order: generate, execute, analyze, judge, report.
 Or run stages individually:
 
 ```bash
-agentic-usability generate          # Create test suite from SDK source
-agentic-usability execute           # Run agents in sandboxes
-agentic-usability analyze           # Token coverage analysis
-agentic-usability judge             # LLM comparison scoring
-agentic-usability report            # Display scorecard
+agentic-usability generate -p pipelines/my-sdk-eval
+agentic-usability execute  -p pipelines/my-sdk-eval
+agentic-usability analyze  -p pipelines/my-sdk-eval
+agentic-usability judge    -p pipelines/my-sdk-eval
+agentic-usability report   -p pipelines/my-sdk-eval
 ```
+
+## Project Directory Layout
+
+Each pipeline project is a self-contained directory. Without `-p`, the CLI treats CWD as the project directory.
+
+```
+pipelines/my-sdk-eval/           # project root (= CWD or -p target)
+  config.json                    # pipeline configuration
+  suite.json                     # generated test cases
+  results/                       # per-target solution files + analysis
+    node-20/
+      TC-001/
+        generated-solution.json
+        agent-output.log
+        token-analysis.json
+        judge.json
+    python-3.12/
+      TC-001/
+        ...
+  reports/                       # scorecard exports
+  logs/                          # pipeline state for resume
+    pipeline-state.json
+  cache/                         # docs cache + git repo clones
+    docs/
+    repos/
+```
+
+This makes it easy to run multiple benchmarks side-by-side, archive results, or share a pipeline run as a single folder.
 
 ## Commands
 
+All commands accept the global `-p/--project <dir>` option to scope to a project directory.
+
 | Command | Description | Flags |
 |---------|-------------|-------|
-| `init` | Create a new `.agentic-usability.json` config | |
-| `generate` | Generate test suite from SDK source | `--fresh` re-resolve source |
-| `execute` | Run agents in sandboxes to solve test cases | `--fresh-docs` bypass doc cache |
+| `init` | Create a new pipeline project | `-p <dir>` |
+| `generate` | Generate test suite from SDK source | `--fresh`, `--non-interactive` |
+| `execute` | Run agents in sandboxes to solve test cases | `--fresh-docs` |
 | `analyze` | Regex-based token analysis of generated solutions | |
 | `judge` | LLM comparison of reference vs generated solutions | `--skip-judge` |
-| `report` | Display terminal scorecard | `--json` output as JSON |
+| `report` | Display terminal scorecard | `--json` |
 | `run` | Full pipeline end-to-end | `--resume`, `--fresh`, `--skip-judge` |
 | `edit` | Open test suite in `$EDITOR` | |
 | `export` | Export test suite to a file | `--output <path>` (required) |
@@ -159,7 +199,7 @@ agentic-usability report            # Display scorecard
 
 ## Configuration Reference
 
-The config lives in `.agentic-usability.json` at the project root.
+The config file is `config.json` inside the project directory.
 
 ```jsonc
 {
@@ -213,12 +253,6 @@ The config lives in `.agentic-usability.json` at the project root.
     "concurrency": 3,           // parallel sandbox instances
     "defaultTimeout": 600,      // seconds per sandbox
     "systemPrompt": "You are solving a {{packageName}} problem."
-  },
-
-  // Output paths
-  "output": {
-    "dir": ".agentic-usability",
-    "suiteFile": ".agentic-usability/suite.json"
   }
 }
 ```
@@ -268,43 +302,35 @@ Define multiple targets to benchmark the same test suite across different enviro
 }
 ```
 
-Each target runs independently. Results are stored per-target:
-
-```
-.agentic-usability/results/<target-name>/<test-id>/
-  generated-solution.json
-  agent-output.log
-  token-analysis.json
-  judge.json
-```
+Each target runs independently. Results are stored per-target under `results/<target-name>/<test-id>/`.
 
 The report displays a separate scorecard per target.
 
 ## Pipeline and Resume
 
-The `run` command orchestrates 5 stages: **generate → execute → analyze → judge → report**. Pipeline state is checkpointed after each test case in `.agentic-usability/pipeline-state.json`.
+The `run` command orchestrates 5 stages: **generate → execute → analyze → judge → report**. Pipeline state is checkpointed after each test case in `logs/pipeline-state.json`.
 
 If a run is interrupted (Ctrl+C, crash, timeout), resume from where it left off:
 
 ```bash
-agentic-usability run --resume
+agentic-usability run -p pipelines/my-sdk-eval --resume
 ```
 
 To start completely fresh (clears all state):
 
 ```bash
-agentic-usability run --fresh
+agentic-usability run -p pipelines/my-sdk-eval --fresh
 ```
 
 To skip the LLM judge stage (faster, token-analysis only):
 
 ```bash
-agentic-usability run --skip-judge
+agentic-usability run -p pipelines/my-sdk-eval --skip-judge
 ```
 
 ## Test Suite Format
 
-The test suite (`.agentic-usability/suite.json`) is a JSON array of test cases:
+The test suite (`suite.json`) is a JSON array of test cases:
 
 ```json
 [
@@ -326,8 +352,8 @@ The test suite (`.agentic-usability/suite.json`) is a JSON array of test cases:
 You can manually edit the suite with `agentic-usability edit`, or export/import for sharing:
 
 ```bash
-agentic-usability export --output my-suite.json
-agentic-usability import --input my-suite.json
+agentic-usability export -p pipelines/my-sdk-eval --output my-suite.json
+agentic-usability import -p pipelines/my-sdk-eval --input my-suite.json
 ```
 
 ## Scoring
@@ -355,7 +381,7 @@ An AI agent compares the reference solution to the generated solution and scores
 
 ```
 src/
-  core/           types, config, pipeline state, source resolver, suite I/O
+  core/           types, config, paths, pipeline state, source resolver, suite I/O
   agents/         adapter pattern: claude, codex, gemini, custom + spawn utility
   sandbox/        OpenSandbox client, docs fetcher, workspace scaffolding, worker pool
   scoring/        token analysis, LLM judge

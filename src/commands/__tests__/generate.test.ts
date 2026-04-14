@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeConfig, makeAgentResult } from '../../__tests__/helpers/fixtures.js';
+import { makeConfig, makeAgentResult, makeProjectPaths } from '../../__tests__/helpers/fixtures.js';
 
 vi.mock('../../core/config.js', () => ({
   loadConfig: vi.fn(),
-  ensureWorkingDir: vi.fn(),
+}));
+
+vi.mock('../../core/paths.js', () => ({
+  ensureProjectDirs: vi.fn(),
 }));
 
 vi.mock('../../core/source-resolver.js', () => ({
@@ -55,11 +58,13 @@ function makeAdapter(overrides: Record<string, unknown> = {}) {
   };
 }
 
-import { loadConfig, ensureWorkingDir } from '../../core/config.js';
+import { loadConfig } from '../../core/config.js';
 import { resolveSource } from '../../core/source-resolver.js';
 import { createAdapter } from '../../agents/adapter.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import { generateCommand } from '../generate.js';
+
+const paths = makeProjectPaths();
 
 describe('generateCommand (non-interactive)', () => {
   beforeEach(() => {
@@ -67,7 +72,6 @@ describe('generateCommand (non-interactive)', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
 
     vi.mocked(loadConfig).mockResolvedValue(makeConfig());
-    vi.mocked(ensureWorkingDir).mockResolvedValue('/working');
     vi.mocked(resolveSource).mockResolvedValue('/tmp/sdk');
   });
 
@@ -78,10 +82,9 @@ describe('generateCommand (non-interactive)', () => {
     );
     vi.mocked(createAdapter).mockReturnValue(adapter as any);
 
-    await generateCommand({ nonInteractive: true });
+    await generateCommand(paths, { nonInteractive: true });
 
-    expect(loadConfig).toHaveBeenCalled();
-    expect(ensureWorkingDir).toHaveBeenCalled();
+    expect(loadConfig).toHaveBeenCalledWith(paths.config);
     expect(resolveSource).toHaveBeenCalled();
     expect(createAdapter).toHaveBeenCalled();
     expect(adapter.run).toHaveBeenCalled();
@@ -99,7 +102,7 @@ describe('generateCommand (non-interactive)', () => {
     );
     vi.mocked(createAdapter).mockReturnValue(adapter as any);
 
-    await generateCommand({ nonInteractive: true });
+    await generateCommand(paths, { nonInteractive: true });
 
     const written = vi.mocked(writeFile).mock.calls[0][1] as string;
     const parsed = JSON.parse(written);
@@ -113,7 +116,7 @@ describe('generateCommand (non-interactive)', () => {
     );
     vi.mocked(createAdapter).mockReturnValue(adapter as any);
 
-    await expect(generateCommand({ nonInteractive: true })).rejects.toThrow(/not valid JSON/);
+    await expect(generateCommand(paths, { nonInteractive: true })).rejects.toThrow(/not valid JSON/);
   });
 
   it('throws when adapter output is not a JSON array', async () => {
@@ -123,7 +126,7 @@ describe('generateCommand (non-interactive)', () => {
     );
     vi.mocked(createAdapter).mockReturnValue(adapter as any);
 
-    await expect(generateCommand({ nonInteractive: true })).rejects.toThrow(/not a JSON array/);
+    await expect(generateCommand(paths, { nonInteractive: true })).rejects.toThrow(/not a JSON array/);
   });
 });
 
@@ -133,7 +136,6 @@ describe('generateCommand (interactive)', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
 
     vi.mocked(loadConfig).mockResolvedValue(makeConfig());
-    vi.mocked(ensureWorkingDir).mockResolvedValue('/working');
     vi.mocked(resolveSource).mockResolvedValue('/tmp/sdk');
   });
 
@@ -143,7 +145,7 @@ describe('generateCommand (interactive)', () => {
     vi.mocked(createAdapter).mockReturnValue(adapter as any);
     vi.mocked(readFile).mockResolvedValue(JSON.stringify(VALID_TC));
 
-    await generateCommand();
+    await generateCommand(paths);
 
     expect(createAdapter).toHaveBeenCalled();
     expect(adapter.interactive).toHaveBeenCalledWith(
@@ -163,7 +165,7 @@ describe('generateCommand (interactive)', () => {
     vi.mocked(createAdapter).mockReturnValue(adapter as any);
     vi.mocked(readFile).mockRejectedValue(new Error('ENOENT'));
 
-    await expect(generateCommand()).rejects.toThrow(/Suite file not found/);
+    await expect(generateCommand(paths)).rejects.toThrow(/Suite file not found/);
   });
 
   it('throws when agent writes invalid JSON', async () => {
@@ -172,6 +174,6 @@ describe('generateCommand (interactive)', () => {
     vi.mocked(createAdapter).mockReturnValue(adapter as any);
     vi.mocked(readFile).mockResolvedValue('not json {{{');
 
-    await expect(generateCommand()).rejects.toThrow(/not valid JSON/);
+    await expect(generateCommand(paths)).rejects.toThrow(/not valid JSON/);
   });
 });

@@ -103,11 +103,6 @@ export interface SandboxConfig {
   systemPrompt?: string;
 }
 
-export interface OutputConfig {
-  dir?: string;
-  suiteFile?: string;
-}
-
 export interface Config {
   source: SourceConfig;
   publicInfo?: PublicInfo;
@@ -119,7 +114,6 @@ export interface Config {
   targets: TargetConfig[];
   workspace?: WorkspaceConfig;
   sandbox: SandboxConfig;
-  output?: OutputConfig;
 }
 
 export interface PipelineState {

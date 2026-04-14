@@ -2,17 +2,17 @@ import chalk from 'chalk';
 import { readFile, writeFile, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
-import { loadConfig, ensureWorkingDir } from '../core/config.js';
+import { loadConfig } from '../core/config.js';
+import { ensureProjectDirs } from '../core/paths.js';
 import { validateTestSuite, printSuiteTable } from './suite-utils.js';
+import type { ProjectPaths } from '../core/paths.js';
 
-const DEFAULT_SUITE_FILE = '.agentic-usability/suite.json';
-
-export async function importCommand(options: { input: string }): Promise<void> {
-  const config = await loadConfig();
-  await ensureWorkingDir();
+export async function importCommand(paths: ProjectPaths, options: { input: string }): Promise<void> {
+  await loadConfig(paths.config); // validate config exists
+  await ensureProjectDirs(paths);
 
   const inputPath = resolve(options.input);
-  const suiteFile = resolve(config.output?.suiteFile ?? DEFAULT_SUITE_FILE);
+  const suiteFile = paths.suite;
 
   // Read and parse input file
   let raw: string;

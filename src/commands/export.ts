@@ -2,12 +2,11 @@ import chalk from 'chalk';
 import { copyFile, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { loadConfig } from '../core/config.js';
+import type { ProjectPaths } from '../core/paths.js';
 
-const DEFAULT_SUITE_FILE = '.agentic-usability/suite.json';
-
-export async function exportCommand(options: { output: string }): Promise<void> {
-  const config = await loadConfig();
-  const suiteFile = resolve(config.output?.suiteFile ?? DEFAULT_SUITE_FILE);
+export async function exportCommand(paths: ProjectPaths, options: { output: string }): Promise<void> {
+  await loadConfig(paths.config); // validate config exists
+  const suiteFile = paths.suite;
 
   // Verify suite file exists
   try {

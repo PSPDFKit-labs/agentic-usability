@@ -1,13 +1,7 @@
-import { readFile, mkdir, access } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { Config } from './types.js';
 
-const CONFIG_FILENAME = '.agentic-usability.json';
-const WORKING_DIR = '.agentic-usability';
-
-export async function loadConfig(cwd: string = process.cwd()): Promise<Config> {
-  const configPath = join(cwd, CONFIG_FILENAME);
-
+export async function loadConfig(configPath: string): Promise<Config> {
   let raw: string;
   try {
     raw = await readFile(configPath, 'utf-8');
@@ -82,14 +76,4 @@ function validateConfig(data: unknown, configPath: string): Config {
   }
 
   return obj as unknown as Config;
-}
-
-export async function ensureWorkingDir(cwd: string = process.cwd()): Promise<string> {
-  const dirPath = join(cwd, WORKING_DIR);
-  try {
-    await access(dirPath);
-  } catch {
-    await mkdir(dirPath, { recursive: true });
-  }
-  return dirPath;
 }

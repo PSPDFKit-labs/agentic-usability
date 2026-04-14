@@ -1,14 +1,12 @@
 import chalk from 'chalk';
 import ora from 'ora';
 import { readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
-import { loadConfig, ensureWorkingDir } from '../core/config.js';
+import { loadConfig } from '../core/config.js';
 import { resolveSource } from '../core/source-resolver.js';
 import { createAdapter, type AgentAdapter } from '../agents/adapter.js';
 import { TestCase, Config } from '../core/types.js';
+import type { ProjectPaths } from '../core/paths.js';
 import { printSuiteTable } from './suite-utils.js';
-
-const DEFAULT_SUITE_FILE = '.agentic-usability/suite.json';
 
 const TEST_SUITE_SCHEMA = {
   type: 'array',
@@ -175,17 +173,16 @@ function printSummary(testCases: TestCase[]): void {
   }
 }
 
-export async function generateCommand(options: { fresh?: boolean; nonInteractive?: boolean } = {}): Promise<void> {
-  const config = await loadConfig();
-  await ensureWorkingDir();
+export async function generateCommand(paths: ProjectPaths, options: { fresh?: boolean; nonInteractive?: boolean } = {}): Promise<void> {
+  const config = await loadConfig(paths.config);
 
   const spinner = ora('Resolving source...').start();
-  const sourcePath = await resolveSource(config, { fresh: options.fresh });
+  const sourcePath = await resolveSource(config, { fresh: options.fresh, reposDir: paths.cacheRepos });
   spinner.succeed(`Source resolved: ${sourcePath}`);
 
   const generatorConfig = config.agents?.generator ?? { command: 'claude' };
   const adapter = createAdapter(generatorConfig);
-  const suiteFile = resolve(config.output?.suiteFile ?? DEFAULT_SUITE_FILE);
+  const suiteFile = paths.suite;
 
   const prompt = buildPrompt(sourcePath, config)
     + `\n\nWhen you are done, write the final JSON array to: ${suiteFile}`;

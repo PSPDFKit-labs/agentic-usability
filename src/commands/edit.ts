@@ -1,15 +1,13 @@
 import chalk from 'chalk';
 import { spawn } from 'node:child_process';
 import { readFile, stat } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import { loadConfig } from '../core/config.js';
 import { validateTestSuite, printSuiteTable } from './suite-utils.js';
+import type { ProjectPaths } from '../core/paths.js';
 
-const DEFAULT_SUITE_FILE = '.agentic-usability/suite.json';
-
-export async function editCommand(): Promise<void> {
-  const config = await loadConfig();
-  const suiteFile = resolve(config.output?.suiteFile ?? DEFAULT_SUITE_FILE);
+export async function editCommand(paths: ProjectPaths): Promise<void> {
+  await loadConfig(paths.config); // validate config exists
+  const suiteFile = paths.suite;
 
   // Verify suite file exists
   try {

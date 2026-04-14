@@ -3,8 +3,9 @@ import Table from 'cli-table3';
 import ora from 'ora';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
-import { loadConfig, ensureWorkingDir } from '../core/config.js';
-import { loadTestSuite, RESULTS_DIR } from '../core/suite-io.js';
+import { loadConfig } from '../core/config.js';
+import { loadTestSuite } from '../core/suite-io.js';
+import type { ProjectPaths } from '../core/paths.js';
 import type { Config, TestCase, TokenAnalysis, JudgeScore, SolutionFile } from '../core/types.js';
 
 interface TestResult {
@@ -38,11 +39,11 @@ async function loadJsonFile<T>(filePath: string): Promise<T | null> {
   }
 }
 
-async function loadAllResults(testCases: TestCase[], target: string): Promise<TestResult[]> {
+async function loadAllResults(paths: ProjectPaths, testCases: TestCase[], target: string): Promise<TestResult[]> {
   const results: TestResult[] = [];
 
   for (const tc of testCases) {
-    const dir = resolve(join(RESULTS_DIR, target, tc.id));
+    const dir = join(paths.results, target, tc.id);
 
     const tokenAnalysis = await loadJsonFile<TokenAnalysis>(join(dir, 'token-analysis.json'));
     const judgeScore = await loadJsonFile<JudgeScore>(join(dir, 'judge.json'));
@@ -269,18 +270,17 @@ function buildJsonOutput(allAggregates: AggregateResults[]): object {
   };
 }
 
-export async function reportCommand(options: { json?: boolean } = {}): Promise<void> {
-  const config = await loadConfig();
-  await ensureWorkingDir();
+export async function reportCommand(paths: ProjectPaths, options: { json?: boolean } = {}): Promise<void> {
+  const config = await loadConfig(paths.config);
 
   const spinner = ora('Loading test suite and results...').start();
-  const testCases = await loadTestSuite(config);
+  const testCases = await loadTestSuite(paths);
   spinner.succeed(`Loaded ${testCases.length} test case(s)`);
 
   const allAggregates: AggregateResults[] = [];
 
   for (const target of config.targets) {
-    const testResults = await loadAllResults(testCases, target.name);
+    const testResults = await loadAllResults(paths, testCases, target.name);
     const aggregates = computeAggregates(testResults, target.name);
     allAggregates.push(aggregates);
 
@@ -295,18 +295,17 @@ export async function reportCommand(options: { json?: boolean } = {}): Promise<v
   }
 }
 
-export async function exportResultsCommand(options: { output: string }): Promise<void> {
-  const config = await loadConfig();
-  await ensureWorkingDir();
+export async function exportResultsCommand(paths: ProjectPaths, options: { output: string }): Promise<void> {
+  const config = await loadConfig(paths.config);
 
   const spinner = ora('Loading test suite and results...').start();
-  const testCases = await loadTestSuite(config);
+  const testCases = await loadTestSuite(paths);
   spinner.succeed(`Loaded ${testCases.length} test case(s)`);
 
   const allAggregates: AggregateResults[] = [];
 
   for (const target of config.targets) {
-    const testResults = await loadAllResults(testCases, target.name);
+    const testResults = await loadAllResults(paths, testCases, target.name);
     const aggregates = computeAggregates(testResults, target.name);
     allAggregates.push(aggregates);
   }

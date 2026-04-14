@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeConfig, makeTestCase } from '../../__tests__/helpers/fixtures.js';
+import { makeConfig, makeTestCase, makeProjectPaths } from '../../__tests__/helpers/fixtures.js';
 
 const mockStateManager = {
   load: vi.fn(),
@@ -19,7 +19,10 @@ const mockStateManager = {
 
 vi.mock('../../core/config.js', () => ({
   loadConfig: vi.fn(),
-  ensureWorkingDir: vi.fn().mockResolvedValue('/tmp/workdir'),
+}));
+
+vi.mock('../../core/paths.js', () => ({
+  ensureProjectDirs: vi.fn(),
 }));
 
 vi.mock('../../core/pipeline.js', () => ({
@@ -108,7 +111,7 @@ vi.mock('ora', () => ({
   })),
 }));
 
-import { loadConfig, ensureWorkingDir } from '../../core/config.js';
+import { loadConfig } from '../../core/config.js';
 import { loadTestSuite, loadSolution, saveResult } from '../../core/suite-io.js';
 import { generateCommand } from '../generate.js';
 import { reportCommand } from '../report.js';
@@ -116,7 +119,10 @@ import { executeTestCase } from '../execute.js';
 import { SandboxClient } from '../../sandbox/opensandbox.js';
 import { analyzeTokens } from '../../scoring/tokens.js';
 import { runJudge } from '../../scoring/judge.js';
+import { PipelineStateManager } from '../../core/pipeline.js';
 import { runCommand } from '../run.js';
+
+const paths = makeProjectPaths();
 
 const defaultConfig = makeConfig({
   targets: [{ name: 'claude', image: 'node:20' }],
@@ -130,7 +136,6 @@ describe('runCommand', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
 
     vi.mocked(loadConfig).mockResolvedValue(defaultConfig);
-    vi.mocked(ensureWorkingDir).mockResolvedValue('/tmp/workdir' as any);
     vi.mocked(loadTestSuite).mockResolvedValue([defaultTestCase]);
     vi.mocked(generateCommand).mockResolvedValue(undefined);
     vi.mocked(reportCommand).mockResolvedValue(undefined);
@@ -155,7 +160,7 @@ describe('runCommand', () => {
   });
 
   it('runs all stages in order', async () => {
-    await runCommand();
+    await runCommand(paths);
 
     expect(generateCommand).toHaveBeenCalled();
     expect(executeTestCase).toHaveBeenCalled();
@@ -165,7 +170,7 @@ describe('runCommand', () => {
   });
 
   it('skips judge stage when skipJudge is true', async () => {
-    await runCommand({ skipJudge: true });
+    await runCommand(paths, { skipJudge: true });
 
     expect(generateCommand).toHaveBeenCalled();
     expect(executeTestCase).toHaveBeenCalled();
@@ -182,7 +187,7 @@ describe('runCommand', () => {
       startedAt: '',
     });
 
-    await runCommand({ resume: true });
+    await runCommand(paths, { resume: true });
 
     expect(mockStateManager.load).toHaveBeenCalled();
     expect(generateCommand).not.toHaveBeenCalled();
@@ -190,7 +195,7 @@ describe('runCommand', () => {
   });
 
   it('calls advanceStage after each completed stage', async () => {
-    await runCommand();
+    await runCommand(paths);
 
     expect(mockStateManager.advanceStage).toHaveBeenCalledWith('execute');
     expect(mockStateManager.advanceStage).toHaveBeenCalledWith('analyze');
@@ -199,7 +204,7 @@ describe('runCommand', () => {
   });
 
   it('saves pipeline state after stage transitions', async () => {
-    await runCommand();
+    await runCommand(paths);
 
     // save is called multiple times for state persistence
     expect(mockStateManager.save).toHaveBeenCalled();

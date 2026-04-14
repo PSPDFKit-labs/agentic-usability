@@ -1,16 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeConfig, makeTestCase, makeSolutionFile } from '../../__tests__/helpers/fixtures.js';
+import { makeConfig, makeTestCase, makeSolutionFile, makeProjectPaths } from '../../__tests__/helpers/fixtures.js';
 
 vi.mock('../../core/config.js', () => ({
   loadConfig: vi.fn(),
-  ensureWorkingDir: vi.fn(),
+}));
+
+vi.mock('../../core/paths.js', () => ({
+  ensureProjectDirs: vi.fn(),
 }));
 
 vi.mock('../../core/suite-io.js', () => ({
   loadTestSuite: vi.fn(),
   loadSolution: vi.fn(),
   saveResult: vi.fn(),
-  RESULTS_DIR: 'results',
 }));
 
 vi.mock('../../scoring/judge.js', () => ({
@@ -26,10 +28,12 @@ vi.mock('ora', () => ({
   })),
 }));
 
-import { loadConfig, ensureWorkingDir } from '../../core/config.js';
+import { loadConfig } from '../../core/config.js';
 import { loadTestSuite, loadSolution, saveResult } from '../../core/suite-io.js';
 import { runJudge } from '../../scoring/judge.js';
 import { judgeCommand } from '../judge.js';
+
+const paths = makeProjectPaths();
 
 function makeJudgeScore() {
   return {
@@ -46,23 +50,22 @@ describe('judgeCommand', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
 
     vi.mocked(loadConfig).mockResolvedValue(makeConfig());
-    vi.mocked(ensureWorkingDir).mockResolvedValue('/working');
     vi.mocked(loadTestSuite).mockResolvedValue([makeTestCase()]);
     vi.mocked(loadSolution).mockResolvedValue([makeSolutionFile()]);
     vi.mocked(runJudge).mockResolvedValue(makeJudgeScore() as any);
   });
 
   it('skips when skipJudge option is true', async () => {
-    await judgeCommand({ skipJudge: true });
+    await judgeCommand(paths, { skipJudge: true });
 
     expect(loadConfig).not.toHaveBeenCalled();
     expect(loadTestSuite).not.toHaveBeenCalled();
   });
 
   it('runs judge for each target and test case', async () => {
-    await judgeCommand();
+    await judgeCommand(paths);
 
-    expect(loadSolution).toHaveBeenCalledWith('TC-001', 'claude');
+    expect(loadSolution).toHaveBeenCalledWith(paths, 'TC-001', 'claude');
     expect(runJudge).toHaveBeenCalledWith(
       makeTestCase(),
       [makeSolutionFile()],
@@ -74,15 +77,16 @@ describe('judgeCommand', () => {
   it('skips test cases with no generated solution', async () => {
     vi.mocked(loadSolution).mockResolvedValue(null);
 
-    await judgeCommand();
+    await judgeCommand(paths);
 
     expect(runJudge).not.toHaveBeenCalled();
   });
 
   it('saves judge.json on success', async () => {
-    await judgeCommand();
+    await judgeCommand(paths);
 
     expect(saveResult).toHaveBeenCalledWith(
+      paths,
       'TC-001',
       'judge.json',
       expect.any(String),
@@ -93,9 +97,10 @@ describe('judgeCommand', () => {
   it('saves judge-error.log and continues on judge failure', async () => {
     vi.mocked(runJudge).mockRejectedValue(new Error('judge crashed'));
 
-    await judgeCommand();
+    await judgeCommand(paths);
 
     expect(saveResult).toHaveBeenCalledWith(
+      paths,
       'TC-001',
       'judge-error.log',
       'judge crashed',

@@ -1,21 +1,20 @@
 import chalk from 'chalk';
 import ora from 'ora';
-import { loadConfig, ensureWorkingDir } from '../core/config.js';
-import { loadTestSuite, loadSolution, saveResult, RESULTS_DIR } from '../core/suite-io.js';
+import { loadConfig } from '../core/config.js';
+import { loadTestSuite, loadSolution, saveResult } from '../core/suite-io.js';
 import { runJudge } from '../scoring/judge.js';
-import { resolve } from 'node:path';
+import type { ProjectPaths } from '../core/paths.js';
 
-export async function judgeCommand(options: { skipJudge?: boolean } = {}): Promise<void> {
+export async function judgeCommand(paths: ProjectPaths, options: { skipJudge?: boolean } = {}): Promise<void> {
   if (options.skipJudge) {
     console.log(chalk.yellow('Judge stage skipped (--skip-judge flag)'));
     return;
   }
 
-  const config = await loadConfig();
-  await ensureWorkingDir();
+  const config = await loadConfig(paths.config);
 
   const spinner = ora('Loading test suite...').start();
-  const testCases = await loadTestSuite(config);
+  const testCases = await loadTestSuite(paths);
   spinner.succeed(`Loaded ${testCases.length} test case(s)`);
 
   const judgeConfig = config.agents?.judge ?? { command: 'claude' };
@@ -24,7 +23,7 @@ export async function judgeCommand(options: { skipJudge?: boolean } = {}): Promi
     console.log(chalk.bold(`\nJudging solutions for target: ${target.name}\n`));
 
     for (const tc of testCases) {
-      const solution = await loadSolution(tc.id, target.name);
+      const solution = await loadSolution(paths, tc.id, target.name);
 
       if (!solution) {
         console.log(
@@ -39,6 +38,7 @@ export async function judgeCommand(options: { skipJudge?: boolean } = {}): Promi
         const score = await runJudge(tc, solution, judgeConfig, target.name);
 
         await saveResult(
+          paths,
           tc.id,
           'judge.json',
           JSON.stringify(score, null, 2),
@@ -53,10 +53,10 @@ export async function judgeCommand(options: { skipJudge?: boolean } = {}): Promi
         const message = err instanceof Error ? err.message : String(err);
         judgeSpinner.fail(`${tc.id}: Judge failed — ${message}`);
 
-        await saveResult(tc.id, 'judge-error.log', message, target.name);
+        await saveResult(paths, tc.id, 'judge-error.log', message, target.name);
       }
     }
   }
 
-  console.log(chalk.dim(`\nResults saved to ${resolve(RESULTS_DIR)}`));
+  console.log(chalk.dim(`\nResults saved to ${paths.results}`));
 }

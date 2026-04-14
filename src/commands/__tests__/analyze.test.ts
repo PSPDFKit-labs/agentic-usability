@@ -1,16 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeConfig, makeTestCase, makeSolutionFile } from '../../__tests__/helpers/fixtures.js';
+import { makeConfig, makeTestCase, makeSolutionFile, makeProjectPaths } from '../../__tests__/helpers/fixtures.js';
 
 vi.mock('../../core/config.js', () => ({
   loadConfig: vi.fn(),
-  ensureWorkingDir: vi.fn(),
+}));
+
+vi.mock('../../core/paths.js', () => ({
+  ensureProjectDirs: vi.fn(),
 }));
 
 vi.mock('../../core/suite-io.js', () => ({
   loadTestSuite: vi.fn(),
   loadSolution: vi.fn(),
   saveResult: vi.fn(),
-  RESULTS_DIR: 'results',
 }));
 
 vi.mock('../../scoring/tokens.js', () => ({
@@ -26,10 +28,12 @@ vi.mock('ora', () => ({
   })),
 }));
 
-import { loadConfig, ensureWorkingDir } from '../../core/config.js';
+import { loadConfig } from '../../core/config.js';
 import { loadTestSuite, loadSolution, saveResult } from '../../core/suite-io.js';
 import { analyzeTokens } from '../../scoring/tokens.js';
 import { analyzeCommand } from '../analyze.js';
+
+const paths = makeProjectPaths();
 
 function makeTokenAnalysis() {
   return {
@@ -48,24 +52,22 @@ describe('analyzeCommand', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
 
     vi.mocked(loadConfig).mockResolvedValue(makeConfig());
-    vi.mocked(ensureWorkingDir).mockResolvedValue('/working');
     vi.mocked(loadTestSuite).mockResolvedValue([makeTestCase()]);
     vi.mocked(loadSolution).mockResolvedValue([makeSolutionFile()]);
     vi.mocked(analyzeTokens).mockReturnValue(makeTokenAnalysis() as any);
   });
 
   it('loads config and test suite', async () => {
-    await analyzeCommand();
+    await analyzeCommand(paths);
 
-    expect(loadConfig).toHaveBeenCalled();
-    expect(ensureWorkingDir).toHaveBeenCalled();
-    expect(loadTestSuite).toHaveBeenCalled();
+    expect(loadConfig).toHaveBeenCalledWith(paths.config);
+    expect(loadTestSuite).toHaveBeenCalledWith(paths);
   });
 
   it('analyzes solutions for each target and test case', async () => {
-    await analyzeCommand();
+    await analyzeCommand(paths);
 
-    expect(loadSolution).toHaveBeenCalledWith('TC-001', 'claude');
+    expect(loadSolution).toHaveBeenCalledWith(paths, 'TC-001', 'claude');
     expect(analyzeTokens).toHaveBeenCalledWith(
       [makeSolutionFile()],
       ['add'],
@@ -78,7 +80,7 @@ describe('analyzeCommand', () => {
   it('handles missing solutions with empty array passed to analyzeTokens', async () => {
     vi.mocked(loadSolution).mockResolvedValue(null);
 
-    await analyzeCommand();
+    await analyzeCommand(paths);
 
     expect(analyzeTokens).toHaveBeenCalledWith(
       [],
@@ -90,9 +92,10 @@ describe('analyzeCommand', () => {
   });
 
   it('saves token-analysis.json for each test case', async () => {
-    await analyzeCommand();
+    await analyzeCommand(paths);
 
     expect(saveResult).toHaveBeenCalledWith(
+      paths,
       'TC-001',
       'token-analysis.json',
       expect.any(String),

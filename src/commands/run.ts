@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { createInterface } from 'node:readline/promises';
-import { loadConfig, ensureWorkingDir } from '../core/config.js';
+import { loadConfig } from '../core/config.js';
+import { ensureProjectDirs, type ProjectPaths } from '../core/paths.js';
 import { PipelineStateManager } from '../core/pipeline.js';
 import { loadTestSuite, loadSolution, saveResult, formatElapsed } from '../core/suite-io.js';
 import { generateCommand } from './generate.js';
@@ -19,14 +20,14 @@ function stageIndex(stage: string): number {
   return idx === -1 ? 0 : idx;
 }
 
-export async function runCommand(options: {
+export async function runCommand(paths: ProjectPaths, options: {
   resume?: boolean;
   fresh?: boolean;
   skipJudge?: boolean;
 } = {}): Promise<void> {
-  const config = await loadConfig();
-  const workingDir = await ensureWorkingDir();
-  const stateManager = new PipelineStateManager(workingDir);
+  const config = await loadConfig(paths.config);
+  await ensureProjectDirs(paths);
+  const stateManager = new PipelineStateManager(paths.pipelineState);
 
   // Handle --fresh: clear state with confirmation
   if (options.fresh) {
@@ -56,7 +57,7 @@ export async function runCommand(options: {
     console.log(
       chalk.bold.blue(`\n[Stage ${genStageNum}/${totalStages}] Generating test suite...`),
     );
-    await generateCommand({ fresh: options.fresh });
+    await generateCommand(paths, { fresh: options.fresh });
     stateManager.advanceStage('execute');
     await stateManager.save();
   } else {
@@ -66,7 +67,7 @@ export async function runCommand(options: {
   }
 
   // Load test suite for subsequent stages
-  const testCases = await loadTestSuite(config);
+  const testCases = await loadTestSuite(paths);
   const allTestIds = testCases.map((tc) => tc.id);
   stateManager.getState().testCases = testCases.length;
   await stateManager.save();
@@ -81,13 +82,12 @@ export async function runCommand(options: {
     await SandboxClient.checkConnectivity(config.sandbox);
 
     const docsContent = config.publicInfo
-      ? await fetchAndCacheDocs(config.publicInfo)
+      ? await fetchAndCacheDocs(config.publicInfo, { cacheDocs: paths.cacheDocs })
       : '';
 
     const concurrency = config.sandbox.concurrency ?? 3;
 
     for (const target of config.targets) {
-      const stageKey = `execute:${target.name}`;
       const incomplete = stateManager.getIncompleteTests('execute', allTestIds);
 
       if (incomplete.length === 0) {
@@ -109,12 +109,12 @@ export async function runCommand(options: {
         incompleteTestCases,
         async (tc) => {
           try {
-            await executeTestCase(tc, target, config, docsContent);
+            await executeTestCase(tc, target, config, docsContent, paths);
             stateManager.markTestComplete('execute', tc.id);
             await stateManager.save();
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            await saveResult(tc.id, 'error.log', message, target.name);
+            await saveResult(paths, tc.id, 'error.log', message, target.name);
             throw err;
           }
         },
@@ -158,7 +158,7 @@ export async function runCommand(options: {
       for (const tc of testCases) {
         if (!incomplete.includes(tc.id)) continue;
 
-        const solution = await loadSolution(tc.id, target.name);
+        const solution = await loadSolution(paths, tc.id, target.name);
         const analysis = analyzeTokens(
           solution ?? [],
           tc.targetApis,
@@ -168,6 +168,7 @@ export async function runCommand(options: {
         );
 
         await saveResult(
+          paths,
           tc.id,
           'token-analysis.json',
           JSON.stringify(analysis, null, 2),
@@ -214,7 +215,7 @@ export async function runCommand(options: {
         for (const tc of testCases) {
           if (!incomplete.includes(tc.id)) continue;
 
-          const solution = await loadSolution(tc.id, target.name);
+          const solution = await loadSolution(paths, tc.id, target.name);
           if (!solution) {
             console.log(
               chalk.yellow(`  ${tc.id} [${target.name}]: No solution found — skipping judge`),
@@ -225,6 +226,7 @@ export async function runCommand(options: {
           try {
             const score = await runJudge(tc, solution, judgeConfig, target.name);
             await saveResult(
+              paths,
               tc.id,
               'judge.json',
               JSON.stringify(score, null, 2),
@@ -240,7 +242,7 @@ export async function runCommand(options: {
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             console.log(chalk.red(`  ${tc.id} [${target.name}]: Judge failed — ${message}`));
-            await saveResult(tc.id, 'judge-error.log', message, target.name);
+            await saveResult(paths, tc.id, 'judge-error.log', message, target.name);
           }
         }
       }
@@ -267,7 +269,7 @@ export async function runCommand(options: {
   console.log(
     chalk.bold.blue(`\n[Stage ${totalStages}/${totalStages}] Generating report...`),
   );
-  await reportCommand();
+  await reportCommand(paths);
 
   console.log(chalk.bold.green('\nPipeline complete!'));
 }

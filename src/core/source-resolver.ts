@@ -5,10 +5,9 @@ import { execFile } from 'node:child_process';
 import TurndownService from 'turndown';
 import { Config } from './types.js';
 
-const REPOS_DIR = '.agentic-usability/repos';
-
 export interface ResolveOptions {
   fresh?: boolean;
+  reposDir?: string;
 }
 
 export async function resolveSource(
@@ -44,9 +43,10 @@ async function resolveGit(
   config: Config,
   options: ResolveOptions
 ): Promise<string> {
+  const reposDir = options.reposDir ?? 'cache/repos';
   const url = config.source.url!;
   const hash = createHash('sha256').update(url).digest('hex').slice(0, 12);
-  const cloneDir = resolve(REPOS_DIR, hash);
+  const cloneDir = resolve(reposDir, hash);
 
   const exists = await dirExists(cloneDir);
 
@@ -73,6 +73,7 @@ async function resolveUrl(
   config: Config,
   options: ResolveOptions
 ): Promise<string> {
+  const reposDir = options.reposDir ?? 'cache/repos';
   const urls = config.source.urls;
   if (!urls || urls.length === 0) {
     throw new Error("Source type 'url' requires a non-empty 'urls' array.");
@@ -82,7 +83,7 @@ async function resolveUrl(
     .update(urls.join('\n'))
     .digest('hex')
     .slice(0, 12);
-  const destDir = resolve(REPOS_DIR, `url-${hash}`);
+  const destDir = resolve(reposDir, `url-${hash}`);
 
   const exists = await dirExists(destDir);
 

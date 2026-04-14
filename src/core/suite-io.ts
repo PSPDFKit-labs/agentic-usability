@@ -1,34 +1,32 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
-import type { Config, TestCase, SolutionFile } from './types.js';
+import { join } from 'node:path';
+import type { TestCase, SolutionFile } from './types.js';
+import type { ProjectPaths } from './paths.js';
 
-export const DEFAULT_SUITE_FILE = '.agentic-usability/suite.json';
-export const RESULTS_DIR = '.agentic-usability/results';
-
-export async function loadTestSuite(config: Config): Promise<TestCase[]> {
-  const suiteFile = resolve(config.output?.suiteFile ?? DEFAULT_SUITE_FILE);
+export async function loadTestSuite(paths: ProjectPaths): Promise<TestCase[]> {
   let raw: string;
   try {
-    raw = await readFile(suiteFile, 'utf-8');
+    raw = await readFile(paths.suite, 'utf-8');
   } catch {
     throw new Error(
-      `Test suite not found at ${suiteFile}. Run 'agentic-usability generate' first.`,
+      `Test suite not found at ${paths.suite}. Run 'agentic-usability generate' first.`,
     );
   }
   const parsed = JSON.parse(raw);
   if (!Array.isArray(parsed)) {
-    throw new Error(`Test suite at ${suiteFile} is not a JSON array`);
+    throw new Error(`Test suite at ${paths.suite} is not a JSON array`);
   }
   return parsed as TestCase[];
 }
 
 export async function loadSolution(
+  paths: ProjectPaths,
   testId: string,
   target?: string,
 ): Promise<SolutionFile[] | null> {
   const dir = target
-    ? resolve(join(RESULTS_DIR, target, testId))
-    : resolve(join(RESULTS_DIR, testId));
+    ? join(paths.results, target, testId)
+    : join(paths.results, testId);
   try {
     const raw = await readFile(join(dir, 'generated-solution.json'), 'utf-8');
     return JSON.parse(raw) as SolutionFile[];
@@ -38,14 +36,15 @@ export async function loadSolution(
 }
 
 export async function saveResult(
+  paths: ProjectPaths,
   testId: string,
   filename: string,
   content: string,
   target?: string,
 ): Promise<void> {
   const dir = target
-    ? resolve(join(RESULTS_DIR, target, testId))
-    : resolve(join(RESULTS_DIR, testId));
+    ? join(paths.results, target, testId)
+    : join(paths.results, testId);
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, filename), content, 'utf-8');
 }
