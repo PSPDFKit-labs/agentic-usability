@@ -20,15 +20,14 @@ describe('GeminiAdapter', () => {
   });
 
   describe('run', () => {
-    it('spawns with --prompt, --output-format json, and --cwd', async () => {
+    it('spawns with -p, -o json', async () => {
       mockSpawnAgent.mockResolvedValue(makeAgentResult({ stdout: '{}' }));
 
       await adapter.run('prompt', {}, '/work');
 
       expect(mockSpawnAgent).toHaveBeenCalledWith('gemini', [
-        '--prompt', 'prompt',
-        '--output-format', 'json',
-        '--cwd', '/work',
+        '-p', 'prompt',
+        '-o', 'json',
       ], { cwd: '/work', env: undefined });
     });
 
@@ -66,7 +65,7 @@ describe('GeminiAdapter', () => {
       const result = await adapter.interactive('task', '/work');
 
       expect(mockSpawnInteractive).toHaveBeenCalledWith('gemini', [
-        '--prompt', 'task', '--cwd', '/work',
+        '-i', 'task',
       ], { cwd: '/work' });
       expect(result).toEqual({ exitCode: 0, durationMs: 5000 });
     });
@@ -75,8 +74,7 @@ describe('GeminiAdapter', () => {
   describe('sandboxCommand', () => {
     it('returns shell command with --yolo', () => {
       const cmd = adapter.sandboxCommand('task');
-      expect(cmd).toContain('gemini --yolo');
-      expect(cmd).toContain('--cwd /workspace');
+      expect(cmd).toContain('cd /workspace && gemini --yolo');
     });
   });
 

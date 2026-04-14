@@ -12,11 +12,11 @@ export class GeminiAdapter extends BaseAdapter {
   sandboxCommand(prompt: string, workDir = '/workspace'): string {
     const escaped = this.escapeForShell(prompt);
     const args = this.config.args ?? [];
-    return `gemini --yolo -p '${escaped}' --cwd ${workDir} ${args.join(' ')}`.trimEnd();
+    return `cd ${workDir} && gemini --yolo -p '${escaped}' ${args.join(' ')}`.trimEnd();
   }
 
-  protected buildInteractiveArgs(prompt: string, workDir: string): string[] {
-    return ['--prompt', prompt, '--cwd', workDir, ...(this.config.args ?? [])];
+  protected buildInteractiveArgs(prompt: string, _workDir: string): string[] {
+    return ['-i', prompt, ...(this.config.args ?? [])];
   }
 
   protected async spawnWithSchema(
@@ -26,12 +26,10 @@ export class GeminiAdapter extends BaseAdapter {
     env?: Record<string, string>,
   ): Promise<AgentResult> {
     const args = [
-      '--prompt',
+      '-p',
       prompt,
-      '--output-format',
+      '-o',
       'json',
-      '--cwd',
-      workDir,
       ...(this.config.args ?? []),
     ];
 

@@ -27,10 +27,10 @@ describe('ClaudeAdapter', () => {
       const result = await adapter.run('prompt', { type: 'object' }, '/work');
 
       expect(mockSpawnAgent).toHaveBeenCalledWith('claude', [
-        '--print', '-p', 'prompt',
+        '--print',
         '--output-format', 'json',
         '--json-schema', JSON.stringify({ type: 'object' }),
-        '--workdir', '/work',
+        'prompt',
       ], { cwd: '/work', env: undefined });
       expect(result.stdout).toBe(JSON.stringify({ key: 'value' }));
     });
@@ -71,7 +71,7 @@ describe('ClaudeAdapter', () => {
       const result = await adapter.interactive('do something', '/work');
 
       expect(mockSpawnInteractive).toHaveBeenCalledWith('claude', [
-        '-p', 'do something', '--workdir', '/work',
+        'do something',
       ], { cwd: '/work' });
       expect(result).toEqual({ exitCode: 0, durationMs: 5000 });
     });
@@ -80,8 +80,7 @@ describe('ClaudeAdapter', () => {
   describe('sandboxCommand', () => {
     it('returns correct shell string with --dangerously-skip-permissions', () => {
       const cmd = adapter.sandboxCommand('do something');
-      expect(cmd).toContain('claude --print --dangerously-skip-permissions');
-      expect(cmd).toContain('--workdir /workspace');
+      expect(cmd).toContain('cd /workspace && claude --print --dangerously-skip-permissions');
       expect(cmd).toContain('do something');
     });
 

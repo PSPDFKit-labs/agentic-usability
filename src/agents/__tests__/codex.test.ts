@@ -42,7 +42,7 @@ describe('CodexAdapter', () => {
         'utf-8',
       );
       expect(mockSpawnAgent).toHaveBeenCalledWith('codex', expect.arrayContaining([
-        '--quiet', '--prompt', 'prompt', '--output-schema', '--cwd', '/work',
+        'exec', '-C', '/work', '--full-auto', '--output-schema',
       ]), expect.any(Object));
       expect(result.stdout).toBe('{"result": true}');
       expect(mockRm).toHaveBeenCalledTimes(2);
@@ -74,7 +74,7 @@ describe('CodexAdapter', () => {
       const result = await adapter.interactive('task', '/work');
 
       expect(mockSpawnInteractive).toHaveBeenCalledWith('codex', [
-        '--prompt', 'task', '--cwd', '/work',
+        'task',
       ], { cwd: '/work' });
       expect(result).toEqual({ exitCode: 0, durationMs: 5000 });
     });
@@ -83,8 +83,7 @@ describe('CodexAdapter', () => {
   describe('sandboxCommand', () => {
     it('returns shell command with --dangerously-bypass-approvals-and-sandbox', () => {
       const cmd = adapter.sandboxCommand('task');
-      expect(cmd).toContain('codex -q --full-auto --dangerously-bypass-approvals-and-sandbox');
-      expect(cmd).toContain('--cwd /workspace');
+      expect(cmd).toContain('codex exec --dangerously-bypass-approvals-and-sandbox -C /workspace');
     });
   });
 

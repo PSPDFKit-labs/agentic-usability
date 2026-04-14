@@ -15,11 +15,11 @@ export class CodexAdapter extends BaseAdapter {
   sandboxCommand(prompt: string, workDir = '/workspace'): string {
     const escaped = this.escapeForShell(prompt);
     const args = this.config.args ?? [];
-    return `codex -q --full-auto --dangerously-bypass-approvals-and-sandbox --prompt '${escaped}' --cwd ${workDir} ${args.join(' ')}`.trimEnd();
+    return `codex exec --dangerously-bypass-approvals-and-sandbox -C ${workDir} '${escaped}' ${args.join(' ')}`.trimEnd();
   }
 
-  protected buildInteractiveArgs(prompt: string, workDir: string): string[] {
-    return ['--prompt', prompt, '--cwd', workDir, ...(this.config.args ?? [])];
+  protected buildInteractiveArgs(prompt: string, _workDir: string): string[] {
+    return [prompt, ...(this.config.args ?? [])];
   }
 
   protected async spawnWithSchema(
@@ -35,15 +35,15 @@ export class CodexAdapter extends BaseAdapter {
     await writeFile(schemaPath, JSON.stringify(schema), 'utf-8');
 
     const args = [
-      '--quiet',
-      '--prompt',
-      prompt,
+      'exec',
+      '-C',
+      workDir,
+      '--full-auto',
       '--output-schema',
       schemaPath,
       '-o',
       outputPath,
-      '--cwd',
-      workDir,
+      prompt,
       ...(this.config.args ?? []),
     ];
 

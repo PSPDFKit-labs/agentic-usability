@@ -12,11 +12,11 @@ export class ClaudeAdapter extends BaseAdapter {
   sandboxCommand(prompt: string, workDir = '/workspace'): string {
     const escaped = this.escapeForShell(prompt);
     const args = this.config.args ?? [];
-    return `claude --print --dangerously-skip-permissions -p '${escaped}' --workdir ${workDir} ${args.join(' ')}`.trimEnd();
+    return `cd ${workDir} && claude --print --dangerously-skip-permissions ${args.join(' ')} '${escaped}'`.trimEnd();
   }
 
-  protected buildInteractiveArgs(prompt: string, workDir: string): string[] {
-    return ['-p', prompt, '--workdir', workDir, ...(this.config.args ?? [])];
+  protected buildInteractiveArgs(prompt: string, _workDir: string): string[] {
+    return [prompt, ...(this.config.args ?? [])];
   }
 
   protected async spawnWithSchema(
@@ -27,15 +27,12 @@ export class ClaudeAdapter extends BaseAdapter {
   ): Promise<AgentResult> {
     const args = [
       '--print',
-      '-p',
-      prompt,
       '--output-format',
       'json',
       '--json-schema',
       JSON.stringify(schema),
-      '--workdir',
-      workDir,
       ...(this.config.args ?? []),
+      prompt,
     ];
 
     return this.spawn(args, workDir, env);
