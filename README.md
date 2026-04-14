@@ -241,6 +241,24 @@ Each pipeline stage can use a different agent CLI. Supported built-in adapters: 
 }
 ```
 
+To select a specific model, use `args` with the CLI's model flag. If omitted, each CLI uses its default model.
+
+```json
+{
+  "agents": {
+    "generator": { "command": "claude", "args": ["--model", "claude-sonnet-4-20250514"] },
+    "executor":  { "command": "codex",  "args": ["-m", "o3"] },
+    "judge":     { "command": "gemini", "args": ["-m", "gemini-2.5-pro"] }
+  }
+}
+```
+
+| CLI | Model flag |
+|-----|-----------|
+| `claude` | `--model <id>` |
+| `codex` | `-m <id>` |
+| `gemini` | `-m <id>` |
+
 ### Targets
 
 Docker environments where agents solve problems. Each target runs independently — results are stored per-target.
@@ -337,7 +355,11 @@ agentic-usability run -p pipelines/my-sdk-eval --skip-judge
 
 ## Test Suite Format
 
-The test suite (`suite.json`) is a JSON array of test cases:
+The test suite (`suite.json`) is a JSON array of test cases. Difficulty levels have specific meanings:
+
+- **easy** — Task directly demonstrated in public docs/guides/examples. Agent can adapt an existing example.
+- **medium** — Uses supported functions with different configs, params, or setups not shown in any guide. Single-function extrapolation.
+- **hard** — Combines multiple SDK functions in ways not directly documented. Multi-function extrapolation and orchestration.
 
 ```json
 [

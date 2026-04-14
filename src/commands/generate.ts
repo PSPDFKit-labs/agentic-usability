@@ -75,7 +75,10 @@ Each test case must be a JSON object with these fields:
 - "id" (string, optional): A unique ID like "TC-001". If omitted, one will be auto-assigned.
 - "problemStatement" (string, required): A clear description of the programming task. This is what an AI agent will receive as instructions.
 - "referenceSolution" (array of objects, required): Each object has "path" (string, file path) and "content" (string, file contents). This is the correct implementation.
-- "difficulty" (string, required): One of "easy", "medium", or "hard".
+- "difficulty" (string, required): One of "easy", "medium", or "hard":
+  - "easy": A task directly demonstrated in public documentation, guides, or examples. The agent can copy/adapt an existing example with minimal changes.
+  - "medium": Uses supported functions but with different configurations, parameters, or setups not directly shown in any guide. Requires combination and extrapolation at the single-function level (e.g., different input formats, non-default options, edge-case parameters).
+  - "hard": Requires combining multiple SDK functions together in ways not directly documented. Tests combination and extrapolation at the multi-function level (e.g., chaining API calls, orchestrating multiple endpoints, building a workflow from several SDK features).
 - "targetApis" (array of strings, required): The SDK APIs that the solution should use (e.g., function names, class names, methods).
 - "expectedTokens" (array of strings, required): Regex patterns or literal strings expected in the solution code (e.g., "import.*${packageName}").
 - "tags" (array of strings, required): Categorization tags (e.g., "auth", "database", "http").
