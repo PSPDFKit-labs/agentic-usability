@@ -76,7 +76,7 @@ Guidelines:
 - Reference solutions should be correct, idiomatic usage of the SDK.
 - Target APIs should be the specific SDK functions/classes the solution needs.
 - Expected tokens should match patterns that indicate correct SDK usage.
-${SCHEMA_DESCRIPTION}`;
+${config.source.additionalContext ? `\nAdditional context:\n${config.source.additionalContext}\n` : ''}${SCHEMA_DESCRIPTION}`;
 }
 
 

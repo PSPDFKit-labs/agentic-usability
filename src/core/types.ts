@@ -55,6 +55,8 @@ export interface SourceConfig {
   branch?: string;
   subpath?: string;
   sparse?: string[];
+  /** Extra context appended to the generator prompt (e.g. SDK conventions, focus areas). */
+  additionalContext?: string;
 }
 
 export interface PublicInfo {

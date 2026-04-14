@@ -12,10 +12,10 @@ async function prompt(rl: ReturnType<typeof createInterface>, question: string, 
   return answer.trim() || defaultValue || '';
 }
 
-async function promptRequired(rl: ReturnType<typeof createInterface>, question: string): Promise<string> {
+async function promptRequired(rl: ReturnType<typeof createInterface>, question: string, defaultValue?: string): Promise<string> {
   let answer = '';
   while (!answer) {
-    answer = await prompt(rl, question);
+    answer = await prompt(rl, question, defaultValue);
     if (!answer) {
       console.log(chalk.yellow('  This field is required.'));
     }
@@ -45,6 +45,10 @@ async function pathExists(p: string): Promise<boolean> {
   }
 }
 
+function hint(text: string): void {
+  console.log(chalk.dim(`  ${text}`));
+}
+
 export async function initCommand(paths: ProjectPaths): Promise<void> {
   const configPath = paths.config;
 
@@ -59,13 +63,19 @@ export async function initCommand(paths: ProjectPaths): Promise<void> {
   const rl = createInterface({ input: stdin, output: stdout });
 
   try {
-    // Source configuration
-    console.log(chalk.bold('Source Configuration'));
+    // ── Source configuration ──────────────────────────────────────────
+    console.log(chalk.bold('1. Source Configuration'));
+    hint("Where does your SDK source code live?");
+    hint("  local = a directory on this machine");
+    hint("  git   = clone from a remote repository");
+    hint("  url   = fetch documentation pages\n");
+
     const sourceType = await promptChoice(rl, 'Source type', ['local', 'git', 'url'], 'local') as 'local' | 'git' | 'url';
 
     const source: Config['source'] = { type: sourceType };
 
     if (sourceType === 'local') {
+      hint("Absolute or relative path to your SDK's source code directory");
       const rawPath = await promptRequired(rl, 'Path to SDK source');
       const absPath = resolve(rawPath);
       if (!(await pathExists(absPath))) {
@@ -74,54 +84,121 @@ export async function initCommand(paths: ProjectPaths): Promise<void> {
         process.exit(1);
       }
       source.path = rawPath;
+
+      hint("Scope to a subdirectory, e.g. 'packages/core' in a monorepo");
+      const subpath = await prompt(rl, 'Subpath within source (optional)');
+      if (subpath) source.subpath = subpath;
     } else if (sourceType === 'git') {
       source.url = await promptRequired(rl, 'Git repository URL');
       const branch = await prompt(rl, 'Branch', 'main');
       if (branch) source.branch = branch;
+
+      hint("Scope to a subdirectory, e.g. 'packages/core' in a monorepo");
       const subpath = await prompt(rl, 'Subpath within repo (optional)');
       if (subpath) source.subpath = subpath;
     } else {
-      const urlsRaw = await promptRequired(rl, 'Documentation URLs (comma-separated)');
+      hint("Comma-separated URLs to fetch as documentation for agents");
+      const urlsRaw = await promptRequired(rl, 'Documentation URLs');
       source.urls = urlsRaw.split(',').map(u => u.trim()).filter(Boolean);
     }
 
-    // Public info
-    console.log(chalk.bold('\nPublic Information'));
-    const docsUrl = await prompt(rl, 'Documentation URL (optional)');
-    const packageName = await prompt(rl, 'Package name (optional)');
-    const installCommand = await prompt(rl, 'Install command (optional)');
+    hint("Extra guidance for the test generator (e.g. 'Focus on the Builder API, ignore legacy v1')");
+    const additionalContext = await prompt(rl, 'Additional context for test generation (optional)');
+    if (additionalContext) source.additionalContext = additionalContext;
+
+    // ── Public information ────────────────────────────────────────────
+    console.log(chalk.bold('\n2. Public SDK Information'));
+    hint("These are injected into sandboxes so agents can find and install your SDK.\n");
+
+    hint("Public documentation URL — fetched and provided to agents as DOCS.md");
+    const docsUrl = await prompt(rl, 'Documentation URL');
+
+    hint("The package name agents will import (e.g. @example/sdk, my-sdk)");
+    const packageName = await prompt(rl, 'Package name');
+
+    hint("Shell command to install the SDK inside a sandbox (e.g. npm install @example/sdk)");
+    const installCommand = await prompt(rl, 'Install command');
 
     const publicInfo: Config['publicInfo'] = {};
     if (docsUrl) publicInfo.docsUrl = docsUrl;
     if (packageName) publicInfo.packageName = packageName;
     if (installCommand) publicInfo.installCommand = installCommand;
 
-    // Agent configuration
-    console.log(chalk.bold('\nAgent Configuration'));
+    // ── Agent configuration ───────────────────────────────────────────
+    console.log(chalk.bold('\n3. Agent Configuration'));
+    hint("Which AI agent CLI to use for generation, execution, and judging.");
+    hint("Supported: claude, codex, gemini, or any custom command.\n");
+
     const agentCommand = await prompt(rl, 'Agent command', 'claude');
 
-    // Target configuration
-    console.log(chalk.bold('\nTarget Configuration'));
+    // ── Target configuration ──────────────────────────────────────────
+    console.log(chalk.bold('\n4. Target Environment'));
+    hint("Targets are Docker containers where agents solve problems.");
+    hint("Each target runs independently — you can benchmark multiple runtimes.\n");
+
     const targets: Config['targets'] = [];
     let addMore = true;
+    let targetIndex = 1;
     while (addMore) {
-      const name = await promptRequired(rl, 'Target name');
-      const image = await promptRequired(rl, 'Docker image for target');
+      if (targetIndex > 1) console.log('');
+      hint("A label for this environment (used in result paths)");
+      const name = await promptRequired(rl, 'Target name', 'node-20');
+
+      hint("Docker image for the sandbox. Must be pre-pulled (docker pull <image>)");
+      const image = await promptRequired(rl, 'Docker image', 'node:20-slim');
+
+      hint("Max seconds per sandbox execution");
       const timeoutStr = await prompt(rl, 'Timeout in seconds', '300');
       const timeout = parseInt(timeoutStr, 10) || 300;
       targets.push({ name, image, timeout });
 
       const more = await prompt(rl, 'Add another target?', 'no');
       addMore = more.toLowerCase().startsWith('y');
+      targetIndex++;
     }
 
-    // Sandbox configuration
-    console.log(chalk.bold('\nSandbox Configuration'));
+    // ── Sandbox configuration ─────────────────────────────────────────
+    console.log(chalk.bold('\n5. Sandbox Server'));
+    hint("OpenSandbox server address. Start it with: opensandbox-server\n");
+
     const domain = await prompt(rl, 'Sandbox domain', 'localhost:8080');
 
-    rl.close();
+    // ── Environment variables ─────────────────────────────────────────
+    let workspaceEnv: Record<string, string> | undefined;
 
-    // Build config object
+    console.log('');
+    hint("Sandbox containers may need API keys or other env vars.");
+    hint("Use $VAR_NAME to reference variables from your host environment.");
+    const configureEnv = await prompt(rl, 'Configure sandbox environment variables?', 'no');
+
+    if (configureEnv.toLowerCase().startsWith('y')) {
+      workspaceEnv = {};
+      console.log(chalk.dim('  Enter key=value pairs. Use $VAR to reference host env. Empty key to finish.\n'));
+
+      while (true) {
+        const pair = await prompt(rl, '  Variable (KEY=$VALUE or KEY=literal, empty to finish)');
+        if (!pair) break;
+
+        const eqIdx = pair.indexOf('=');
+        if (eqIdx === -1) {
+          console.log(chalk.yellow('  Invalid format. Use KEY=VALUE (e.g. ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY)'));
+          continue;
+        }
+
+        const key = pair.slice(0, eqIdx).trim();
+        const value = pair.slice(eqIdx + 1).trim();
+        if (key) {
+          workspaceEnv[key] = value;
+          console.log(chalk.dim(`  Added: ${key}=${value.startsWith('$') ? chalk.cyan(value) : value}`));
+        }
+      }
+
+      if (Object.keys(workspaceEnv).length === 0) {
+        workspaceEnv = undefined;
+      }
+    }
+
+    // ── Build config ──────────────────────────────────────────────────
     const config: Config = {
       source,
       publicInfo: Object.keys(publicInfo).length > 0 ? publicInfo : undefined,
@@ -131,15 +208,36 @@ export async function initCommand(paths: ProjectPaths): Promise<void> {
         judge: { command: agentCommand },
       },
       targets,
+      workspace: workspaceEnv ? { env: workspaceEnv } : undefined,
       sandbox: { domain },
     };
 
-    // Create project directories and write config
+    // ── Summary ───────────────────────────────────────────────────────
+    console.log(chalk.bold('\n── Config Summary ──\n'));
+    console.log(JSON.stringify(config, null, 2));
+    console.log('');
+
+    const confirm = await prompt(rl, 'Write config?', 'yes');
+    if (!confirm.toLowerCase().startsWith('y')) {
+      console.log(chalk.yellow('Aborted. No files written.'));
+      rl.close();
+      return;
+    }
+
+    rl.close();
+
+    // ── Write ─────────────────────────────────────────────────────────
     await ensureProjectDirs(paths);
     await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+
     console.log(chalk.green(`\nConfig written to ${configPath}`));
-    console.log(chalk.green(`Project directory: ${paths.root}`));
-    console.log(chalk.dim('\nNext step: run `agentic-usability generate` to create a test suite.'));
+    console.log(chalk.green(`Project directory: ${paths.root}\n`));
+
+    console.log(chalk.bold('Next steps:'));
+    console.log(`  1. Ensure OpenSandbox is running:  ${chalk.cyan('opensandbox-server')}`);
+    console.log(`  2. Generate test suite:            ${chalk.cyan('agentic-usability generate')}`);
+    console.log(`  3. Run the full pipeline:          ${chalk.cyan('agentic-usability run')}`);
+    console.log('');
   } catch (err) {
     rl.close();
     throw err;
