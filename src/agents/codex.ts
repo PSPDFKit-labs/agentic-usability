@@ -15,7 +15,8 @@ export class CodexAdapter extends BaseAdapter {
   sandboxCommand(prompt: string, workDir = '/workspace'): string {
     const escaped = this.escapeForShell(prompt);
     const args = this.config.args ?? [];
-    return `codex exec --dangerously-bypass-approvals-and-sandbox -C ${workDir} '${escaped}' ${args.join(' ')}`.trimEnd();
+    const cmd = `codex exec --dangerously-bypass-approvals-and-sandbox -C ${workDir} '${escaped}' ${args.join(' ')}`.trimEnd();
+    return this.wrapAsUser(cmd);
   }
 
   protected buildInteractiveArgs(prompt: string, _workDir: string): string[] {

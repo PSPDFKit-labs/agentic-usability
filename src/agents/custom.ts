@@ -18,7 +18,8 @@ export class CustomAdapter extends BaseAdapter {
     const baseArgs = this.resolveArgs(this.config.args ?? [], `'${escaped}'`, workDir);
     const sandboxArgs = this.config.sandboxArgs ?? [];
     const allArgs = [...baseArgs, ...sandboxArgs];
-    return `${this.config.command} ${allArgs.join(' ')}`.trimEnd();
+    const cmd = `${this.config.command} ${allArgs.join(' ')}`.trimEnd();
+    return this.wrapAsUser(cmd);
   }
 
   protected buildInteractiveArgs(prompt: string, workDir: string): string[] {

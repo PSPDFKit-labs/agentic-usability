@@ -118,6 +118,11 @@ export async function executeTestCase(
       { path: '/workspace/DOCS.md', data: docsContent },
     ]);
 
+    // Create non-root user (agents like Claude refuse to run as root)
+    await client.runCommand(
+      'useradd -m -s /bin/bash sandbox 2>/dev/null; chown -R sandbox:sandbox /workspace'
+    );
+
     // Install agent CLI inside the sandbox
     const executorConfig = config.agents?.executor ?? { command: 'claude' };
     const adapter = createAdapter(executorConfig);

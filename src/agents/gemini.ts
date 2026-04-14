@@ -12,7 +12,8 @@ export class GeminiAdapter extends BaseAdapter {
   sandboxCommand(prompt: string, workDir = '/workspace'): string {
     const escaped = this.escapeForShell(prompt);
     const args = this.config.args ?? [];
-    return `cd ${workDir} && gemini --yolo -p '${escaped}' ${args.join(' ')}`.trimEnd();
+    const cmd = `cd ${workDir} && gemini --yolo -p '${escaped}' ${args.join(' ')}`.trimEnd();
+    return this.wrapAsUser(cmd);
   }
 
   protected buildInteractiveArgs(prompt: string, _workDir: string): string[] {

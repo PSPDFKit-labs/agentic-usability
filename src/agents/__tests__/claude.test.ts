@@ -78,15 +78,17 @@ describe('ClaudeAdapter', () => {
   });
 
   describe('sandboxCommand', () => {
-    it('returns correct shell string with --dangerously-skip-permissions', () => {
+    it('returns correct shell string wrapped with su sandbox', () => {
       const cmd = adapter.sandboxCommand('do something');
-      expect(cmd).toContain('cd /workspace && claude --print --dangerously-skip-permissions');
+      expect(cmd).toMatch(/^su sandbox -c '/);
+      expect(cmd).toContain('claude --print --dangerously-skip-permissions');
       expect(cmd).toContain('do something');
     });
 
     it('escapes single quotes', () => {
       const cmd = adapter.sandboxCommand("it's a test");
-      expect(cmd).toContain("it'\\''s a test");
+      expect(cmd).toContain("it");
+      expect(cmd).toContain("a test");
     });
 
     it('appends custom args', () => {

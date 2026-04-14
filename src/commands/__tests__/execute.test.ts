@@ -115,10 +115,14 @@ describe('executeTestCase', () => {
     expect(mockSandboxInstance.destroy).toHaveBeenCalled();
   });
 
-  it('installs known agent CLI (claude) inside sandbox', async () => {
+  it('creates non-root sandbox user and installs agent CLI', async () => {
     await executeTestCase(defaultTestCase, defaultTarget, defaultConfig, defaultDocs, paths);
 
-    // Default executor is 'claude', so npm install @anthropic-ai/claude-code should be called
+    // First call: create sandbox user
+    expect(mockSandboxInstance.runCommand).toHaveBeenCalledWith(
+      expect.stringContaining('useradd'),
+    );
+    // Second call: install agent CLI
     expect(mockSandboxInstance.runCommand).toHaveBeenCalledWith(
       'npm i -g @anthropic-ai/claude-code',
     );
@@ -133,8 +137,11 @@ describe('executeTestCase', () => {
 
     await executeTestCase(defaultTestCase, defaultTarget, config, defaultDocs, paths);
 
-    // runCommand should NOT be called for install (no known install command)
-    expect(mockSandboxInstance.runCommand).not.toHaveBeenCalled();
+    // runCommand is called for user setup but NOT for install
+    expect(mockSandboxInstance.runCommand).toHaveBeenCalledTimes(1);
+    expect(mockSandboxInstance.runCommand).toHaveBeenCalledWith(
+      expect.stringContaining('useradd'),
+    );
   });
 
   it('destroys sandbox in finally block even on error', async () => {
