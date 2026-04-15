@@ -18,6 +18,7 @@ import { judgeCommand } from './commands/judge.js';
 import { reportCommand, exportResultsCommand } from './commands/report.js';
 import { runCommand } from './commands/run.js';
 import { inspectCommand } from './commands/inspect.js';
+import { insightsCommand } from './commands/insights.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -59,6 +60,7 @@ program
   .description('Execute test cases in sandboxed environments with AI agents')
   .option('--tests <ids>', 'Comma-separated list of test case IDs to run')
   .action(async (opts: { tests?: string }) => {
+    await loadDotenv();
     const paths = getPaths();
     await ensureProjectDirs(paths);
     const testIds = opts.tests?.split(',').map(s => s.trim());
@@ -139,15 +141,22 @@ program
   });
 
 program
+  .command('insights')
+  .description('Interactive AI session to analyze pipeline results and identify SDK improvement areas')
+  .option('--fresh', 'Re-resolve sources (skip cache)')
+  .action(async (opts: { fresh?: boolean }) => {
+    const paths = getPaths();
+    await ensureProjectDirs(paths);
+    await insightsCommand(paths, { fresh: opts.fresh });
+  });
+
+program
   .command('export-results')
   .description('Export all benchmark results to a single JSON file')
   .requiredOption('--output <path>', 'Output file path')
   .action(async (opts: { output: string }) => {
     await exportResultsCommand(getPaths(), { output: opts.output });
   });
-
-// Load .env file before running commands (shell env takes precedence)
-await loadDotenv();
 
 program.parseAsync().catch((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err);

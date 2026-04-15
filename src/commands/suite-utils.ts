@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import Table from 'cli-table3';
 import { TestCase } from '../core/types.js';
 
-function validateTestCase(tc: unknown, index: number): string[] {
+export function validateTestCase(tc: unknown, index: number, options: { requireId?: boolean } = {}): string[] {
   const errors: string[] = [];
   if (typeof tc !== 'object' || tc === null || Array.isArray(tc)) {
     return [`Test case at index ${index} is not an object`];
@@ -10,7 +10,7 @@ function validateTestCase(tc: unknown, index: number): string[] {
 
   const obj = tc as Record<string, unknown>;
 
-  if (typeof obj.id !== 'string' || obj.id.length === 0) {
+  if (options.requireId !== false && (typeof obj.id !== 'string' || obj.id.length === 0)) {
     errors.push(`Test case ${index}: missing or empty id`);
   }
 

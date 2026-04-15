@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { createInterface } from 'node:readline/promises';
+import { loadDotenv } from '../core/env.js';
 import { loadConfig } from '../core/config.js';
 import { ensureProjectDirs, type ProjectPaths } from '../core/paths.js';
 import { PipelineStateManager } from '../core/pipeline.js';
@@ -82,6 +83,9 @@ export async function runCommand(paths: ProjectPaths, options: {
     console.log(
       chalk.bold.blue(`\n[Stage ${execStageNum}/${totalStages}] Executing test cases...`),
     );
+
+    // Load .env (with op:// resolution) only for the execute stage — sandbox needs these secrets
+    await loadDotenv();
 
     await SandboxClient.checkConnectivity(config.sandbox);
 

@@ -156,6 +156,7 @@ pipelines/my-sdk-eval/           # project root (= CWD or -p target)
 | `edit` | Open test suite in `$EDITOR` | |
 | `export` | Export test suite to a file | `--output <path>` (required) |
 | `import` | Import test suite from a file | `--input <path>` (required) |
+| `insights` | Interactive AI analysis of pipeline results | `--fresh` |
 | `export-results` | Export all results to a single JSON file | `--output <path>` (required) |
 
 ## Configuration Reference
@@ -400,6 +401,24 @@ The UI includes:
 - **Pipeline Runner** — trigger individual stages or full runs with real-time streaming output
 
 The server reads and writes directly to the pipeline project directory. Press Ctrl+C in the terminal to stop.
+
+## Insights
+
+The `insights` command launches an interactive AI session pre-loaded with all pipeline results. It helps you interpret benchmark scores, identify SDK usability gaps, and prioritize improvements:
+
+```bash
+npx agentic-usability insights -p pipelines/my-sdk-eval
+```
+
+The agent is given:
+- **Aggregate scores** per target — API coverage, token coverage, judge scores, pass rate, and difficulty breakdowns
+- **Worst-performing APIs and missed tokens** — which SDK surface areas agents struggle with most
+- **Per-test-case results** — problem statements, scores, verdicts, and judge notes
+- **File paths** to generated solutions, token analysis, and judge assessments for deep dives
+- **Scoring methodology** — the exact difficulty rubric and judge scoring bands used during evaluation
+- **SDK source locations** — so the agent can read your source code and correlate failures with API design
+
+Ask about failure patterns, documentation gaps, API design issues, or request prioritized improvement recommendations. The agent can read any file in the project directory for deeper analysis.
 
 ## Pipeline and Resume
 

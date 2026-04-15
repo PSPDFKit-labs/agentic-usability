@@ -6,7 +6,8 @@ import { resolveSources } from '../core/source-resolver.js';
 import { createAdapter, type AgentAdapter } from '../agents/adapter.js';
 import { TestCase, Config } from '../core/types.js';
 import type { ProjectPaths } from '../core/paths.js';
-import { printSuiteTable } from './suite-utils.js';
+import { printSuiteTable, validateTestCase } from './suite-utils.js';
+import { buildSourceList, DIFFICULTY_RUBRIC, extractJson } from './prompt-helpers.js';
 
 const TEST_SUITE_SCHEMA = {
   type: 'array',
@@ -62,16 +63,7 @@ function summarizeExistingTests(testCases: TestCase[]): string {
 }
 
 function buildSourceSection(sourcePaths: string[], config: Config): string {
-  if (sourcePaths.length === 1) {
-    const ctx = config.sources[0].additionalContext;
-    const suffix = ctx ? ` — ${ctx}` : '';
-    return `Your task: Explore the source at "${sourcePaths[0]}"${suffix}`;
-  }
-  const list = sourcePaths.map((p, i) => {
-    const ctx = config.sources[i]?.additionalContext;
-    return ctx ? `  - ${p} — ${ctx}` : `  - ${p}`;
-  }).join('\n');
-  return `Your task: Explore the following source(s):\n${list}\n\nUse all of them`;
+  return `Your task: Explore the following source(s):\n${buildSourceList(sourcePaths, config).replace(/^- /gm, '  - ')}\n\nUse all of them`;
 }
 
 function buildPrompt(sourcePaths: string[], config: Config, existingTests: TestCase[] = []): string {
@@ -89,9 +81,7 @@ Each test case must be a JSON object with these fields:
 - "problemStatement" (string, required): A clear description of the programming task. This is what an AI agent will receive as instructions.
 - "referenceSolution" (array of objects, required): Each object has "path" (string, file path) and "content" (string, file contents). This is the correct implementation.
 - "difficulty" (string, required): One of "easy", "medium", or "hard":
-  - "easy": A task directly demonstrated in public documentation, guides, or examples. The agent can copy/adapt an existing example with minimal changes.
-  - "medium": Uses supported functions but with different configurations, parameters, or setups not directly shown in any guide. Requires combination and extrapolation at the single-function level (e.g., different input formats, non-default options, edge-case parameters).
-  - "hard": Requires combining multiple SDK functions together in ways not directly documented. Tests combination and extrapolation at the multi-function level (e.g., chaining API calls, orchestrating multiple endpoints, building a workflow from several SDK features).
+${DIFFICULTY_RUBRIC}
 - "targetApis" (array of strings, required): The SDK APIs that the solution should use (e.g., function names, class names, methods).
 - "expectedTokens" (array of strings, required): Regex patterns or literal strings expected in the solution code (e.g., "import.*${packageName}").
 - "tags" (array of strings, required): Categorization tags (e.g., "auth", "database", "http").
@@ -120,64 +110,6 @@ function buildTargetContext(config: Config): string {
   }
   if (lines.length === 0) return '';
   return `\nTarget environment notes (use these when writing setupInstructions):\n${lines.join('\n')}\n`;
-}
-
-function validateTestCase(tc: unknown, index: number): string[] {
-  const errors: string[] = [];
-  if (typeof tc !== 'object' || tc === null || Array.isArray(tc)) {
-    return [`Test case at index ${index} is not an object`];
-  }
-
-  const obj = tc as Record<string, unknown>;
-
-  if (typeof obj.problemStatement !== 'string' || obj.problemStatement.length === 0) {
-    errors.push(`Test case ${index}: missing or empty problemStatement`);
-  }
-
-  if (!Array.isArray(obj.referenceSolution)) {
-    errors.push(`Test case ${index}: referenceSolution must be an array`);
-  } else {
-    for (let i = 0; i < obj.referenceSolution.length; i++) {
-      const sf = obj.referenceSolution[i] as Record<string, unknown>;
-      if (typeof sf?.path !== 'string' || typeof sf?.content !== 'string') {
-        errors.push(`Test case ${index}: referenceSolution[${i}] must have path and content strings`);
-      }
-    }
-  }
-
-  const validDifficulties = ['easy', 'medium', 'hard'];
-  if (!validDifficulties.includes(obj.difficulty as string)) {
-    errors.push(`Test case ${index}: difficulty must be one of ${validDifficulties.join(', ')}`);
-  }
-
-  if (!Array.isArray(obj.targetApis)) {
-    errors.push(`Test case ${index}: targetApis must be an array`);
-  }
-
-  if (!Array.isArray(obj.expectedTokens)) {
-    errors.push(`Test case ${index}: expectedTokens must be an array`);
-  }
-
-  if (!Array.isArray(obj.tags)) {
-    errors.push(`Test case ${index}: tags must be an array`);
-  }
-
-  return errors;
-}
-
-function extractJson(text: string): string {
-  const fencedMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (fencedMatch) {
-    return fencedMatch[1].trim();
-  }
-
-  const arrayStart = text.indexOf('[');
-  const arrayEnd = text.lastIndexOf(']');
-  if (arrayStart !== -1 && arrayEnd !== -1 && arrayEnd > arrayStart) {
-    return text.slice(arrayStart, arrayEnd + 1);
-  }
-
-  return text.trim();
 }
 
 
@@ -309,7 +241,7 @@ async function generateNonInteractive(
   // Validate each test case
   const allErrors: string[] = [];
   for (let i = 0; i < parsed.length; i++) {
-    const errors = validateTestCase(parsed[i], i);
+    const errors = validateTestCase(parsed[i], i, { requireId: false });
     allErrors.push(...errors);
   }
 
@@ -352,7 +284,7 @@ async function validateAndFinalize(suiteFile: string): Promise<void> {
 
   const allErrors: string[] = [];
   for (let i = 0; i < parsed.length; i++) {
-    const errors = validateTestCase(parsed[i], i);
+    const errors = validateTestCase(parsed[i], i, { requireId: false });
     allErrors.push(...errors);
   }
 

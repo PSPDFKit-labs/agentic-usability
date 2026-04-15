@@ -31,9 +31,13 @@ vi.mock('ora', () => ({
   })),
 }));
 
-vi.mock('../suite-utils.js', () => ({
-  printSuiteTable: vi.fn(),
-}));
+vi.mock('../suite-utils.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../suite-utils.js')>();
+  return {
+    ...actual,
+    printSuiteTable: vi.fn(),
+  };
+});
 
 const VALID_TC = [
   {
