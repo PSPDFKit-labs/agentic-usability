@@ -89,10 +89,25 @@ Guidelines:
 - Each problem statement should be self-contained — the agent should be able to solve it with only the problem description and SDK documentation.
 - Reference solutions should be correct, idiomatic usage of the SDK.
 - Target APIs should be the specific SDK functions/classes the solution needs.
-- Expected tokens should match patterns that indicate correct SDK usage.
-${config.publicInfo?.language ? `\nIMPORTANT: All test cases and reference solutions MUST use ${config.publicInfo.language}. Write solutions using standard ${config.publicInfo.language} HTTP libraries (e.g. requests for Python).\n` : ''}${config.source.additionalContext ? `\nAdditional context:\n${config.source.additionalContext}\n` : ''}${SCHEMA_DESCRIPTION}`;
+- Expected tokens should match patterns that indicate correct SDK usage. Prefer API endpoint paths over library-specific patterns when possible (e.g. prefer "/v1/messages" over "requests\\.post").
+- IMPORTANT: When multiple valid API approaches exist for a problem (e.g. different library versions, simpler vs advanced API, two functions doing the same thing), handle this by either:
+  (a) Being explicit in the problemStatement about which specific API, method, or library to use (e.g. "Use endpoint POST /processor/convert" not just "Convert a file using the API"), OR
+  (b) Creating separate test cases for each valid approach, each with its own targetApis and expectedTokens.
+  Do NOT create a test case with an ambiguous problem statement where the agent could reasonably use a different valid approach and be penalized for it.
+${config.publicInfo?.language ? `\nIMPORTANT: All test cases and reference solutions MUST use ${config.publicInfo.language}. Write solutions using standard ${config.publicInfo.language} HTTP libraries (e.g. requests for Python).\n` : ''}${config.source.additionalContext ? `\nAdditional context:\n${config.source.additionalContext}\n` : ''}${buildTargetContext(config)}${SCHEMA_DESCRIPTION}`;
 }
 
+
+function buildTargetContext(config: Config): string {
+  const lines: string[] = [];
+  for (const target of config.targets) {
+    if (target.additionalContext) {
+      lines.push(`- ${target.name} (${target.image}): ${target.additionalContext}`);
+    }
+  }
+  if (lines.length === 0) return '';
+  return `\nTarget environment notes (use these when writing setupInstructions):\n${lines.join('\n')}\n`;
+}
 
 function validateTestCase(tc: unknown, index: number): string[] {
   const errors: string[] = [];

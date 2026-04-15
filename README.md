@@ -358,9 +358,19 @@ OpenSandbox server connection and agent secrets:
 | `concurrency` | Max parallel sandbox instances (default: 3) |
 | `defaultTimeout` | Seconds per sandbox if not set per-target (default: 600) |
 | `systemPrompt` | Prepended to agent prompt. `{{packageName}}` and `{{docsUrl}}` are interpolated. |
-| `env` | Secret env vars passed **only** to the agent command (e.g. auth tokens). These are scoped per-command via the OpenSandbox SDK and are **not** baked into the container — agent-generated code running in YOLO mode cannot access them. |
+| `env` | Environment variables for the sandbox container. Known secrets (see below) are routed through a local auth proxy; everything else is passed through as-is. All vars are baked into the container at creation time. |
 
-> **`sandbox.env` vs `workspace.env`**: Use `sandbox.env` for agent infrastructure secrets (auth tokens, API keys for the agent CLI itself). Use `workspace.env` for variables that setup scripts or agent-generated code need (test API keys, config values). The distinction ensures that YOLO-mode agents cannot exfiltrate your agent auth credentials.
+#### Security: Auth Proxy for Known Secrets
+
+When `sandbox.env` contains a known secret key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `GEMINI_API_KEY`), the CLI automatically:
+
+1. **Strips the real secret** from the container environment
+2. **Starts a local auth proxy** on the host that holds the real credentials
+3. **Injects `*_BASE_URL`** vars pointing to the proxy, plus a dummy passthrough token
+
+The agent CLI inside the sandbox routes API requests through the proxy, which injects the real credentials on the fly. This way, **real API keys never enter the sandbox** — even if the agent runs `printenv`, it only sees the proxy URL and a dummy token.
+
+> **Warning**: Any env var in `sandbox.env` that is **not** a known secret key is passed through to the container as-is and is visible to agent-generated code (e.g. via `printenv`). Agents routinely inspect their environment. **Rotate any non-proxied credentials after use**, or use `systemPrompt` to instruct the agent not to inspect the environment. Only the known secret keys listed above are protected by the auth proxy.
 
 ## Web UI (Inspect)
 

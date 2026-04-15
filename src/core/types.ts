@@ -91,6 +91,9 @@ export interface TargetConfig {
   name: string;
   image: string;
   timeout?: number;
+  /** Extra context about the target environment, included in the generator prompt
+   *  so it can produce correct setupInstructions (e.g. "Use uv instead of pip"). */
+  additionalContext?: string;
 }
 
 export interface WorkspaceConfig {
