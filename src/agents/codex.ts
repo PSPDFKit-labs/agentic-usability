@@ -44,11 +44,10 @@ export class CodexAdapter extends BaseAdapter {
       schemaPath,
       '-o',
       outputPath,
-      prompt,
       ...(this.config.args ?? []),
     ];
 
-    const result = await this.spawn(args, workDir, env);
+    const result = await this.spawn(args, workDir, env, undefined, prompt);
 
     // Read structured output from the output file
     try {

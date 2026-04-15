@@ -27,14 +27,12 @@ export class GeminiAdapter extends BaseAdapter {
     env?: Record<string, string>,
   ): Promise<AgentResult> {
     const args = [
-      '-p',
-      prompt,
       '-o',
       'json',
       ...(this.config.args ?? []),
     ];
 
-    return this.spawn(args, workDir, env);
+    return this.spawn(args, workDir, env, undefined, prompt);
   }
 
   protected parseEnvelope(result: AgentResult): AgentResult | null {

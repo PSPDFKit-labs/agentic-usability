@@ -63,6 +63,8 @@ export function spawnAgent(
     cwd?: string;
     env?: Record<string, string>;
     timeout?: number;
+    /** Optional string to write to the child's stdin (enables pipe mode). */
+    stdin?: string;
   } = {}
 ): Promise<AgentResult> {
   const timeout = options.timeout ?? DEFAULT_TIMEOUT;
@@ -75,11 +77,16 @@ export function spawnAgent(
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: { ...process.env, ...options.env },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [options.stdin !== undefined ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     });
 
-    child.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
-    child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+    if (options.stdin !== undefined && child.stdin) {
+      child.stdin.write(options.stdin);
+      child.stdin.end();
+    }
+
+    child.stdout!.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
+    child.stderr!.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
 
     const timer = setTimeout(() => {
       child.kill('SIGTERM');

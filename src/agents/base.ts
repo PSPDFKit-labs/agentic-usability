@@ -65,8 +65,8 @@ export abstract class BaseAdapter implements AgentAdapter {
   protected abstract buildInteractiveArgs(prompt: string, workDir: string): string[];
 
   /** Shared helper: spawn the agent process with piped stdio. */
-  protected spawn(args: string[], workDir: string, env?: Record<string, string>, timeout?: number): Promise<AgentResult> {
-    return spawnAgent(this.config.command, args, { cwd: workDir, env, timeout });
+  protected spawn(args: string[], workDir: string, env?: Record<string, string>, timeout?: number, stdin?: string): Promise<AgentResult> {
+    return spawnAgent(this.config.command, args, { cwd: workDir, env, timeout, stdin });
   }
 
   /** Escape single quotes for shell embedding. */

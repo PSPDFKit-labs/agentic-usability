@@ -6,7 +6,7 @@ const mockSandboxInstance = {
   uploadFiles: vi.fn(),
   runCommand: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
   runCommandTimed: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0, durationMs: 100 }),
-  listFiles: vi.fn().mockResolvedValue(['solution/a.ts']),
+  listFiles: vi.fn().mockResolvedValue(['solution/solution__a.ts']),
   readFile: vi.fn().mockResolvedValue('code'),
   destroy: vi.fn(),
 };
@@ -91,7 +91,7 @@ describe('executeTestCase', () => {
     mockSandboxInstance.uploadFiles.mockReset().mockResolvedValue(undefined);
     mockSandboxInstance.runCommand.mockReset().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
     mockSandboxInstance.runCommandTimed.mockReset().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0, durationMs: 100 });
-    mockSandboxInstance.listFiles.mockReset().mockResolvedValue(['solution/a.ts']);
+    mockSandboxInstance.listFiles.mockReset().mockResolvedValue(['solution/solution__a.ts']);
     mockSandboxInstance.readFile.mockReset().mockResolvedValue('code');
     mockSandboxInstance.destroy.mockReset().mockResolvedValue(undefined);
 
@@ -170,6 +170,26 @@ describe('executeTestCase', () => {
       expect.any(String),
       'claude',
     );
+  });
+
+  it('only extracts files with solution__ prefix and strips the prefix', async () => {
+    // Override listFiles to return a mix of solution and non-solution files
+    mockSandboxInstance.listFiles.mockImplementation(async () => [
+      'solution/solution__main.py',
+      'solution/solution__utils.py',
+      'solution/.venv/bin/python',
+      'solution/.git/config',
+      'solution/requirements.txt',
+    ]);
+
+    await executeTestCase(defaultTestCase, defaultTarget, defaultConfig, paths);
+
+    // Should only read solution__-prefixed files
+    expect(mockSandboxInstance.readFile).toHaveBeenCalledWith('solution/solution__main.py');
+    expect(mockSandboxInstance.readFile).toHaveBeenCalledWith('solution/solution__utils.py');
+    expect(mockSandboxInstance.readFile).not.toHaveBeenCalledWith('solution/.venv/bin/python');
+    expect(mockSandboxInstance.readFile).not.toHaveBeenCalledWith('solution/.git/config');
+    expect(mockSandboxInstance.readFile).not.toHaveBeenCalledWith('solution/requirements.txt');
   });
 
   it('saves setup log when scaffoldWorkspace returns log content', async () => {

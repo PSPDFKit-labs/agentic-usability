@@ -41,9 +41,13 @@ describe('CodexAdapter', () => {
         JSON.stringify({ type: 'object' }),
         'utf-8',
       );
-      expect(mockSpawnAgent).toHaveBeenCalledWith('codex', expect.arrayContaining([
+      const call = mockSpawnAgent.mock.calls[0];
+      expect(call[0]).toBe('codex');
+      expect(call[1]).toEqual(expect.arrayContaining([
         'exec', '-C', '/work', '--full-auto', '--output-schema',
-      ]), expect.any(Object));
+      ]));
+      expect(call[1]).not.toContain('prompt');
+      expect(call[2]).toEqual(expect.objectContaining({ stdin: 'prompt' }));
       expect(result.stdout).toBe('{"result": true}');
       expect(mockRm).toHaveBeenCalledTimes(2);
     });

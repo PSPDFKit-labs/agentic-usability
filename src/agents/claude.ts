@@ -33,10 +33,9 @@ export class ClaudeAdapter extends BaseAdapter {
       '--json-schema',
       JSON.stringify(schema),
       ...(this.config.args ?? []),
-      prompt,
     ];
 
-    return this.spawn(args, workDir, env);
+    return this.spawn(args, workDir, env, undefined, prompt);
   }
 
   protected parseEnvelope(result: AgentResult): AgentResult | null {

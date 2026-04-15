@@ -30,8 +30,7 @@ describe('ClaudeAdapter', () => {
         '--print',
         '--output-format', 'json',
         '--json-schema', JSON.stringify({ type: 'object' }),
-        'prompt',
-      ], { cwd: '/work', env: undefined });
+      ], { cwd: '/work', env: undefined, stdin: 'prompt' });
       expect(result.stdout).toBe(JSON.stringify({ key: 'value' }));
     });
 

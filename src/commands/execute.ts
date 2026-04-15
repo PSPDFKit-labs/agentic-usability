@@ -111,26 +111,15 @@ function buildAgentPrompt(
   return `${prefix}Read the problem statement in /workspace/PROBLEM.md.
 ${docsSection}${langInstruction}
 Implement the solution and write all output files to the /workspace/solution/ directory.
+Prefix every solution file name with "solution__" (e.g. solution__main.py, solution__utils.py, solution__requirements.txt).
+Only files with this prefix will be collected for evaluation.
 
 Make sure to create the /workspace/solution/ directory first if it does not exist.`;
 }
 
 
-/** File paths to skip when extracting solutions (binary/cache artifacts). */
-const SKIP_PATTERNS = [
-  /__pycache__\//,
-  /\.pyc$/,
-  /\.pyo$/,
-  /node_modules\//,
-  /\.class$/,
-  /\.o$/,
-  /\.so$/,
-  /\.dylib$/,
-];
-
-function shouldSkipFile(filePath: string): boolean {
-  return SKIP_PATTERNS.some((pattern) => pattern.test(filePath));
-}
+/** Solution file prefix convention — only files with this basename prefix are collected. */
+const SOLUTION_PREFIX = 'solution__';
 
 async function extractSolution(
   client: SandboxClient,
@@ -148,12 +137,15 @@ async function extractSolution(
 
   const solution: SolutionFile[] = [];
   for (const filePath of files) {
-    if (shouldSkipFile(filePath)) continue;
+    const basename = filePath.split('/').pop() ?? '';
+    if (!basename.startsWith(SOLUTION_PREFIX)) continue;
     try {
       const content = await client.readFile(filePath);
       // Skip binary files (content with null bytes)
       if (content.includes('\0')) continue;
-      solution.push({ path: filePath, content });
+      // Strip the solution__ prefix from the stored path
+      const cleanPath = filePath.replace(`/${SOLUTION_PREFIX}`, '/');
+      solution.push({ path: cleanPath, content });
     } catch {
       // Skip files that can't be read (e.g. directories)
     }

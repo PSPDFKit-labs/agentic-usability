@@ -26,9 +26,8 @@ describe('GeminiAdapter', () => {
       await adapter.run('prompt', {}, '/work');
 
       expect(mockSpawnAgent).toHaveBeenCalledWith('gemini', [
-        '-p', 'prompt',
         '-o', 'json',
-      ], { cwd: '/work', env: undefined });
+      ], { cwd: '/work', env: undefined, stdin: 'prompt' });
     });
 
     it('extracts response field from JSON envelope', async () => {
