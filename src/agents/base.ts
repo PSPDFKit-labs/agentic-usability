@@ -74,10 +74,6 @@ export abstract class BaseAdapter implements AgentAdapter {
     return str.replace(/'/g, "'\\''");
   }
 
-  /** Wrap a shell command to run as a non-root user via `su`. */
-  protected wrapAsUser(cmd: string, user = 'sandbox'): string {
-    return `su -p ${user} -c '${cmd.replace(/'/g, "'\\''")}'`;
-  }
 }
 
 function buildRetryPrompt(originalPrompt: string, badOutput: string): string {

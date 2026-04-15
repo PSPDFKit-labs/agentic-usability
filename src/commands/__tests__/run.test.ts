@@ -48,6 +48,7 @@ vi.mock('../report.js', () => ({
 
 vi.mock('../execute.js', () => ({
   executeTestCase: vi.fn(),
+  startProxy: vi.fn().mockResolvedValue({ proxy: undefined, proxyEnv: undefined }),
 }));
 
 vi.mock('../../sandbox/opensandbox.js', () => {

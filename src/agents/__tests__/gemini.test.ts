@@ -72,10 +72,9 @@ describe('GeminiAdapter', () => {
   });
 
   describe('sandboxCommand', () => {
-    it('returns shell command wrapped with su sandbox', () => {
+    it('returns shell command without su wrapping', () => {
       const cmd = adapter.sandboxCommand('task');
-      expect(cmd).toMatch(/^su -p sandbox -c '/);
-      expect(cmd).toContain('gemini --yolo');
+      expect(cmd).toBe("cd /workspace && gemini --yolo -p 'task'");
     });
   });
 

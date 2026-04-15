@@ -4,6 +4,11 @@
  *
  * This prevents secrets from ever entering the sandbox environment — agent-generated
  * code (e.g. `printenv`) cannot leak them.
+ *
+ * For Anthropic secrets (ANTHROPIC_API_KEY), the proxy
+ * acts as an LLM gateway. Claude Code recognises ANTHROPIC_AUTH_TOKEN +
+ * ANTHROPIC_BASE_URL as a gateway configuration (auth precedence #2), so we
+ * emit those instead of the original secret var.
  */
 
 export interface ProxyTarget {
@@ -24,6 +29,12 @@ interface SecretMapping {
   targetBaseUrl: string;
   headerName: string;
   headerPrefix?: string;
+  /**
+   * Env var name + dummy value to inject into cleanEnv so the CLI considers
+   * itself authenticated. For Anthropic secrets this is ANTHROPIC_AUTH_TOKEN
+   * (gateway auth). For others it's the original key with a dummy value.
+   */
+  passThrough: { key: string; value: string };
 }
 
 const KNOWN_SECRETS: Record<string, SecretMapping> = {
@@ -31,28 +42,26 @@ const KNOWN_SECRETS: Record<string, SecretMapping> = {
     baseUrlVar: 'ANTHROPIC_BASE_URL',
     targetBaseUrl: 'https://api.anthropic.com',
     headerName: 'x-api-key',
-  },
-  CLAUDE_CODE_OAUTH_TOKEN: {
-    baseUrlVar: 'ANTHROPIC_BASE_URL',
-    targetBaseUrl: 'https://api.anthropic.com',
-    headerName: 'Authorization',
-    headerPrefix: 'Bearer ',
+    passThrough: { key: 'ANTHROPIC_AUTH_TOKEN', value: 'proxy-managed' },
   },
   OPENAI_API_KEY: {
     baseUrlVar: 'OPENAI_BASE_URL',
     targetBaseUrl: 'https://api.openai.com',
     headerName: 'Authorization',
     headerPrefix: 'Bearer ',
+    passThrough: { key: 'OPENAI_API_KEY', value: 'proxy-managed' },
   },
   GOOGLE_API_KEY: {
     baseUrlVar: 'GOOGLE_GEMINI_BASE_URL',
     targetBaseUrl: 'https://generativelanguage.googleapis.com',
     headerName: 'x-goog-api-key',
+    passThrough: { key: 'GOOGLE_API_KEY', value: 'proxy-managed' },
   },
   GEMINI_API_KEY: {
     baseUrlVar: 'GOOGLE_GEMINI_BASE_URL',
     targetBaseUrl: 'https://generativelanguage.googleapis.com',
     headerName: 'x-goog-api-key',
+    passThrough: { key: 'GEMINI_API_KEY', value: 'proxy-managed' },
   },
 };
 
@@ -68,6 +77,10 @@ export interface RewriteResult {
 /**
  * Extracts known secret env vars from `sandboxEnv`, returning proxy target
  * configs and a clean env map with secrets removed.
+ *
+ * For each extracted secret, a gateway-compatible passthrough var is injected
+ * into cleanEnv (e.g. ANTHROPIC_AUTH_TOKEN=proxy-managed) so the CLI
+ * considers itself authenticated and routes requests through the proxy.
  *
  * BASE_URL vars are NOT populated here because we don't know the proxy ports yet.
  * After starting the proxy, call `applyProxyUrls()` to fill them in.
@@ -94,6 +107,8 @@ export function rewriteEnv(
         headerPrefix: mapping.headerPrefix,
       });
       baseUrlVarMap.set(key, mapping.baseUrlVar);
+      // Inject gateway-compatible passthrough (e.g. ANTHROPIC_AUTH_TOKEN)
+      cleanEnv[mapping.passThrough.key] = mapping.passThrough.value;
     } else {
       // Pass through non-secret env vars unchanged
       cleanEnv[key] = value;
@@ -114,6 +129,24 @@ export function applyProxyUrls(
   const result = { ...cleanEnv };
   for (const { baseUrlVar, port } of listeners) {
     result[baseUrlVar] = `http://${hostAddr}:${port}`;
+  }
+  return result;
+}
+
+/**
+ * Stamps a test-case tag onto all proxy-managed passthrough values in the env.
+ * The tag travels through the CLI → proxy as a dummy credential, allowing the
+ * proxy to correlate log entries with specific test cases.
+ */
+export function stampProxyTag(
+  env: Record<string, string>,
+  tag: string,
+): Record<string, string> {
+  const result = { ...env };
+  for (const [key, value] of Object.entries(result)) {
+    if (value === 'proxy-managed') {
+      result[key] = `proxy:${tag}`;
+    }
   }
   return result;
 }

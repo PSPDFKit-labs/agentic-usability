@@ -168,15 +168,16 @@ export async function initCommand(paths: ProjectPaths): Promise<void> {
     const domain = await prompt(rl, 'Sandbox domain', 'localhost:8080');
 
     // ── Environment variables ─────────────────────────────────────────
-    let workspaceEnv: Record<string, string> | undefined;
+    let sandboxEnv: Record<string, string> | undefined;
 
     console.log('');
     hint("Sandbox containers may need API keys or other env vars.");
     hint("Use $VAR_NAME to reference variables from your host environment.");
+    hint("Known secrets (ANTHROPIC_API_KEY, etc.) are automatically proxied.");
     const configureEnv = await prompt(rl, 'Configure sandbox environment variables?', 'no');
 
     if (configureEnv.toLowerCase().startsWith('y')) {
-      workspaceEnv = {};
+      sandboxEnv = {};
       console.log(chalk.dim('  Enter key=value pairs. Use $VAR to reference host env. Empty key to finish.\n'));
 
       while (true) {
@@ -192,13 +193,13 @@ export async function initCommand(paths: ProjectPaths): Promise<void> {
         const key = pair.slice(0, eqIdx).trim();
         const value = pair.slice(eqIdx + 1).trim();
         if (key) {
-          workspaceEnv[key] = value;
+          sandboxEnv[key] = value;
           console.log(chalk.dim(`  Added: ${key}=${value.startsWith('$') ? chalk.cyan(value) : value}`));
         }
       }
 
-      if (Object.keys(workspaceEnv).length === 0) {
-        workspaceEnv = undefined;
+      if (Object.keys(sandboxEnv).length === 0) {
+        sandboxEnv = undefined;
       }
     }
 
@@ -212,8 +213,7 @@ export async function initCommand(paths: ProjectPaths): Promise<void> {
         judge: { command: agentCommand },
       },
       targets,
-      workspace: workspaceEnv ? { env: workspaceEnv } : undefined,
-      sandbox: { domain },
+      sandbox: { domain, env: sandboxEnv },
     };
 
     // ── Summary ───────────────────────────────────────────────────────

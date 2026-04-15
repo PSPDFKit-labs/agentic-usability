@@ -3,13 +3,40 @@ import ora from 'ora';
 import { loadConfig } from '../core/config.js';
 import { loadTestSuite, saveResult, formatElapsed } from '../core/suite-io.js';
 import { SandboxClient, getSandboxHostAddress } from '../sandbox/opensandbox.js';
-import { rewriteEnv, applyProxyUrls } from '../proxy/env-rewriter.js';
+import { rewriteEnv, applyProxyUrls, stampProxyTag } from '../proxy/env-rewriter.js';
 import { startAuthProxy, type AuthProxyHandle } from '../proxy/auth-proxy.js';
 import { scaffoldWorkspace } from '../sandbox/scaffolding.js';
 import { WorkerPool } from '../sandbox/worker-pool.js';
 import { createAdapter } from '../agents/adapter.js';
 import type { ProjectPaths } from '../core/paths.js';
 import type { Config, TestCase, SolutionFile, TargetConfig } from '../core/types.js';
+
+export interface ProxySetupResult {
+  proxy?: AuthProxyHandle;
+  proxyEnv?: Record<string, string>;
+}
+
+/**
+ * Resolve sandbox env vars, start the auth proxy for known secrets,
+ * and return the rewritten env (with BASE_URL vars) + proxy handle.
+ * Call once before executing test cases; stop the proxy when done.
+ */
+export async function startProxy(config: Config): Promise<ProxySetupResult> {
+  const sandboxEnv = resolveEnv(config.sandbox?.env);
+  const hostAddr = getSandboxHostAddress();
+  let proxy: AuthProxyHandle | undefined;
+  let proxyEnv: Record<string, string> | undefined;
+
+  const { proxyTargets, baseUrlVarMap, cleanEnv } = rewriteEnv(sandboxEnv);
+  if (proxyTargets.length > 0) {
+    proxy = await startAuthProxy(proxyTargets, baseUrlVarMap);
+    proxyEnv = applyProxyUrls(cleanEnv, proxy.listeners, hostAddr);
+  } else if (sandboxEnv && Object.keys(sandboxEnv).length > 0) {
+    proxyEnv = sandboxEnv;
+  }
+
+  return { proxy, proxyEnv };
+}
 
 function resolveEnv(
   env: Record<string, string> | undefined,
@@ -23,7 +50,7 @@ function resolveEnv(
       const hostValue = process.env[hostVar];
       if (hostValue === undefined) {
         throw new Error(
-          `Environment variable '${hostVar}' referenced in workspace.env.${key} is not set on the host`,
+          `Environment variable '${hostVar}' referenced in sandbox.env.${key} is not set on the host`,
         );
       }
       resolved[key] = hostValue;
@@ -142,6 +169,8 @@ export async function executeTestCase(
   pool?: WorkerPool,
   /** Pre-rewritten env: secrets replaced with *_BASE_URL vars pointing to the auth proxy. */
   proxyEnv?: Record<string, string>,
+  /** Auth proxy handle for per-test-case log extraction */
+  proxyHandle?: AuthProxyHandle,
 ): Promise<void> {
   const client = new SandboxClient(config.sandbox);
   // Register sandbox destruction as abort callback so Ctrl+C kills in-flight sandboxes
@@ -150,12 +179,12 @@ export async function executeTestCase(
   });
 
   try {
-    // workspace.env → baked into the container (available to setup scripts + agent-generated code)
-    const workspaceEnv = resolveEnv(config.workspace?.env);
-
+    // Stamp test case ID onto proxy passthrough vars, then bake all env into the container
+    const tcEnv = proxyEnv ? stampProxyTag(proxyEnv, testCase.id) : undefined;
+    const containerEnv = tcEnv && Object.keys(tcEnv).length > 0 ? tcEnv : undefined;
     await client.create(
       target.image,
-      workspaceEnv,
+      containerEnv,
       target.timeout ?? config.sandbox.defaultTimeout,
     );
 
@@ -169,11 +198,6 @@ export async function executeTestCase(
     await client.uploadFiles([
       { path: '/workspace/PROBLEM.md', data: testCase.problemStatement },
     ]);
-
-    // Create non-root user (agents like Claude refuse to run as root)
-    await client.runCommand(
-      'useradd -m -s /bin/bash sandbox 2>/dev/null; chown -R sandbox:sandbox /workspace'
-    );
 
     // Install agent CLI inside the sandbox
     const executorConfig = config.agents?.executor ?? { command: 'claude' };
@@ -195,7 +219,8 @@ export async function executeTestCase(
     // Run agent — secrets are proxied, only BASE_URL vars enter the sandbox
     const prompt = buildAgentPrompt(testCase, config);
     const agentCmd = adapter.sandboxCommand(prompt);
-    const agentResult = await client.runCommandTimed(agentCmd, { envs: proxyEnv });
+    await saveResult(paths, testCase.id, 'agent-cmd.log', agentCmd, target.name);
+    const agentResult = await client.runCommandTimed(agentCmd);
 
     // Save agent output
     const agentLog = [
@@ -227,6 +252,21 @@ export async function executeTestCase(
       target.name,
     );
   } finally {
+    // Save proxy logs for this test case (even on failure, for debugging)
+    if (proxyHandle) {
+      const tcLogs = proxyHandle.getLogsForTestCase(testCase.id);
+      if (tcLogs.length > 0) {
+        const logText = tcLogs
+          .map(e => {
+            const lines = [`[${e.timestamp}] ${e.method} ${e.url} → ${e.status} (${e.durationMs}ms)${e.error ? ` ERROR: ${e.error}` : ''}`];
+            if (e.requestBody) lines.push(`  ← ${e.requestBody}`);
+            if (e.responseBody) lines.push(`  → ${e.responseBody}`);
+            return lines.join('\n');
+          })
+          .join('\n');
+        await saveResult(paths, testCase.id, 'proxy.log', logText, target.name);
+      }
+    }
     unregisterAbort?.();
     await client.destroy();
   }
@@ -274,7 +314,7 @@ export async function executeCommand(paths: ProjectPaths): Promise<void> {
 
       const executeFn = async (tc: TestCase): Promise<void> => {
         try {
-          await executeTestCase(tc, target, config, paths, pool, proxyEnv);
+          await executeTestCase(tc, target, config, paths, pool, proxyEnv, proxy);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           await saveResult(paths, tc.id, 'error.log', message, target.name);

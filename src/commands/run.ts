@@ -6,7 +6,7 @@ import { PipelineStateManager } from '../core/pipeline.js';
 import { loadTestSuite, loadSolution, saveResult, formatElapsed } from '../core/suite-io.js';
 import { generateCommand } from './generate.js';
 import { reportCommand } from './report.js';
-import { executeTestCase } from './execute.js';
+import { executeTestCase, startProxy } from './execute.js';
 import { SandboxClient } from '../sandbox/opensandbox.js';
 
 import { WorkerPool } from '../sandbox/worker-pool.js';
@@ -85,6 +85,13 @@ export async function runCommand(paths: ProjectPaths, options: {
 
     await SandboxClient.checkConnectivity(config.sandbox);
 
+    // Start auth proxy: secrets stay on host, sandboxes get BASE_URL vars
+    const { proxy, proxyEnv } = await startProxy(config);
+    if (proxy) {
+      const ports = proxy.listeners.map((l) => `${l.baseUrlVar}→:${l.port}`).join(', ');
+      console.log(chalk.dim(`  Auth proxy listening (${ports})`));
+    }
+
     const concurrency = config.sandbox.concurrency ?? 3;
 
     for (const target of config.targets) {
@@ -109,7 +116,7 @@ export async function runCommand(paths: ProjectPaths, options: {
         incompleteTestCases,
         async (tc) => {
           try {
-            await executeTestCase(tc, target, config, paths, pool);
+            await executeTestCase(tc, target, config, paths, pool, proxyEnv, proxy);
             stateManager.markTestComplete('execute', tc.id);
             await stateManager.save();
           } catch (err) {
@@ -138,12 +145,14 @@ export async function runCommand(paths: ProjectPaths, options: {
 
       if (poolResult.aborted || pipelineAborted) {
         console.log(chalk.yellow('\nPipeline aborted by user (Ctrl+C). State saved — use --resume to continue.'));
+        await proxy?.stop();
         await stateManager.save();
         process.removeListener('SIGINT', onSigint);
         return;
       }
     }
 
+    await proxy?.stop();
     stateManager.advanceStage('analyze');
     await stateManager.save();
   } else {

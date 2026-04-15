@@ -9,6 +9,7 @@
  */
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 import type { ProxyTarget } from './env-rewriter.js';
 
 export interface ProxyListener {
@@ -18,17 +19,34 @@ export interface ProxyListener {
   port: number;
 }
 
+export interface ProxyLogEntry {
+  timestamp: string;
+  method: string;
+  url: string;
+  upstreamUrl: string;
+  status: number;
+  durationMs: number;
+  requestBody?: string;
+  responseBody?: string;
+  /** Test case ID extracted from the proxy tag in the incoming auth header */
+  testCaseId?: string;
+  error?: string;
+}
+
 export interface AuthProxyHandle {
   /** One listener per unique baseUrlVar */
   listeners: ProxyListener[];
+  /** Returns all recorded proxy request log entries */
+  getLogs(): ProxyLogEntry[];
+  /** Returns log entries for a specific test case */
+  getLogsForTestCase(testCaseId: string): ProxyLogEntry[];
   stop(): Promise<void>;
 }
 
 /**
  * Start one HTTP proxy listener per unique upstream (keyed by `baseUrlVar`).
  *
- * When multiple secrets share the same `baseUrlVar` (e.g. both ANTHROPIC_API_KEY
- * and CLAUDE_CODE_OAUTH_TOKEN → ANTHROPIC_BASE_URL), the last target wins.
+ * When multiple secrets share the same `baseUrlVar`, the last target wins.
  */
 export async function startAuthProxy(
   targets: ProxyTarget[],
@@ -49,9 +67,10 @@ export async function startAuthProxy(
 
   const servers: Server[] = [];
   const listeners: ProxyListener[] = [];
+  const logs: ProxyLogEntry[] = [];
 
   for (const [baseUrlVar, target] of targetByBaseUrlVar) {
-    const server = createProxyServer(target);
+    const server = createProxyServer(target, logs);
     const port = await listen(server);
     servers.push(server);
     listeners.push({ baseUrlVar, port });
@@ -59,77 +78,97 @@ export async function startAuthProxy(
 
   return {
     listeners,
+    getLogs: () => [...logs],
+    getLogsForTestCase: (testCaseId: string) => logs.filter(e => e.testCaseId === testCaseId),
     stop: async () => {
       await Promise.all(servers.map(closeServer));
     },
   };
 }
 
-function createProxyServer(target: ProxyTarget): Server {
-  return createServer(async (req: IncomingMessage, res: ServerResponse) => {
-    // Build upstream URL
-    const upstreamUrl = `${target.targetBaseUrl}${req.url ?? ''}`;
+/**
+ * Extracts a test-case tag from an incoming auth header value.
+ * The tag is embedded by `stampProxyTag()` as `proxy:<id>` and may
+ * arrive with a prefix (e.g. `Bearer proxy:TC-001` or just `proxy:TC-001`).
+ */
+function extractProxyTag(headerValue: string | undefined): string | undefined {
+  if (!headerValue) return undefined;
+  const match = headerValue.match(/proxy:(.+)/);
+  return match ? match[1] : undefined;
+}
 
-    // Collect request body
-    const bodyChunks: Buffer[] = [];
-    for await (const chunk of req) {
-      bodyChunks.push(chunk as Buffer);
-    }
-    const body = Buffer.concat(bodyChunks);
+function createProxyServer(target: ProxyTarget, logs: ProxyLogEntry[]): Server {
+  const middleware = createProxyMiddleware({
+    target: target.targetBaseUrl,
+    changeOrigin: true,
+    on: {
+      proxyReq: (proxyReq, req) => {
+        // Extract test-case tag from incoming auth headers before overwriting
+        const authHeaderLower = target.headerName.toLowerCase();
+        const incomingAuth = req.headers['authorization']
+          ?? req.headers[authHeaderLower];
+        const headerStr = Array.isArray(incomingAuth) ? incomingAuth[0] : incomingAuth;
+        (req as any).__testCaseId = extractProxyTag(headerStr);
+        (req as any).__startTime = Date.now();
 
-    // Build forwarded headers (strip hop-by-hop)
-    const forwardHeaders: Record<string, string> = {};
-    for (const [key, value] of Object.entries(req.headers)) {
-      if (key === 'host' || key === 'connection' || key === 'transfer-encoding') continue;
-      if (value !== undefined) {
-        forwardHeaders[key] = Array.isArray(value) ? value.join(', ') : value;
-      }
-    }
+        // Capture request body passively for logging
+        const chunks: Buffer[] = [];
+        req.on('data', (chunk: Buffer) => chunks.push(chunk));
+        req.on('end', () => {
+          (req as any).__requestBody = chunks.length > 0
+            ? Buffer.concat(chunks).toString('utf8')
+            : undefined;
+        });
 
-    // Inject auth header
-    const authValue = target.headerPrefix
-      ? `${target.headerPrefix}${target.headerValue}`
-      : target.headerValue;
-    forwardHeaders[target.headerName] = authValue;
-
-    try {
-      const upstream = await fetch(upstreamUrl, {
-        method: req.method ?? 'GET',
-        headers: forwardHeaders,
-        body: body.length > 0 ? body : undefined,
-        // @ts-expect-error -- Node fetch supports duplex for streaming
-        duplex: 'half',
-      });
-
-      // Forward status and headers
-      const responseHeaders: Record<string, string> = {};
-      upstream.headers.forEach((value, key) => {
-        if (key === 'transfer-encoding' || key === 'connection') return;
-        responseHeaders[key] = value;
-      });
-      res.writeHead(upstream.status, responseHeaders);
-
-      // Stream the response body
-      if (upstream.body) {
-        const reader = upstream.body.getReader();
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            res.write(value);
-          }
-        } finally {
-          reader.releaseLock();
+        // Strip dummy auth headers, inject real secret
+        proxyReq.removeHeader('authorization');
+        proxyReq.removeHeader(target.headerName);
+        const authValue = target.headerPrefix
+          ? `${target.headerPrefix}${target.headerValue}`
+          : target.headerValue;
+        proxyReq.setHeader(target.headerName, authValue);
+      },
+      proxyRes: (proxyRes, req) => {
+        // Capture response body passively (streaming preserved — no selfHandleResponse)
+        const chunks: Buffer[] = [];
+        proxyRes.on('data', (chunk: Buffer) => chunks.push(chunk));
+        proxyRes.on('end', () => {
+          logs.push({
+            timestamp: new Date().toISOString(),
+            method: req.method ?? 'GET',
+            url: req.url ?? '/',
+            upstreamUrl: `${target.targetBaseUrl}${req.url}`,
+            status: proxyRes.statusCode ?? 0,
+            durationMs: Date.now() - ((req as any).__startTime ?? 0),
+            requestBody: (req as any).__requestBody,
+            responseBody: chunks.length > 0
+              ? Buffer.concat(chunks).toString('utf8')
+              : undefined,
+            testCaseId: (req as any).__testCaseId,
+          });
+        });
+      },
+      error: (err, req, res) => {
+        const serverRes = res as ServerResponse;
+        if (!serverRes.headersSent) {
+          serverRes.writeHead(502);
+          serverRes.end(`Auth proxy upstream error: ${err.message}`);
         }
-      }
-      res.end();
-    } catch (err) {
-      if (!res.headersSent) {
-        res.writeHead(502);
-        res.end(`Auth proxy upstream error: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
+        logs.push({
+          timestamp: new Date().toISOString(),
+          method: (req as IncomingMessage).method ?? 'GET',
+          url: (req as IncomingMessage).url ?? '/',
+          upstreamUrl: `${target.targetBaseUrl}${(req as IncomingMessage).url}`,
+          status: 502,
+          durationMs: Date.now() - ((req as any).__startTime ?? 0),
+          testCaseId: (req as any).__testCaseId,
+          error: err.message,
+        });
+      },
+    },
   });
+
+  return createServer(middleware);
 }
 
 function listen(server: Server): Promise<number> {

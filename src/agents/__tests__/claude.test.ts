@@ -78,23 +78,22 @@ describe('ClaudeAdapter', () => {
   });
 
   describe('sandboxCommand', () => {
-    it('returns correct shell string wrapped with su sandbox', () => {
+    it('returns correct shell string with IS_SANDBOX=1', () => {
       const cmd = adapter.sandboxCommand('do something');
-      expect(cmd).toMatch(/^su -p sandbox -c '/);
-      expect(cmd).toContain('claude --print --dangerously-skip-permissions');
-      expect(cmd).toContain('do something');
+      expect(cmd).toContain('IS_SANDBOX=1 claude --print --dangerously-skip-permissions');
+      expect(cmd).toContain("'do something'");
+      expect(cmd.startsWith('cd /workspace &&')).toBe(true);
     });
 
     it('escapes single quotes', () => {
       const cmd = adapter.sandboxCommand("it's a test");
-      expect(cmd).toContain("it");
-      expect(cmd).toContain("a test");
+      expect(cmd).toContain("it'\\''s a test");
     });
 
     it('appends custom args', () => {
       const custom = new ClaudeAdapter({ command: 'claude', args: ['--verbose'] });
       const cmd = custom.sandboxCommand('prompt');
-      expect(cmd).toContain('--verbose');
+      expect(cmd).toBe("cd /workspace && IS_SANDBOX=1 claude --print --dangerously-skip-permissions --verbose 'prompt'");
     });
   });
 

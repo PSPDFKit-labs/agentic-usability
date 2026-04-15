@@ -81,10 +81,9 @@ describe('CodexAdapter', () => {
   });
 
   describe('sandboxCommand', () => {
-    it('returns shell command wrapped with su sandbox', () => {
+    it('returns shell command without su wrapping', () => {
       const cmd = adapter.sandboxCommand('task');
-      expect(cmd).toMatch(/^su -p sandbox -c '/);
-      expect(cmd).toContain('codex exec --dangerously-bypass-approvals-and-sandbox -C /workspace');
+      expect(cmd).toBe("codex exec --dangerously-bypass-approvals-and-sandbox -C /workspace 'task'");
     });
   });
 

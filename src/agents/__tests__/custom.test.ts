@@ -113,17 +113,15 @@ describe('CustomAdapter', () => {
   });
 
   describe('sandboxCommand', () => {
-    it('substitutes {prompt} (escaped) and {workDir} (/workspace) and wraps with su', () => {
+    it('substitutes {prompt} (escaped) and {workDir} (/workspace)', () => {
       const adapter = new CustomAdapter({ command: 'tool', args: ['--dir', '{workDir}', '{prompt}'] });
       const cmd = adapter.sandboxCommand('task');
-      expect(cmd).toMatch(/^su -p sandbox -c '/);
-      expect(cmd).toContain('tool');
-      expect(cmd).toContain('/workspace');
+      expect(cmd).toBe("tool --dir /workspace 'task'");
     });
 
-    it('wraps command with su when no args', () => {
+    it('returns bare command when no args', () => {
       const adapter = new CustomAdapter({ command: 'tool' });
-      expect(adapter.sandboxCommand('task')).toBe("su -p sandbox -c 'tool'");
+      expect(adapter.sandboxCommand('task')).toBe('tool');
     });
   });
 

@@ -13,7 +13,7 @@ export class GeminiAdapter extends BaseAdapter {
     const escaped = this.escapeForShell(prompt);
     const args = this.config.args ?? [];
     const cmd = `cd ${workDir} && gemini --yolo -p '${escaped}' ${args.join(' ')}`.trimEnd();
-    return this.wrapAsUser(cmd);
+    return cmd;
   }
 
   protected buildInteractiveArgs(prompt: string, _workDir: string): string[] {

@@ -96,7 +96,6 @@ export interface TargetConfig {
 export interface WorkspaceConfig {
   template?: string;
   setupScript?: string;
-  env?: Record<string, string>;
 }
 
 export interface SandboxConfig {
@@ -105,7 +104,9 @@ export interface SandboxConfig {
   concurrency?: number;
   defaultTimeout?: number;
   systemPrompt?: string;
-  /** Secret env vars for sandbox infrastructure (e.g. agent CLI auth). Passed only to the agent command, never exposed to agent-generated code. */
+  /** Env vars for the sandbox container. Known secrets (ANTHROPIC_API_KEY, etc.)
+   *  are routed through the auth proxy; everything else is passed through as-is.
+   *  All vars are baked into the container at creation time. */
   env?: Record<string, string>;
 }
 

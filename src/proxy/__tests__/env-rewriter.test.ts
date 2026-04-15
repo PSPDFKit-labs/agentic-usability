@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rewriteEnv, applyProxyUrls } from '../env-rewriter.js';
+import { rewriteEnv, applyProxyUrls, stampProxyTag } from '../env-rewriter.js';
 
 describe('rewriteEnv', () => {
   it('returns empty result for undefined env', () => {
@@ -21,7 +21,7 @@ describe('rewriteEnv', () => {
     expect(result.cleanEnv).toEqual({ NODE_ENV: 'test', DEBUG: '1' });
   });
 
-  it('extracts ANTHROPIC_API_KEY into proxy target', () => {
+  it('extracts ANTHROPIC_API_KEY and emits ANTHROPIC_AUTH_TOKEN passthrough', () => {
     const result = rewriteEnv({ ANTHROPIC_API_KEY: 'sk-secret' });
 
     expect(result.proxyTargets).toHaveLength(1);
@@ -33,26 +33,12 @@ describe('rewriteEnv', () => {
       headerPrefix: undefined,
     });
     expect(result.baseUrlVarMap.get('ANTHROPIC_API_KEY')).toBe('ANTHROPIC_BASE_URL');
-    // Secret must not appear in cleanEnv
+    // Original secret stripped, gateway auth token emitted instead
     expect(result.cleanEnv).not.toHaveProperty('ANTHROPIC_API_KEY');
-    expect(result.cleanEnv).not.toHaveProperty('ANTHROPIC_BASE_URL');
+    expect(result.cleanEnv).toHaveProperty('ANTHROPIC_AUTH_TOKEN', 'proxy-managed');
   });
 
-  it('extracts CLAUDE_CODE_OAUTH_TOKEN with Bearer prefix', () => {
-    const result = rewriteEnv({ CLAUDE_CODE_OAUTH_TOKEN: 'oauth-token' });
-
-    expect(result.proxyTargets[0]).toEqual({
-      envVar: 'CLAUDE_CODE_OAUTH_TOKEN',
-      targetBaseUrl: 'https://api.anthropic.com',
-      headerName: 'Authorization',
-      headerValue: 'oauth-token',
-      headerPrefix: 'Bearer ',
-    });
-    expect(result.baseUrlVarMap.get('CLAUDE_CODE_OAUTH_TOKEN')).toBe('ANTHROPIC_BASE_URL');
-    expect(result.cleanEnv).not.toHaveProperty('CLAUDE_CODE_OAUTH_TOKEN');
-  });
-
-  it('extracts OPENAI_API_KEY', () => {
+  it('extracts OPENAI_API_KEY with dummy passthrough', () => {
     const result = rewriteEnv({ OPENAI_API_KEY: 'sk-openai' });
 
     expect(result.proxyTargets[0]).toMatchObject({
@@ -61,10 +47,10 @@ describe('rewriteEnv', () => {
       headerPrefix: 'Bearer ',
     });
     expect(result.baseUrlVarMap.get('OPENAI_API_KEY')).toBe('OPENAI_BASE_URL');
-    expect(result.cleanEnv).not.toHaveProperty('OPENAI_API_KEY');
+    expect(result.cleanEnv).toHaveProperty('OPENAI_API_KEY', 'proxy-managed');
   });
 
-  it('extracts GOOGLE_API_KEY', () => {
+  it('extracts GOOGLE_API_KEY with dummy passthrough', () => {
     const result = rewriteEnv({ GOOGLE_API_KEY: 'goog-key' });
 
     expect(result.proxyTargets[0]).toMatchObject({
@@ -72,34 +58,32 @@ describe('rewriteEnv', () => {
       headerName: 'x-goog-api-key',
     });
     expect(result.baseUrlVarMap.get('GOOGLE_API_KEY')).toBe('GOOGLE_GEMINI_BASE_URL');
-    expect(result.cleanEnv).not.toHaveProperty('GOOGLE_API_KEY');
+    expect(result.cleanEnv).toHaveProperty('GOOGLE_API_KEY', 'proxy-managed');
   });
 
-  it('extracts GEMINI_API_KEY', () => {
+  it('extracts GEMINI_API_KEY with dummy passthrough', () => {
     const result = rewriteEnv({ GEMINI_API_KEY: 'gem-key' });
     expect(result.baseUrlVarMap.get('GEMINI_API_KEY')).toBe('GOOGLE_GEMINI_BASE_URL');
-    expect(result.cleanEnv).not.toHaveProperty('GEMINI_API_KEY');
+    expect(result.cleanEnv).toHaveProperty('GEMINI_API_KEY', 'proxy-managed');
   });
 
   it('no secret value leaks into cleanEnv for any known secret', () => {
     const secrets = {
       ANTHROPIC_API_KEY: 'sk-ant-secret',
-      CLAUDE_CODE_OAUTH_TOKEN: 'oauth-secret',
       OPENAI_API_KEY: 'sk-oai-secret',
       GOOGLE_API_KEY: 'goog-secret',
       GEMINI_API_KEY: 'gem-secret',
     };
     const result = rewriteEnv({ ...secrets, SAFE_VAR: 'public' });
 
-    // No secret env var name should appear as a key in cleanEnv
-    for (const secretKey of Object.keys(secrets)) {
-      expect(result.cleanEnv).not.toHaveProperty(secretKey);
-    }
     // No secret value should appear anywhere in cleanEnv values
     const allCleanValues = Object.values(result.cleanEnv).join(' ');
     for (const secretValue of Object.values(secrets)) {
       expect(allCleanValues).not.toContain(secretValue);
     }
+    // Anthropic secrets → ANTHROPIC_AUTH_TOKEN passthrough
+    expect(result.cleanEnv).toHaveProperty('ANTHROPIC_AUTH_TOKEN', 'proxy-managed');
+    expect(result.cleanEnv).not.toHaveProperty('ANTHROPIC_API_KEY');
     // Non-secret var must survive
     expect(result.cleanEnv).toHaveProperty('SAFE_VAR', 'public');
   });
@@ -112,7 +96,11 @@ describe('rewriteEnv', () => {
     });
 
     expect(result.proxyTargets).toHaveLength(1);
-    expect(result.cleanEnv).toEqual({ NODE_ENV: 'production', DEBUG: '1' });
+    expect(result.cleanEnv).toEqual({
+      ANTHROPIC_AUTH_TOKEN: 'proxy-managed',
+      NODE_ENV: 'production',
+      DEBUG: '1',
+    });
   });
 
   it('handles multiple secrets targeting different upstreams', () => {
@@ -153,5 +141,49 @@ describe('applyProxyUrls', () => {
     const cleanEnv = { FOO: 'bar' };
     const result = applyProxyUrls(cleanEnv, [], 'localhost');
     expect(result).toEqual({ FOO: 'bar' });
+  });
+});
+
+describe('stampProxyTag', () => {
+  it('replaces proxy-managed values with proxy:<tag>', () => {
+    const env = {
+      ANTHROPIC_AUTH_TOKEN: 'proxy-managed',
+      ANTHROPIC_BASE_URL: 'http://localhost:12345',
+      NODE_ENV: 'test',
+    };
+
+    const result = stampProxyTag(env, 'TC-001');
+
+    expect(result).toEqual({
+      ANTHROPIC_AUTH_TOKEN: 'proxy:TC-001',
+      ANTHROPIC_BASE_URL: 'http://localhost:12345',
+      NODE_ENV: 'test',
+    });
+  });
+
+  it('stamps multiple proxy-managed vars', () => {
+    const env = {
+      ANTHROPIC_AUTH_TOKEN: 'proxy-managed',
+      OPENAI_API_KEY: 'proxy-managed',
+      DEBUG: '1',
+    };
+
+    const result = stampProxyTag(env, 'TC-042');
+
+    expect(result.ANTHROPIC_AUTH_TOKEN).toBe('proxy:TC-042');
+    expect(result.OPENAI_API_KEY).toBe('proxy:TC-042');
+    expect(result.DEBUG).toBe('1');
+  });
+
+  it('does not mutate the original env', () => {
+    const env = { ANTHROPIC_AUTH_TOKEN: 'proxy-managed' };
+    stampProxyTag(env, 'TC-001');
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBe('proxy-managed');
+  });
+
+  it('returns env unchanged when no proxy-managed values', () => {
+    const env = { NODE_ENV: 'test', FOO: 'bar' };
+    const result = stampProxyTag(env, 'TC-001');
+    expect(result).toEqual(env);
   });
 });

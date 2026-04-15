@@ -12,8 +12,8 @@ export class ClaudeAdapter extends BaseAdapter {
   sandboxCommand(prompt: string, workDir = '/workspace'): string {
     const escaped = this.escapeForShell(prompt);
     const args = this.config.args ?? [];
-    const cmd = `cd ${workDir} && claude --print --dangerously-skip-permissions ${args.join(' ')} '${escaped}'`.trimEnd();
-    return this.wrapAsUser(cmd);
+    const cmd = `cd ${workDir} && IS_SANDBOX=1 claude --print --dangerously-skip-permissions ${args.join(' ')} '${escaped}'`.trimEnd();
+    return cmd;
   }
 
   protected buildInteractiveArgs(prompt: string, _workDir: string): string[] {
