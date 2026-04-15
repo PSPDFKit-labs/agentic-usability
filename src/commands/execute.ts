@@ -256,15 +256,7 @@ export async function executeTestCase(
     if (proxyHandle) {
       const tcLogs = proxyHandle.getLogsForTestCase(testCase.id);
       if (tcLogs.length > 0) {
-        const logText = tcLogs
-          .map(e => {
-            const lines = [`[${e.timestamp}] ${e.method} ${e.url} → ${e.status} (${e.durationMs}ms)${e.error ? ` ERROR: ${e.error}` : ''}`];
-            if (e.requestBody) lines.push(`  ← ${e.requestBody}`);
-            if (e.responseBody) lines.push(`  → ${e.responseBody}`);
-            return lines.join('\n');
-          })
-          .join('\n');
-        await saveResult(paths, testCase.id, 'proxy.log', logText, target.name);
+        await saveResult(paths, testCase.id, 'proxy.log.json', JSON.stringify(tcLogs, null, 2), target.name);
       }
     }
     unregisterAbort?.();

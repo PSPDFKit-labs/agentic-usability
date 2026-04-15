@@ -9,6 +9,7 @@
  */
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
+import { gunzipSync, brotliDecompressSync, inflateSync } from 'node:zlib';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import type { ProxyTarget } from './env-rewriter.js';
 
@@ -133,6 +134,11 @@ function createProxyServer(target: ProxyTarget, logs: ProxyLogEntry[]): Server {
         const chunks: Buffer[] = [];
         proxyRes.on('data', (chunk: Buffer) => chunks.push(chunk));
         proxyRes.on('end', () => {
+          let responseBody: string | undefined;
+          if (chunks.length > 0) {
+            const raw = Buffer.concat(chunks);
+            responseBody = decompressForLog(raw, proxyRes.headers['content-encoding']);
+          }
           logs.push({
             timestamp: new Date().toISOString(),
             method: req.method ?? 'GET',
@@ -141,9 +147,7 @@ function createProxyServer(target: ProxyTarget, logs: ProxyLogEntry[]): Server {
             status: proxyRes.statusCode ?? 0,
             durationMs: Date.now() - ((req as any).__startTime ?? 0),
             requestBody: (req as any).__requestBody,
-            responseBody: chunks.length > 0
-              ? Buffer.concat(chunks).toString('utf8')
-              : undefined,
+            responseBody,
             testCaseId: (req as any).__testCaseId,
           });
         });
@@ -169,6 +173,25 @@ function createProxyServer(target: ProxyTarget, logs: ProxyLogEntry[]): Server {
   });
 
   return createServer(middleware);
+}
+
+/** Decompress a response buffer for logging only. Falls back to raw UTF-8 on error. */
+function decompressForLog(buf: Buffer, encoding: string | undefined): string {
+  try {
+    switch (encoding) {
+      case 'gzip':
+        return gunzipSync(buf).toString('utf8');
+      case 'br':
+        return brotliDecompressSync(buf).toString('utf8');
+      case 'deflate':
+        return inflateSync(buf).toString('utf8');
+      default:
+        return buf.toString('utf8');
+    }
+  } catch {
+    // If decompression fails (e.g. partial stream), return raw as UTF-8
+    return buf.toString('utf8');
+  }
 }
 
 function listen(server: Server): Promise<number> {

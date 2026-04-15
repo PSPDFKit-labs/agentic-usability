@@ -339,7 +339,7 @@ OpenSandbox server connection and agent secrets:
     "defaultTimeout": 600,
     "systemPrompt": "You are solving a {{packageName}} problem.",
     "env": {
-      "CLAUDE_CODE_OAUTH_TOKEN": "$CLAUDE_CODE_OAUTH_TOKEN"
+      "ANTHROPIC_API_KEY": "$ANTHROPIC_API_KEY"
     }
   }
 }
