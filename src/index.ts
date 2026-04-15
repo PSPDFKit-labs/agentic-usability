@@ -57,29 +57,35 @@ program
 program
   .command('execute')
   .description('Execute test cases in sandboxed environments with AI agents')
-  .action(async () => {
+  .option('--tests <ids>', 'Comma-separated list of test case IDs to run')
+  .action(async (opts: { tests?: string }) => {
     const paths = getPaths();
     await ensureProjectDirs(paths);
-    await executeCommand(paths);
+    const testIds = opts.tests?.split(',').map(s => s.trim());
+    await executeCommand(paths, { testIds });
   });
 
 program
   .command('analyze')
   .description('Analyze generated solutions for expected SDK API calls and patterns')
-  .action(async () => {
+  .option('--tests <ids>', 'Comma-separated list of test case IDs to run')
+  .action(async (opts: { tests?: string }) => {
     const paths = getPaths();
     await ensureProjectDirs(paths);
-    await analyzeCommand(paths);
+    const testIds = opts.tests?.split(',').map(s => s.trim());
+    await analyzeCommand(paths, { testIds });
   });
 
 program
   .command('judge')
   .description('Have an LLM compare reference and generated solutions')
   .option('--skip-judge', 'Skip the judge stage')
-  .action(async (opts: { skipJudge?: boolean }) => {
+  .option('--tests <ids>', 'Comma-separated list of test case IDs to run')
+  .action(async (opts: { skipJudge?: boolean; tests?: string }) => {
     const paths = getPaths();
     await ensureProjectDirs(paths);
-    await judgeCommand(paths, { skipJudge: opts.skipJudge });
+    const testIds = opts.tests?.split(',').map(s => s.trim());
+    await judgeCommand(paths, { skipJudge: opts.skipJudge, testIds });
   });
 
 program

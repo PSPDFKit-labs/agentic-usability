@@ -5,7 +5,7 @@ import { loadTestSuite, loadSolution, saveResult } from '../core/suite-io.js';
 import { runJudge } from '../scoring/judge.js';
 import type { ProjectPaths } from '../core/paths.js';
 
-export async function judgeCommand(paths: ProjectPaths, options: { skipJudge?: boolean } = {}): Promise<void> {
+export async function judgeCommand(paths: ProjectPaths, options: { skipJudge?: boolean; testIds?: string[] } = {}): Promise<void> {
   if (options.skipJudge) {
     console.log(chalk.yellow('Judge stage skipped (--skip-judge flag)'));
     return;
@@ -14,8 +14,11 @@ export async function judgeCommand(paths: ProjectPaths, options: { skipJudge?: b
   const config = await loadConfig(paths.config);
 
   const spinner = ora('Loading test suite...').start();
-  const testCases = await loadTestSuite(paths);
-  spinner.succeed(`Loaded ${testCases.length} test case(s)`);
+  const allTestCases = await loadTestSuite(paths);
+  const testCases = options.testIds
+    ? allTestCases.filter(tc => options.testIds!.includes(tc.id))
+    : allTestCases;
+  spinner.succeed(`Loaded ${testCases.length} test case(s)${options.testIds ? ` (filtered from ${allTestCases.length})` : ''}`);
 
   const judgeConfig = config.agents?.judge ?? { command: 'claude' };
 

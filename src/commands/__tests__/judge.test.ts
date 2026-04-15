@@ -95,6 +95,17 @@ describe('judgeCommand', () => {
     );
   });
 
+  it('filters test cases when testIds is provided', async () => {
+    const tc1 = makeTestCase({ id: 'TC-001' });
+    const tc2 = makeTestCase({ id: 'TC-002' });
+    vi.mocked(loadTestSuite).mockResolvedValue([tc1, tc2]);
+
+    await judgeCommand(paths, { testIds: ['TC-002'] });
+
+    expect(loadSolution).toHaveBeenCalledTimes(1);
+    expect(loadSolution).toHaveBeenCalledWith(paths, 'TC-002', 'claude');
+  });
+
   it('saves judge-error.log and continues on judge failure', async () => {
     vi.mocked(runJudge).mockRejectedValue(new Error('judge crashed'));
 

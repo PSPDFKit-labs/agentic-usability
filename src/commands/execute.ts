@@ -264,12 +264,15 @@ export async function executeTestCase(
   }
 }
 
-export async function executeCommand(paths: ProjectPaths): Promise<void> {
+export async function executeCommand(paths: ProjectPaths, options: { testIds?: string[] } = {}): Promise<void> {
   const config = await loadConfig(paths.config);
 
   const spinner = ora('Loading test suite...').start();
-  const testCases = await loadTestSuite(paths);
-  spinner.succeed(`Loaded ${testCases.length} test case(s)`);
+  const allTestCases = await loadTestSuite(paths);
+  const testCases = options.testIds
+    ? allTestCases.filter(tc => options.testIds!.includes(tc.id))
+    : allTestCases;
+  spinner.succeed(`Loaded ${testCases.length} test case(s)${options.testIds ? ` (filtered from ${allTestCases.length})` : ''}`);
 
   // Validate connectivity
   spinner.start('Checking OpenSandbox connectivity...');

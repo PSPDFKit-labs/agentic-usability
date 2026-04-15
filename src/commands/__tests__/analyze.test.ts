@@ -91,6 +91,17 @@ describe('analyzeCommand', () => {
     );
   });
 
+  it('filters test cases when testIds is provided', async () => {
+    const tc1 = makeTestCase({ id: 'TC-001' });
+    const tc2 = makeTestCase({ id: 'TC-002' });
+    vi.mocked(loadTestSuite).mockResolvedValue([tc1, tc2]);
+
+    await analyzeCommand(paths, { testIds: ['TC-002'] });
+
+    expect(loadSolution).toHaveBeenCalledTimes(1);
+    expect(loadSolution).toHaveBeenCalledWith(paths, 'TC-002', 'claude');
+  });
+
   it('saves token-analysis.json for each test case', async () => {
     await analyzeCommand(paths);
 

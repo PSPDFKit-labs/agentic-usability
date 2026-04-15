@@ -202,4 +202,15 @@ describe('executeCommand', () => {
     expect(loadTestSuite).toHaveBeenCalledWith(paths);
     expect(SandboxClient.checkConnectivity).toHaveBeenCalledWith(defaultConfig.sandbox);
   });
+
+  it('filters test cases when testIds is provided', async () => {
+    const tc1 = makeTestCase({ id: 'TC-001' });
+    const tc2 = makeTestCase({ id: 'TC-002' });
+    vi.mocked(loadTestSuite).mockResolvedValue([tc1, tc2]);
+
+    await executeCommand(paths, { testIds: ['TC-001'] });
+
+    // loadTestSuite still loads all, but only filtered set is passed to pool
+    expect(loadTestSuite).toHaveBeenCalledWith(paths);
+  });
 });

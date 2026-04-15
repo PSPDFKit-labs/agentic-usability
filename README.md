@@ -111,6 +111,14 @@ npx agentic-usability judge    -p pipelines/my-sdk-eval
 npx agentic-usability report   -p pipelines/my-sdk-eval
 ```
 
+Use `--tests` to run specific test cases (comma-separated):
+
+```bash
+npx agentic-usability execute -p pipelines/my-sdk-eval --tests TC-001,TC-003
+npx agentic-usability analyze -p pipelines/my-sdk-eval --tests TC-001,TC-003
+npx agentic-usability judge   -p pipelines/my-sdk-eval --tests TC-001,TC-003
+```
+
 ## Project Directory Layout
 
 Each pipeline project is a self-contained directory. Without `-p`, the CLI treats CWD as the project directory.
@@ -135,15 +143,13 @@ pipelines/my-sdk-eval/           # project root (= CWD or -p target)
 
 ## Commands
 
-All commands accept the global `-p/--project <dir>` option to scope to a project directory.
-
 | Command | Description | Flags |
 |---------|-------------|-------|
 | `init` | Create a new pipeline project (interactive wizard) | `-p <dir>` |
 | `generate` | Generate test suite from SDK source | `--fresh`, `--non-interactive` |
-| `execute` | Run agents in sandboxes to solve test cases | |
-| `analyze` | Regex-based token analysis of generated solutions | |
-| `judge` | LLM comparison of reference vs generated solutions | `--skip-judge` |
+| `execute` | Run agents in sandboxes to solve test cases | `--tests <ids>` |
+| `analyze` | Regex-based token analysis of generated solutions | `--tests <ids>` |
+| `judge` | LLM comparison of reference vs generated solutions | `--skip-judge`, `--tests <ids>` |
 | `report` | Display terminal scorecard | `--json` |
 | `run` | Full pipeline end-to-end | `--resume`, `--fresh`, `--skip-judge` |
 | `inspect` | Open web UI to inspect, edit, and run the pipeline | `--port <number>` |
