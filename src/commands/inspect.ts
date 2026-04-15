@@ -8,7 +8,7 @@ export async function inspectCommand(paths: ProjectPaths, options: { port?: numb
   const server = createServer(paths);
 
   await new Promise<void>((resolve, reject) => {
-    server.listen(port, () => {
+    server.listen(port, '127.0.0.1', () => {
       console.log(chalk.bold('\nAgentic Usability — Inspect UI\n'));
       console.log(`  ${chalk.cyan('URL:')}       http://localhost:${port}`);
       console.log(`  ${chalk.cyan('Pipeline:')}  ${paths.root}`);

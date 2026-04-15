@@ -138,8 +138,10 @@ export class SandboxClient {
       domain: config.domain,
       apiKey: config.apiKey,
     });
+    const isLocal = config.domain.startsWith('localhost') || config.domain.startsWith('127.');
+    const protocol = isLocal ? 'http' : 'https';
     try {
-      const healthUrl = `http://${config.domain}/health`;
+      const healthUrl = `${protocol}://${config.domain}/health`;
       const response = await fetch(healthUrl, {
         method: 'GET',
         signal: AbortSignal.timeout(5000),
@@ -155,7 +157,7 @@ export class SandboxClient {
           `  1. Install: pip install opensandbox-server (or: uv tool install opensandbox-server)\n` +
           `  2. Init config: opensandbox-server init-config ~/.sandbox.toml --example docker\n` +
           `  3. Run: opensandbox-server\n` +
-          `  4. Verify: curl http://${config.domain}/health\n` +
+          `  4. Verify: curl ${protocol}://${config.domain}/health\n` +
           `Error: ${message}`,
       );
     } finally {

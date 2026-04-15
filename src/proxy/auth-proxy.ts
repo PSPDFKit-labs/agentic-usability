@@ -197,7 +197,7 @@ function decompressForLog(buf: Buffer, encoding: string | undefined): string {
 function listen(server: Server): Promise<number> {
   return new Promise<number>((resolve, reject) => {
     server.once('error', reject);
-    server.listen(0, '0.0.0.0', () => {
+    server.listen(0, '127.0.0.1', () => {
       server.removeListener('error', reject);
       const addr = server.address();
       resolve(typeof addr === 'object' && addr !== null ? addr.port : 0);

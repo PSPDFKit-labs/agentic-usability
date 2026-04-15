@@ -65,6 +65,14 @@ const KNOWN_SECRETS: Record<string, SecretMapping> = {
   },
 };
 
+const SECRET_KEY_PATTERN = /_(KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL)S?$/i;
+const SECRET_VALUE_PREFIXES = ['sk-', 'ghp_', 'gho_', 'AIza', 'AKIA', 'op://'];
+
+function looksLikeSecret(key: string, value: string): boolean {
+  if (SECRET_KEY_PATTERN.test(key)) return true;
+  return SECRET_VALUE_PREFIXES.some((prefix) => value.startsWith(prefix));
+}
+
 export interface RewriteResult {
   /** Proxy targets extracted from secret env vars */
   proxyTargets: ProxyTarget[];
@@ -110,6 +118,12 @@ export function rewriteEnv(
       // Inject gateway-compatible passthrough (e.g. ANTHROPIC_AUTH_TOKEN)
       cleanEnv[mapping.passThrough.key] = mapping.passThrough.value;
     } else {
+      // Warn if the var looks like a secret but isn't proxied
+      if (looksLikeSecret(key, value)) {
+        console.warn(
+          `\x1b[33m⚠ sandbox.env.${key} looks like a secret but is not proxied — it will enter the sandbox in plaintext and may be visible to agent code (e.g. via printenv). Consider removing it from sandbox.env if the agent does not need it or rotate the keys after usage.\x1b[0m`,
+        );
+      }
       // Pass through non-secret env vars unchanged
       cleanEnv[key] = value;
     }

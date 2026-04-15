@@ -21,7 +21,7 @@ export async function loadConfig(configPath: string): Promise<Config> {
   return validateConfig(parsed, configPath);
 }
 
-function validateConfig(data: unknown, configPath: string): Config {
+export function validateConfig(data: unknown, configPath?: string): Config {
   if (typeof data !== 'object' || data === null || Array.isArray(data)) {
     throw new Error(`Config must be a JSON object in ${configPath}`);
   }
