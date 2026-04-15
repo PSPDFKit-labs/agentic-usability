@@ -51,7 +51,6 @@ export interface SourceConfig {
   type: 'local' | 'git' | 'url';
   path?: string;
   url?: string;
-  urls?: string[];
   branch?: string;
   subpath?: string;
   sparse?: string[];
@@ -114,7 +113,7 @@ export interface SandboxConfig {
 }
 
 export interface Config {
-  source: SourceConfig;
+  sources: SourceConfig[];
   publicInfo?: PublicInfo;
   agents?: {
     generator?: AgentConfig;

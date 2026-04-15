@@ -24,7 +24,7 @@ export function makeSolutionFile(overrides: Partial<SolutionFile> = {}): Solutio
 
 export function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
-    source: { type: 'local', path: '/tmp/sdk' },
+    sources: [{ type: 'local', path: '/tmp/sdk' }],
     targets: [{ name: 'claude', image: 'node:20' }],
     sandbox: { domain: 'localhost:8080' },
     ...overrides,

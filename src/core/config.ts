@@ -28,34 +28,37 @@ export function validateConfig(data: unknown, configPath?: string): Config {
 
   const obj = data as Record<string, unknown>;
 
-  // Validate source
-  if (!obj.source || typeof obj.source !== 'object' || Array.isArray(obj.source)) {
-    throw new Error('Config missing required field: source');
+  // Validate sources
+  if (!Array.isArray(obj.sources) || obj.sources.length === 0) {
+    throw new Error('Config requires a non-empty sources array');
   }
 
-  const source = obj.source as Record<string, unknown>;
+  for (let i = 0; i < obj.sources.length; i++) {
+    const source = obj.sources[i] as Record<string, unknown>;
+    const prefix = `sources[${i}]`;
 
-  if (!source.type || typeof source.type !== 'string') {
-    throw new Error('Config missing required field: source.type');
-  }
-
-  if (!['local', 'git', 'url'].includes(source.type)) {
-    throw new Error(
-      `Invalid source.type: '${source.type}'. Must be one of: 'local', 'git', 'url'`
-    );
-  }
-
-  if (source.type === 'local') {
-    if (!source.path || typeof source.path !== 'string') {
-      throw new Error("source.type 'local' requires source.path to be set");
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+      throw new Error(`${prefix} must be an object`);
     }
-  } else if (source.type === 'git') {
-    if (!source.url || typeof source.url !== 'string') {
-      throw new Error("source.type 'git' requires source.url to be set");
+
+    if (!source.type || typeof source.type !== 'string') {
+      throw new Error(`${prefix} missing required field: type`);
     }
-  } else if (source.type === 'url') {
-    if (!Array.isArray(source.urls) || source.urls.length === 0) {
-      throw new Error("source.type 'url' requires source.urls array with at least one URL");
+
+    if (!['local', 'git', 'url'].includes(source.type)) {
+      throw new Error(
+        `${prefix}.type '${source.type}' is invalid. Must be one of: 'local', 'git', 'url'`
+      );
+    }
+
+    if (source.type === 'local') {
+      if (!source.path || typeof source.path !== 'string') {
+        throw new Error(`${prefix} type 'local' requires path to be set`);
+      }
+    } else if (source.type === 'git' || source.type === 'url') {
+      if (!source.url || typeof source.url !== 'string') {
+        throw new Error(`${prefix} type '${source.type}' requires url to be set`);
+      }
     }
   }
 

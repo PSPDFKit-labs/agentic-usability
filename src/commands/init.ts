@@ -72,7 +72,7 @@ export async function initCommand(paths: ProjectPaths): Promise<void> {
 
     const sourceType = await promptChoice(rl, 'Source type', ['local', 'git', 'url'], 'local') as 'local' | 'git' | 'url';
 
-    const source: Config['source'] = { type: sourceType };
+    const source: Config['sources'][number] = { type: sourceType };
 
     if (sourceType === 'local') {
       hint("Absolute or relative path to your SDK's source code directory");
@@ -97,9 +97,8 @@ export async function initCommand(paths: ProjectPaths): Promise<void> {
       const subpath = await prompt(rl, 'Subpath within repo (optional)');
       if (subpath) source.subpath = subpath;
     } else {
-      hint("Comma-separated URLs to fetch as documentation for agents");
-      const urlsRaw = await promptRequired(rl, 'Documentation URLs');
-      source.urls = urlsRaw.split(',').map(u => u.trim()).filter(Boolean);
+      hint("URL to fetch as documentation source (add more sources by editing config.json)");
+      source.url = await promptRequired(rl, 'Documentation URL');
     }
 
     hint("Extra guidance for the test generator (e.g. 'Focus on the Builder API, ignore legacy v1')");
@@ -205,7 +204,7 @@ export async function initCommand(paths: ProjectPaths): Promise<void> {
 
     // ── Build config ──────────────────────────────────────────────────
     const config: Config = {
-      source,
+      sources: [source],
       publicInfo: Object.keys(publicInfo).length > 0 ? publicInfo : undefined,
       agents: {
         generator: { command: agentCommand },

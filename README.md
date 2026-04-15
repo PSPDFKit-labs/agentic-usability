@@ -162,18 +162,24 @@ pipelines/my-sdk-eval/           # project root (= CWD or -p target)
 
 The config file is `config.json` inside the project directory.
 
-### Source (local)
+### Sources
 
-Point to an SDK directory on your machine:
+The `sources` array defines where your SDK code lives. Each entry is resolved independently and all are presented to the generator agent. You can mix source types (e.g. a local OpenAPI spec + a git repo with examples).
+
+#### Local source
+
+Point to an SDK directory or file on your machine:
 
 ```json
 {
-  "source": {
-    "type": "local",
-    "path": "/path/to/sdk",
-    "subpath": "packages/core",
-    "additionalContext": "Focus on the Builder API, ignore legacy v1 namespace"
-  }
+  "sources": [
+    {
+      "type": "local",
+      "path": "/path/to/sdk",
+      "subpath": "packages/core",
+      "additionalContext": "Focus on the Builder API, ignore legacy v1 namespace"
+    }
+  ]
 }
 ```
 
@@ -183,19 +189,21 @@ Point to an SDK directory on your machine:
 | `subpath` | Scope to a subdirectory (e.g. monorepo package) |
 | `additionalContext` | Extra guidance appended to the test generator prompt |
 
-### Source (git)
+#### Git source
 
 Clone from a remote repository:
 
 ```json
 {
-  "source": {
-    "type": "git",
-    "url": "https://github.com/org/sdk.git",
-    "branch": "main",
-    "subpath": "packages/core",
-    "sparse": ["src/", "docs/"]
-  }
+  "sources": [
+    {
+      "type": "git",
+      "url": "https://github.com/org/sdk.git",
+      "branch": "main",
+      "subpath": "packages/core",
+      "sparse": ["src/", "docs/"]
+    }
+  ]
 }
 ```
 
@@ -207,20 +215,20 @@ Clone from a remote repository:
 | `sparse` | Only download these paths (sparse checkout — saves time on large repos) |
 | `additionalContext` | Extra guidance appended to the test generator prompt |
 
-### Source (url)
+#### URL source
 
-Fetch documentation pages directly:
+Fetch a documentation page or file directly:
 
 ```json
 {
-  "source": {
-    "type": "url",
-    "urls": ["https://docs.example.com/api", "https://docs.example.com/guide"]
-  }
+  "sources": [
+    { "type": "url", "url": "https://docs.example.com/api" },
+    { "type": "url", "url": "https://docs.example.com/guide" }
+  ]
 }
 ```
 
-> **Note:** URL fetching only retrieves the initial HTML response — it does not execute JavaScript. Sites that rely on client-side rendering (SPAs, React-based docs, etc.) will return empty or incomplete content. For JS-rendered docs, use the `local` or `git` source type instead.
+> **Note:** URL fetching retrieves the HTTP response as-is. Direct file links (`.md`, `.yaml`, `.json`, etc.) work fine. However, HTML pages that rely on client-side JavaScript rendering (SPAs, React-based docs, etc.) will return empty or incomplete content. For JS-rendered docs, use the `local` or `git` source type instead.
 
 ### Public information
 

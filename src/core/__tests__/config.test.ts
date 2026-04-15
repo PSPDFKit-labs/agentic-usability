@@ -9,7 +9,7 @@ vi.mock('node:fs/promises', () => ({
 const mockReadFile = vi.mocked(readFile);
 
 const validConfig = {
-  source: { type: 'local', path: '/tmp/sdk' },
+  sources: [{ type: 'local', path: '/tmp/sdk' }],
   targets: [{ name: 'claude', image: 'node:20' }],
   sandbox: { domain: 'localhost:8080' },
 };
@@ -18,7 +18,7 @@ describe('loadConfig', () => {
   it('reads and parses a valid config file', async () => {
     mockReadFile.mockResolvedValue(JSON.stringify(validConfig));
     const config = await loadConfig('/fake/config.json');
-    expect(config.source.type).toBe('local');
+    expect(config.sources[0].type).toBe('local');
     expect(config.targets).toHaveLength(1);
   });
 
@@ -47,58 +47,72 @@ describe('loadConfig', () => {
     await expect(loadConfig('/fake/config.json')).rejects.toThrow(/must be a JSON object/);
   });
 
-  it('throws when source field is missing', async () => {
-    mockReadFile.mockResolvedValue(JSON.stringify({ targets: [], sandbox: {} }));
-    await expect(loadConfig('/fake/config.json')).rejects.toThrow(/source/);
+  it('throws when sources field is missing', async () => {
+    mockReadFile.mockResolvedValue(JSON.stringify({ targets: [{}], sandbox: { domain: 'x' } }));
+    await expect(loadConfig('/fake/config.json')).rejects.toThrow(/sources/);
   });
 
-  it('throws when source.type is missing', async () => {
-    mockReadFile.mockResolvedValue(JSON.stringify({ source: {}, targets: [], sandbox: {} }));
-    await expect(loadConfig('/fake/config.json')).rejects.toThrow(/source\.type/);
+  it('throws when sources is empty array', async () => {
+    mockReadFile.mockResolvedValue(JSON.stringify({ sources: [], targets: [{}], sandbox: { domain: 'x' } }));
+    await expect(loadConfig('/fake/config.json')).rejects.toThrow(/sources/);
   });
 
-  it('throws when source.type is invalid', async () => {
-    mockReadFile.mockResolvedValue(JSON.stringify({ source: { type: 'ftp' }, targets: [{}], sandbox: { domain: 'x' } }));
-    await expect(loadConfig('/fake/config.json')).rejects.toThrow(/Invalid source\.type/);
+  it('throws when sources entry is missing type', async () => {
+    mockReadFile.mockResolvedValue(JSON.stringify({ sources: [{}], targets: [{}], sandbox: { domain: 'x' } }));
+    await expect(loadConfig('/fake/config.json')).rejects.toThrow(/type/);
   });
 
-  it('throws when source.type is "local" but source.path is missing', async () => {
-    mockReadFile.mockResolvedValue(JSON.stringify({ source: { type: 'local' }, targets: [{}], sandbox: { domain: 'x' } }));
-    await expect(loadConfig('/fake/config.json')).rejects.toThrow(/source\.path/);
+  it('throws when sources entry has invalid type', async () => {
+    mockReadFile.mockResolvedValue(JSON.stringify({ sources: [{ type: 'ftp' }], targets: [{}], sandbox: { domain: 'x' } }));
+    await expect(loadConfig('/fake/config.json')).rejects.toThrow(/invalid/i);
   });
 
-  it('throws when source.type is "git" but source.url is missing', async () => {
-    mockReadFile.mockResolvedValue(JSON.stringify({ source: { type: 'git' }, targets: [{}], sandbox: { domain: 'x' } }));
-    await expect(loadConfig('/fake/config.json')).rejects.toThrow(/source\.url/);
+  it('throws when local source is missing path', async () => {
+    mockReadFile.mockResolvedValue(JSON.stringify({ sources: [{ type: 'local' }], targets: [{}], sandbox: { domain: 'x' } }));
+    await expect(loadConfig('/fake/config.json')).rejects.toThrow(/path/);
   });
 
-  it('throws when source.type is "url" but source.urls is missing', async () => {
-    mockReadFile.mockResolvedValue(JSON.stringify({ source: { type: 'url' }, targets: [{}], sandbox: { domain: 'x' } }));
-    await expect(loadConfig('/fake/config.json')).rejects.toThrow(/source\.urls/);
+  it('throws when git source is missing url', async () => {
+    mockReadFile.mockResolvedValue(JSON.stringify({ sources: [{ type: 'git' }], targets: [{}], sandbox: { domain: 'x' } }));
+    await expect(loadConfig('/fake/config.json')).rejects.toThrow(/url/);
   });
 
-  it('throws when source.type is "url" but source.urls is empty', async () => {
-    mockReadFile.mockResolvedValue(JSON.stringify({ source: { type: 'url', urls: [] }, targets: [{}], sandbox: { domain: 'x' } }));
-    await expect(loadConfig('/fake/config.json')).rejects.toThrow(/source\.urls/);
+  it('throws when url source is missing url', async () => {
+    mockReadFile.mockResolvedValue(JSON.stringify({ sources: [{ type: 'url' }], targets: [{}], sandbox: { domain: 'x' } }));
+    await expect(loadConfig('/fake/config.json')).rejects.toThrow(/url/);
+  });
+
+  it('validates multiple sources', async () => {
+    const config = {
+      sources: [
+        { type: 'local', path: '/tmp/sdk' },
+        { type: 'url', url: 'https://docs.example.com' },
+      ],
+      targets: [{ name: 'claude', image: 'node:20' }],
+      sandbox: { domain: 'localhost:8080' },
+    };
+    mockReadFile.mockResolvedValue(JSON.stringify(config));
+    const result = await loadConfig('/fake/config.json');
+    expect(result.sources).toHaveLength(2);
   });
 
   it('throws when targets array is missing', async () => {
-    mockReadFile.mockResolvedValue(JSON.stringify({ source: { type: 'local', path: '/x' }, sandbox: { domain: 'x' } }));
+    mockReadFile.mockResolvedValue(JSON.stringify({ sources: [{ type: 'local', path: '/x' }], sandbox: { domain: 'x' } }));
     await expect(loadConfig('/fake/config.json')).rejects.toThrow(/targets/);
   });
 
   it('throws when targets array is empty', async () => {
-    mockReadFile.mockResolvedValue(JSON.stringify({ source: { type: 'local', path: '/x' }, targets: [], sandbox: { domain: 'x' } }));
+    mockReadFile.mockResolvedValue(JSON.stringify({ sources: [{ type: 'local', path: '/x' }], targets: [], sandbox: { domain: 'x' } }));
     await expect(loadConfig('/fake/config.json')).rejects.toThrow(/targets/);
   });
 
   it('throws when sandbox field is missing', async () => {
-    mockReadFile.mockResolvedValue(JSON.stringify({ source: { type: 'local', path: '/x' }, targets: [{}] }));
+    mockReadFile.mockResolvedValue(JSON.stringify({ sources: [{ type: 'local', path: '/x' }], targets: [{}] }));
     await expect(loadConfig('/fake/config.json')).rejects.toThrow(/sandbox/);
   });
 
   it('throws when sandbox.domain is missing', async () => {
-    mockReadFile.mockResolvedValue(JSON.stringify({ source: { type: 'local', path: '/x' }, targets: [{}], sandbox: {} }));
+    mockReadFile.mockResolvedValue(JSON.stringify({ sources: [{ type: 'local', path: '/x' }], targets: [{}], sandbox: {} }));
     await expect(loadConfig('/fake/config.json')).rejects.toThrow(/sandbox\.domain/);
   });
 });

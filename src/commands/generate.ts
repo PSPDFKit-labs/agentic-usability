@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { readFile, writeFile } from 'node:fs/promises';
 import { loadConfig } from '../core/config.js';
-import { resolveSource } from '../core/source-resolver.js';
+import { resolveSources } from '../core/source-resolver.js';
 import { createAdapter, type AgentAdapter } from '../agents/adapter.js';
 import { TestCase, Config } from '../core/types.js';
 import type { ProjectPaths } from '../core/paths.js';
@@ -61,13 +61,26 @@ function summarizeExistingTests(testCases: TestCase[]): string {
   return `\n## Existing Test Cases (DO NOT DUPLICATE)\nThe suite already contains ${testCases.length} test case(s). Do NOT generate test cases that overlap with these:\n${lines.join('\n')}\n\nGenerate new, complementary test cases that cover different APIs and scenarios.\n`;
 }
 
-function buildPrompt(sourcePath: string, config: Config, existingTests: TestCase[] = []): string {
+function buildSourceSection(sourcePaths: string[], config: Config): string {
+  if (sourcePaths.length === 1) {
+    const ctx = config.sources[0].additionalContext;
+    const suffix = ctx ? ` — ${ctx}` : '';
+    return `Your task: Explore the source at "${sourcePaths[0]}"${suffix}`;
+  }
+  const list = sourcePaths.map((p, i) => {
+    const ctx = config.sources[i]?.additionalContext;
+    return ctx ? `  - ${p} — ${ctx}` : `  - ${p}`;
+  }).join('\n');
+  return `Your task: Explore the following source(s):\n${list}\n\nUse all of them`;
+}
+
+function buildPrompt(sourcePaths: string[], config: Config, existingTests: TestCase[] = []): string {
   const packageName = config.publicInfo?.packageName ?? 'the SDK';
   const docsUrl = config.publicInfo?.docsUrl ?? '';
 
   return `You are a test case generator for an SDK usability benchmark.
 
-Your task: Explore the codebase at "${sourcePath}" and generate a JSON array of programming test cases that evaluate an AI agent's ability to use ${packageName}.
+${buildSourceSection(sourcePaths, config)} and generate a JSON array of programming test cases that evaluate an AI agent's ability to use ${packageName}.
 
 ${docsUrl ? `Documentation: ${docsUrl}` : ''}
 ${summarizeExistingTests(existingTests)}
@@ -94,7 +107,7 @@ Guidelines:
   (a) Being explicit in the problemStatement about which specific API, method, or library to use (e.g. "Use endpoint POST /processor/convert" not just "Convert a file using the API"), OR
   (b) Creating separate test cases for each valid approach, each with its own targetApis and expectedTokens.
   Do NOT create a test case with an ambiguous problem statement where the agent could reasonably use a different valid approach and be penalized for it.
-${config.publicInfo?.language ? `\nIMPORTANT: All test cases and reference solutions MUST use ${config.publicInfo.language}. Write solutions using standard ${config.publicInfo.language} HTTP libraries (e.g. requests for Python).\n` : ''}${config.source.additionalContext ? `\nAdditional context:\n${config.source.additionalContext}\n` : ''}${buildTargetContext(config)}${SCHEMA_DESCRIPTION}`;
+${config.publicInfo?.language ? `\nIMPORTANT: All test cases and reference solutions MUST use ${config.publicInfo.language}.\n` : ''}${buildTargetContext(config)}${SCHEMA_DESCRIPTION}`;
 }
 
 
@@ -214,9 +227,9 @@ function printSummary(testCases: TestCase[]): void {
 export async function generateCommand(paths: ProjectPaths, options: { fresh?: boolean; nonInteractive?: boolean } = {}): Promise<void> {
   const config = await loadConfig(paths.config);
 
-  const spinner = ora('Resolving source...').start();
-  const sourcePath = await resolveSource(config, { fresh: options.fresh, reposDir: paths.cacheRepos });
-  spinner.succeed(`Source resolved: ${sourcePath}`);
+  const spinner = ora('Resolving sources...').start();
+  const sourcePaths = await resolveSources(config, { fresh: options.fresh, reposDir: paths.cacheRepos });
+  spinner.succeed(`Sources resolved: ${sourcePaths.join(', ')}`);
 
   const generatorConfig = config.agents?.generator ?? { command: 'claude' };
   const adapter = createAdapter(generatorConfig);
@@ -240,7 +253,7 @@ export async function generateCommand(paths: ProjectPaths, options: { fresh?: bo
     console.log(chalk.dim(`Found ${existingTests.length} existing test case(s) — agent will avoid duplicates.`));
   }
 
-  const prompt = buildPrompt(sourcePath, config, existingTests)
+  const prompt = buildPrompt(sourcePaths, config, existingTests)
     + `\n\nWhen you are done, write the final JSON array to: ${suiteFile}`;
 
   // Always use the project root as cwd. The prompt already contains the full source path,
@@ -255,7 +268,7 @@ export async function generateCommand(paths: ProjectPaths, options: { fresh?: bo
 
   // Interactive mode: launch the agent with inherited stdio so the user can collaborate
   console.log(chalk.bold(`\nLaunching interactive ${adapter.name} session...`));
-  console.log(chalk.dim(`The agent will explore ${sourcePath} and generate test cases.`));
+  console.log(chalk.dim(`The agent will explore ${sourcePaths.join(', ')} and generate test cases.`));
   console.log(chalk.dim(`You can give feedback, ask for changes, and guide the generation.`));
   console.log(chalk.dim(`The agent will write the suite to ${suiteFile} when done.\n`));
 

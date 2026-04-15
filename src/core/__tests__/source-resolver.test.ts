@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { access, mkdir, writeFile, rm } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
-import { resolveSource } from '../source-resolver.js';
+import { resolveSource, resolveSources } from '../source-resolver.js';
 import { makeConfig } from '../../__tests__/helpers/fixtures.js';
+import type { SourceConfig } from '../types.js';
 
 vi.mock('node:fs/promises', () => ({
   access: vi.fn(),
@@ -39,34 +40,32 @@ describe('resolveSource', () => {
   describe('local source', () => {
     it('returns resolved path when directory exists', async () => {
       mockAccess.mockResolvedValue(undefined);
-      const config = makeConfig({ source: { type: 'local', path: '/tmp/sdk' } });
-      const result = await resolveSource(config);
+      const result = await resolveSource({ type: 'local', path: '/tmp/sdk' });
       expect(result).toContain('/tmp/sdk');
     });
 
     it('appends subpath when configured', async () => {
       mockAccess.mockResolvedValue(undefined);
-      const config = makeConfig({ source: { type: 'local', path: '/tmp/sdk', subpath: 'src' } });
-      const result = await resolveSource(config);
+      const result = await resolveSource({ type: 'local', path: '/tmp/sdk', subpath: 'src' });
       expect(result).toContain('src');
     });
 
     it('throws when directory does not exist', async () => {
       mockAccess.mockRejectedValue(new Error('ENOENT'));
-      const config = makeConfig({ source: { type: 'local', path: '/nonexistent' } });
-      await expect(resolveSource(config)).rejects.toThrow(/Directory not found/);
+      await expect(resolveSource({ type: 'local', path: '/nonexistent' })).rejects.toThrow(/Directory not found/);
     });
   });
 
   describe('git source', () => {
+    const gitSource: SourceConfig = { type: 'git', url: 'https://github.com/org/repo.git' };
+
     it('clones repo with shallow clone', async () => {
       mockAccess.mockRejectedValue(new Error('ENOENT'));
       mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb: any) => {
         cb(null, '', '');
         return undefined as any;
       });
-      const config = makeConfig({ source: { type: 'git', url: 'https://github.com/org/repo.git' } });
-      await resolveSource(config);
+      await resolveSource(gitSource);
       expect(mockExecFile).toHaveBeenCalledWith(
         'git',
         expect.arrayContaining(['clone', '--depth', '1']),
@@ -76,11 +75,8 @@ describe('resolveSource', () => {
     });
 
     it('returns cached path without cloning when directory exists and not fresh', async () => {
-      // When the cached dir exists, resolveGit should return the path without calling git
       mockAccess.mockResolvedValue(undefined);
-      const config = makeConfig({ source: { type: 'git', url: 'https://github.com/org/repo.git' } });
-      const result = await resolveSource(config);
-      // Should return a truthy path containing the hash
+      const result = await resolveSource(gitSource);
       expect(result).toContain('deb25368bca2');
     });
 
@@ -90,8 +86,7 @@ describe('resolveSource', () => {
         cb(null, '', '');
         return undefined as any;
       });
-      const config = makeConfig({ source: { type: 'git', url: 'https://github.com/org/repo.git' } });
-      await resolveSource(config, { fresh: true });
+      await resolveSource(gitSource, { fresh: true });
       expect(mockRm).toHaveBeenCalled();
       expect(mockExecFile).toHaveBeenCalled();
     });
@@ -102,8 +97,7 @@ describe('resolveSource', () => {
         cb(null, '', '');
         return undefined as any;
       });
-      const config = makeConfig({ source: { type: 'git', url: 'https://github.com/org/repo.git', branch: 'develop' } });
-      await resolveSource(config);
+      await resolveSource({ ...gitSource, branch: 'develop' });
       expect(mockExecFile).toHaveBeenCalledWith(
         'git',
         expect.arrayContaining(['--branch', 'develop']),
@@ -118,10 +112,7 @@ describe('resolveSource', () => {
         cb(null, '', '');
         return undefined as any;
       });
-      const config = makeConfig({
-        source: { type: 'git', url: 'https://github.com/org/repo.git', sparse: ['src/', 'docs/'] },
-      });
-      await resolveSource(config);
+      await resolveSource({ ...gitSource, sparse: ['src/', 'docs/'] });
       expect(mockExecFile).toHaveBeenCalledWith(
         'git',
         expect.arrayContaining(['init']),
@@ -136,21 +127,19 @@ describe('resolveSource', () => {
         cb(new Error('clone failed'), '', 'fatal: not found');
         return undefined as any;
       });
-      const config = makeConfig({ source: { type: 'git', url: 'https://github.com/org/repo.git' } });
-      await expect(resolveSource(config)).rejects.toThrow(/Git clone failed/);
+      await expect(resolveSource(gitSource)).rejects.toThrow(/Git clone failed/);
     });
   });
 
   describe('url source', () => {
-    it('fetches URLs and saves as files', async () => {
+    it('fetches URL and saves as file', async () => {
       mockAccess.mockRejectedValue(new Error('ENOENT'));
       mockFetch.mockResolvedValue({
         ok: true,
         headers: new Headers({ 'content-type': 'text/plain' }),
         text: async () => 'content',
       });
-      const config = makeConfig({ source: { type: 'url', urls: ['https://example.com/api.md'] } });
-      const result = await resolveSource(config);
+      const result = await resolveSource({ type: 'url', url: 'https://example.com/api.md' });
       expect(result).toBeTruthy();
       expect(mockFetch).toHaveBeenCalledWith('https://example.com/api.md');
     });
@@ -164,9 +153,7 @@ describe('resolveSource', () => {
       });
       const mockWriteFile = vi.mocked(writeFile);
       mockWriteFile.mockClear();
-      const config = makeConfig({ source: { type: 'url', urls: ['https://example.com'] } });
-      await resolveSource(config);
-      // Find the writeFile call that writes the fetched content (not the mkdir/sparse calls)
+      await resolveSource({ type: 'url', url: 'https://example.com' });
       const writeCalls = mockWriteFile.mock.calls;
       const mdCall = writeCalls.find((c) => (c[0] as string).endsWith('.md'));
       expect(mdCall).toBeTruthy();
@@ -174,12 +161,11 @@ describe('resolveSource', () => {
 
     it('uses cached directory when exists and not fresh', async () => {
       mockAccess.mockResolvedValue(undefined);
-      const config = makeConfig({ source: { type: 'url', urls: ['https://example.com'] } });
-      await resolveSource(config);
+      await resolveSource({ type: 'url', url: 'https://example.com' });
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('warns and continues when a URL fails', async () => {
+    it('warns and continues when URL fails', async () => {
       mockAccess.mockRejectedValue(new Error('ENOENT'));
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       mockFetch.mockResolvedValue({
@@ -188,15 +174,29 @@ describe('resolveSource', () => {
         headers: new Headers(),
         text: async () => '',
       });
-      const config = makeConfig({ source: { type: 'url', urls: ['https://fail.com'] } });
-      await resolveSource(config);
+      await resolveSource({ type: 'url', url: 'https://fail.com' });
       expect(console.warn).toHaveBeenCalled();
     });
 
-    it('throws when urls array is empty', async () => {
+    it('throws when url is missing', async () => {
       mockAccess.mockRejectedValue(new Error('ENOENT'));
-      const config = makeConfig({ source: { type: 'url', urls: [] } });
-      await expect(resolveSource(config)).rejects.toThrow(/non-empty/);
+      await expect(resolveSource({ type: 'url' })).rejects.toThrow(/url/);
     });
+  });
+});
+
+describe('resolveSources', () => {
+  it('resolves all sources in config', async () => {
+    mockAccess.mockResolvedValue(undefined);
+    const config = makeConfig({
+      sources: [
+        { type: 'local', path: '/tmp/sdk1' },
+        { type: 'local', path: '/tmp/sdk2' },
+      ],
+    });
+    const result = await resolveSources(config);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toContain('/tmp/sdk1');
+    expect(result[1]).toContain('/tmp/sdk2');
   });
 });

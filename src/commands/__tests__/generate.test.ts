@@ -10,7 +10,7 @@ vi.mock('../../core/paths.js', () => ({
 }));
 
 vi.mock('../../core/source-resolver.js', () => ({
-  resolveSource: vi.fn(),
+  resolveSources: vi.fn(),
 }));
 
 vi.mock('../../agents/adapter.js', () => ({
@@ -59,7 +59,7 @@ function makeAdapter(overrides: Record<string, unknown> = {}) {
 }
 
 import { loadConfig } from '../../core/config.js';
-import { resolveSource } from '../../core/source-resolver.js';
+import { resolveSources } from '../../core/source-resolver.js';
 import { createAdapter } from '../../agents/adapter.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import { generateCommand } from '../generate.js';
@@ -72,7 +72,7 @@ describe('generateCommand (non-interactive)', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
 
     vi.mocked(loadConfig).mockResolvedValue(makeConfig());
-    vi.mocked(resolveSource).mockResolvedValue('/tmp/sdk');
+    vi.mocked(resolveSources).mockResolvedValue(['/tmp/sdk']);
   });
 
   it('loads config, resolves source, runs adapter, saves suite JSON', async () => {
@@ -85,7 +85,7 @@ describe('generateCommand (non-interactive)', () => {
     await generateCommand(paths, { nonInteractive: true });
 
     expect(loadConfig).toHaveBeenCalledWith(paths.config);
-    expect(resolveSource).toHaveBeenCalled();
+    expect(resolveSources).toHaveBeenCalled();
     expect(createAdapter).toHaveBeenCalled();
     expect(adapter.run).toHaveBeenCalled();
     expect(writeFile).toHaveBeenCalledWith(
@@ -120,7 +120,7 @@ describe('generateCommand (non-interactive)', () => {
   });
 
   it('always uses project root as workDir', async () => {
-    vi.mocked(resolveSource).mockResolvedValue('/home/user/Downloads/api-spec.yaml');
+    vi.mocked(resolveSources).mockResolvedValue(['/home/user/Downloads/api-spec.yaml']);
 
     const adapter = makeAdapter();
     adapter.run.mockResolvedValue(
@@ -154,7 +154,7 @@ describe('generateCommand (interactive)', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
 
     vi.mocked(loadConfig).mockResolvedValue(makeConfig());
-    vi.mocked(resolveSource).mockResolvedValue('/tmp/sdk');
+    vi.mocked(resolveSources).mockResolvedValue(['/tmp/sdk']);
   });
 
   it('calls adapter.interactive with project root as workDir', async () => {
@@ -178,7 +178,7 @@ describe('generateCommand (interactive)', () => {
   });
 
   it('includes source path in prompt even when source is a file', async () => {
-    vi.mocked(resolveSource).mockResolvedValue('/home/user/Downloads/api-spec.yaml');
+    vi.mocked(resolveSources).mockResolvedValue(['/home/user/Downloads/api-spec.yaml']);
 
     const adapter = makeAdapter();
     adapter.interactive.mockResolvedValue({ exitCode: 0, durationMs: 1000 });

@@ -3,31 +3,48 @@ import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import TurndownService from 'turndown';
-import { Config } from './types.js';
+import type { Config, SourceConfig } from './types.js';
 
 export interface ResolveOptions {
   fresh?: boolean;
   reposDir?: string;
 }
 
+/**
+ * Resolve a single SourceConfig to a local filesystem path.
+ */
 export async function resolveSource(
-  config: Config,
+  source: SourceConfig,
   options: ResolveOptions = {}
 ): Promise<string> {
-  switch (config.source.type) {
+  switch (source.type) {
     case 'local':
-      return resolveLocal(config);
+      return resolveLocal(source);
     case 'git':
-      return resolveGit(config, options);
+      return resolveGit(source, options);
     case 'url':
-      return resolveUrl(config, options);
+      return resolveUrl(source, options);
   }
 }
 
-async function resolveLocal(config: Config): Promise<string> {
-  const basePath = resolve(config.source.path!);
-  const fullPath = config.source.subpath
-    ? join(basePath, config.source.subpath)
+/**
+ * Resolve all sources in a Config to local filesystem paths.
+ */
+export async function resolveSources(
+  config: Config,
+  options: ResolveOptions = {}
+): Promise<string[]> {
+  const paths: string[] = [];
+  for (const source of config.sources) {
+    paths.push(await resolveSource(source, options));
+  }
+  return paths;
+}
+
+async function resolveLocal(source: SourceConfig): Promise<string> {
+  const basePath = resolve(source.path!);
+  const fullPath = source.subpath
+    ? join(basePath, source.subpath)
     : basePath;
 
   try {
@@ -40,18 +57,18 @@ async function resolveLocal(config: Config): Promise<string> {
 }
 
 async function resolveGit(
-  config: Config,
+  source: SourceConfig,
   options: ResolveOptions
 ): Promise<string> {
   const reposDir = options.reposDir ?? 'cache/repos';
-  const url = config.source.url!;
+  const url = source.url!;
   const hash = createHash('sha256').update(url).digest('hex').slice(0, 12);
   const cloneDir = resolve(reposDir, hash);
 
   const exists = await dirExists(cloneDir);
 
   if (exists && !options.fresh) {
-    return appendSubpath(cloneDir, config.source.subpath);
+    return appendSubpath(cloneDir, source.subpath);
   }
 
   if (exists && options.fresh) {
@@ -60,27 +77,27 @@ async function resolveGit(
 
   await mkdir(cloneDir, { recursive: true });
 
-  if (config.source.sparse && config.source.sparse.length > 0) {
-    await cloneSparse(url, cloneDir, config.source.branch, config.source.sparse);
+  if (source.sparse && source.sparse.length > 0) {
+    await cloneSparse(url, cloneDir, source.branch, source.sparse);
   } else {
-    await cloneShallow(url, cloneDir, config.source.branch);
+    await cloneShallow(url, cloneDir, source.branch);
   }
 
-  return appendSubpath(cloneDir, config.source.subpath);
+  return appendSubpath(cloneDir, source.subpath);
 }
 
 async function resolveUrl(
-  config: Config,
+  source: SourceConfig,
   options: ResolveOptions
 ): Promise<string> {
   const reposDir = options.reposDir ?? 'cache/repos';
-  const urls = config.source.urls;
-  if (!urls || urls.length === 0) {
-    throw new Error("Source type 'url' requires a non-empty 'urls' array.");
+  const url = source.url;
+  if (!url) {
+    throw new Error("Source type 'url' requires 'url' to be set.");
   }
 
   const hash = createHash('sha256')
-    .update(urls.join('\n'))
+    .update(url)
     .digest('hex')
     .slice(0, 12);
   const destDir = resolve(reposDir, `url-${hash}`);
@@ -99,29 +116,27 @@ async function resolveUrl(
 
   const turndown = new TurndownService();
 
-  for (const url of urls) {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        console.warn(`Warning: Failed to fetch ${url} (HTTP ${response.status})`);
-        continue;
-      }
-
-      const contentType = response.headers.get('content-type') ?? '';
-      const body = await response.text();
-      const filename = urlToFilename(url);
-
-      if (contentType.includes('text/html')) {
-        const markdown = turndown.turndown(body);
-        await writeFile(join(destDir, filename + '.md'), markdown, 'utf-8');
-      } else {
-        const ext = contentType.includes('text/markdown') ? '.md' : '.txt';
-        await writeFile(join(destDir, filename + ext), body, 'utf-8');
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(`Warning: Could not fetch ${url}: ${message}`);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.warn(`Warning: Failed to fetch ${url} (HTTP ${response.status})`);
+      return destDir;
     }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    const body = await response.text();
+    const filename = urlToFilename(url);
+
+    if (contentType.includes('text/html')) {
+      const markdown = turndown.turndown(body);
+      await writeFile(join(destDir, filename + '.md'), markdown, 'utf-8');
+    } else {
+      const ext = contentType.includes('text/markdown') ? '.md' : '.txt';
+      await writeFile(join(destDir, filename + ext), body, 'utf-8');
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`Warning: Could not fetch ${url}: ${message}`);
   }
 
   return destDir;
