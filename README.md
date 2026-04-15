@@ -68,7 +68,12 @@ git clone <repo-url>
 cd agentic-usability
 npm install
 npm run build
-sudo npm link   # makes `agentic-usability` available globally
+```
+
+Then run commands via `npx`:
+
+```bash
+npx agentic-usability init -p pipelines/my-sdk-eval
 ```
 
 ## Quick Start
@@ -76,7 +81,7 @@ sudo npm link   # makes `agentic-usability` available globally
 ### 1. Initialize a project
 
 ```bash
-agentic-usability init -p pipelines/my-sdk-eval
+npx agentic-usability init -p pipelines/my-sdk-eval
 ```
 
 The interactive wizard walks you through configuring:
@@ -86,12 +91,12 @@ The interactive wizard walks you through configuring:
 - **Target** — Docker image + timeout for sandbox execution
 - **Sandbox** — OpenSandbox server address + environment variables
 
-The wizard explains each field and provides sensible defaults. You can also `cd` into a directory and run `agentic-usability init` without `-p`.
+The wizard explains each field and provides sensible defaults. You can also `cd` into a directory and run `npx agentic-usability init` without `-p`.
 
 ### 2. Run the pipeline
 
 ```bash
-agentic-usability run -p pipelines/my-sdk-eval
+npx agentic-usability run -p pipelines/my-sdk-eval
 ```
 
 This executes all stages: **generate → execute → analyze → judge → report**.
@@ -99,11 +104,11 @@ This executes all stages: **generate → execute → analyze → judge → repor
 Or run stages individually:
 
 ```bash
-agentic-usability generate -p pipelines/my-sdk-eval
-agentic-usability execute  -p pipelines/my-sdk-eval
-agentic-usability analyze  -p pipelines/my-sdk-eval
-agentic-usability judge    -p pipelines/my-sdk-eval
-agentic-usability report   -p pipelines/my-sdk-eval
+npx agentic-usability generate -p pipelines/my-sdk-eval
+npx agentic-usability execute  -p pipelines/my-sdk-eval
+npx agentic-usability analyze  -p pipelines/my-sdk-eval
+npx agentic-usability judge    -p pipelines/my-sdk-eval
+npx agentic-usability report   -p pipelines/my-sdk-eval
 ```
 
 ## Project Directory Layout
@@ -356,10 +361,10 @@ OpenSandbox server connection and agent secrets:
 The `inspect` command launches a local web interface for browsing results, editing test suites, and running pipeline stages:
 
 ```bash
-agentic-usability inspect -p pipelines/my-sdk-eval
+npx agentic-usability inspect -p pipelines/my-sdk-eval
 # Opens http://localhost:7373 in your browser
 
-agentic-usability inspect -p pipelines/my-sdk-eval --port 8888
+npx agentic-usability inspect -p pipelines/my-sdk-eval --port 8888
 # Use a custom port
 ```
 
@@ -378,13 +383,13 @@ The `run` command orchestrates 5 stages: **generate → execute → analyze → 
 
 ```bash
 # Resume after interruption
-agentic-usability run -p pipelines/my-sdk-eval --resume
+npx agentic-usability run -p pipelines/my-sdk-eval --resume
 
 # Start fresh (clears all state)
-agentic-usability run -p pipelines/my-sdk-eval --fresh
+npx agentic-usability run -p pipelines/my-sdk-eval --fresh
 
 # Skip the LLM judge stage (faster, token-analysis only)
-agentic-usability run -p pipelines/my-sdk-eval --skip-judge
+npx agentic-usability run -p pipelines/my-sdk-eval --skip-judge
 ```
 
 ## Test Suite Format
@@ -412,11 +417,11 @@ The test suite (`suite.json`) is a JSON array of test cases. Difficulty levels h
 ]
 ```
 
-Edit the suite manually with `agentic-usability edit`, or export/import for sharing:
+Edit the suite manually with `npx agentic-usability edit`, or export/import for sharing:
 
 ```bash
-agentic-usability export -p pipelines/my-sdk-eval --output my-suite.json
-agentic-usability import -p pipelines/my-sdk-eval --input my-suite.json
+npx agentic-usability export -p pipelines/my-sdk-eval --output my-suite.json
+npx agentic-usability import -p pipelines/my-sdk-eval --input my-suite.json
 ```
 
 ## Scoring

@@ -228,9 +228,14 @@ export async function generateCommand(paths: ProjectPaths, options: { fresh?: bo
   const prompt = buildPrompt(sourcePath, config, existingTests)
     + `\n\nWhen you are done, write the final JSON array to: ${suiteFile}`;
 
+  // Always use the project root as cwd. The prompt already contains the full source path,
+  // so the agent can navigate to it regardless. This avoids ENOTDIR when the source is a
+  // single file, and keeps behavior consistent across local/git/url source types.
+  const workDir = paths.root;
+
   if (options.nonInteractive) {
     // Non-interactive mode: use adapter with piped stdio (for CI or automation)
-    return generateNonInteractive(adapter, prompt, sourcePath, suiteFile, existingTests);
+    return generateNonInteractive(adapter, prompt, workDir, suiteFile, existingTests);
   }
 
   // Interactive mode: launch the agent with inherited stdio so the user can collaborate
@@ -239,7 +244,7 @@ export async function generateCommand(paths: ProjectPaths, options: { fresh?: bo
   console.log(chalk.dim(`You can give feedback, ask for changes, and guide the generation.`));
   console.log(chalk.dim(`The agent will write the suite to ${suiteFile} when done.\n`));
 
-  const { exitCode, durationMs } = await adapter.interactive(prompt, sourcePath);
+  const { exitCode, durationMs } = await adapter.interactive(prompt, workDir);
 
   console.log(chalk.dim(`\nAgent exited (code ${exitCode}, ${Math.round(durationMs / 1000)}s)`));
 
@@ -250,14 +255,14 @@ export async function generateCommand(paths: ProjectPaths, options: { fresh?: bo
 async function generateNonInteractive(
   adapter: AgentAdapter,
   prompt: string,
-  sourcePath: string,
+  workDir: string,
   suiteFile: string,
   existingTests: TestCase[] = [],
 ): Promise<void> {
   const spinner = ora(`Running generator agent (${adapter.name})...`).start();
 
   // adapter.run() handles envelope unwrapping and retry internally
-  const result = await adapter.run(prompt, TEST_SUITE_SCHEMA, sourcePath);
+  const result = await adapter.run(prompt, TEST_SUITE_SCHEMA, workDir);
   spinner.succeed(`Agent finished (${result.durationMs}ms, exit code ${result.exitCode})`);
 
   // Parse the clean stdout from the adapter

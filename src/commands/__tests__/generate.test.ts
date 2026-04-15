@@ -119,6 +119,24 @@ describe('generateCommand (non-interactive)', () => {
     await expect(generateCommand(paths, { nonInteractive: true })).rejects.toThrow(/not valid JSON/);
   });
 
+  it('always uses project root as workDir', async () => {
+    vi.mocked(resolveSource).mockResolvedValue('/home/user/Downloads/api-spec.yaml');
+
+    const adapter = makeAdapter();
+    adapter.run.mockResolvedValue(
+      makeAgentResult({ stdout: VALID_TC_JSON }),
+    );
+    vi.mocked(createAdapter).mockReturnValue(adapter as any);
+
+    await generateCommand(paths, { nonInteractive: true });
+
+    expect(adapter.run).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Object),
+      paths.root,
+    );
+  });
+
   it('throws when adapter output is not a JSON array', async () => {
     const adapter = makeAdapter();
     adapter.run.mockResolvedValue(
@@ -139,7 +157,7 @@ describe('generateCommand (interactive)', () => {
     vi.mocked(resolveSource).mockResolvedValue('/tmp/sdk');
   });
 
-  it('calls adapter.interactive and saves suite JSON', async () => {
+  it('calls adapter.interactive with project root as workDir', async () => {
     const adapter = makeAdapter();
     adapter.interactive.mockResolvedValue({ exitCode: 0, durationMs: 5000 });
     vi.mocked(createAdapter).mockReturnValue(adapter as any);
@@ -150,13 +168,28 @@ describe('generateCommand (interactive)', () => {
     expect(createAdapter).toHaveBeenCalled();
     expect(adapter.interactive).toHaveBeenCalledWith(
       expect.stringContaining('test case generator'),
-      '/tmp/sdk',
+      paths.root,
     );
     expect(writeFile).toHaveBeenCalledWith(
       expect.stringContaining('suite.json'),
       expect.any(String),
       'utf-8',
     );
+  });
+
+  it('includes source path in prompt even when source is a file', async () => {
+    vi.mocked(resolveSource).mockResolvedValue('/home/user/Downloads/api-spec.yaml');
+
+    const adapter = makeAdapter();
+    adapter.interactive.mockResolvedValue({ exitCode: 0, durationMs: 1000 });
+    vi.mocked(createAdapter).mockReturnValue(adapter as any);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify(VALID_TC));
+
+    await generateCommand(paths);
+
+    const prompt = adapter.interactive.mock.calls[0][0] as string;
+    expect(prompt).toContain('/home/user/Downloads/api-spec.yaml');
+    expect(adapter.interactive).toHaveBeenCalledWith(prompt, paths.root);
   });
 
   it('throws when agent does not write the suite file', async () => {
