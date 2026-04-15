@@ -76,7 +76,7 @@ export abstract class BaseAdapter implements AgentAdapter {
 
   /** Wrap a shell command to run as a non-root user via `su`. */
   protected wrapAsUser(cmd: string, user = 'sandbox'): string {
-    return `su ${user} -c '${cmd.replace(/'/g, "'\\''")}'`;
+    return `su -p ${user} -c '${cmd.replace(/'/g, "'\\''")}'`;
   }
 }
 

@@ -11,6 +11,21 @@ export interface CommandResult {
   exitCode: number;
 }
 
+/**
+ * Returns the hostname that sandboxes can use to reach the host machine.
+ * On macOS (Docker Desktop) this is `host.docker.internal`.
+ * On Linux it's the Docker bridge gateway, defaulting to `172.17.0.1`.
+ * Can be overridden via the `SANDBOX_HOST_ADDRESS` env var.
+ */
+export function getSandboxHostAddress(): string {
+  if (process.env.SANDBOX_HOST_ADDRESS) {
+    return process.env.SANDBOX_HOST_ADDRESS;
+  }
+  return process.platform === 'darwin'
+    ? 'host.docker.internal'
+    : '172.17.0.1';
+}
+
 export class SandboxClient {
   private sandbox: Sandbox | null = null;
   private readonly connectionConfig: ConnectionConfig;

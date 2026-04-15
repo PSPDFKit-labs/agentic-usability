@@ -2,7 +2,9 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { loadConfig } from '../core/config.js';
 import { loadTestSuite, saveResult, formatElapsed } from '../core/suite-io.js';
-import { SandboxClient } from '../sandbox/opensandbox.js';
+import { SandboxClient, getSandboxHostAddress } from '../sandbox/opensandbox.js';
+import { rewriteEnv, applyProxyUrls } from '../proxy/env-rewriter.js';
+import { startAuthProxy, type AuthProxyHandle } from '../proxy/auth-proxy.js';
 import { scaffoldWorkspace } from '../sandbox/scaffolding.js';
 import { WorkerPool } from '../sandbox/worker-pool.js';
 import { createAdapter } from '../agents/adapter.js';
@@ -87,6 +89,22 @@ Make sure to create the /workspace/solution/ directory first if it does not exis
 }
 
 
+/** File paths to skip when extracting solutions (binary/cache artifacts). */
+const SKIP_PATTERNS = [
+  /__pycache__\//,
+  /\.pyc$/,
+  /\.pyo$/,
+  /node_modules\//,
+  /\.class$/,
+  /\.o$/,
+  /\.so$/,
+  /\.dylib$/,
+];
+
+function shouldSkipFile(filePath: string): boolean {
+  return SKIP_PATTERNS.some((pattern) => pattern.test(filePath));
+}
+
 async function extractSolution(
   client: SandboxClient,
 ): Promise<SolutionFile[]> {
@@ -103,8 +121,11 @@ async function extractSolution(
 
   const solution: SolutionFile[] = [];
   for (const filePath of files) {
+    if (shouldSkipFile(filePath)) continue;
     try {
       const content = await client.readFile(filePath);
+      // Skip binary files (content with null bytes)
+      if (content.includes('\0')) continue;
       solution.push({ path: filePath, content });
     } catch {
       // Skip files that can't be read (e.g. directories)
@@ -119,6 +140,8 @@ export async function executeTestCase(
   config: Config,
   paths: ProjectPaths,
   pool?: WorkerPool,
+  /** Pre-rewritten env: secrets replaced with *_BASE_URL vars pointing to the auth proxy. */
+  proxyEnv?: Record<string, string>,
 ): Promise<void> {
   const client = new SandboxClient(config.sandbox);
   // Register sandbox destruction as abort callback so Ctrl+C kills in-flight sandboxes
@@ -129,8 +152,6 @@ export async function executeTestCase(
   try {
     // workspace.env → baked into the container (available to setup scripts + agent-generated code)
     const workspaceEnv = resolveEnv(config.workspace?.env);
-    // sandbox.env → passed only to the agent command (secrets like auth tokens)
-    const sandboxEnv = resolveEnv(config.sandbox?.env);
 
     await client.create(
       target.image,
@@ -171,10 +192,10 @@ export async function executeTestCase(
       }
     }
 
-    // Run agent with sandbox.env scoped to this command only (not leaked to agent-generated code)
+    // Run agent — secrets are proxied, only BASE_URL vars enter the sandbox
     const prompt = buildAgentPrompt(testCase, config);
     const agentCmd = adapter.sandboxCommand(prompt);
-    const agentResult = await client.runCommandTimed(agentCmd, { envs: sandboxEnv });
+    const agentResult = await client.runCommandTimed(agentCmd, { envs: proxyEnv });
 
     // Save agent output
     const agentLog = [
@@ -223,43 +244,65 @@ export async function executeCommand(paths: ProjectPaths): Promise<void> {
   await SandboxClient.checkConnectivity(config.sandbox);
   spinner.succeed('OpenSandbox server is reachable');
 
+  // Start auth proxy: secrets stay on the host, sandboxes only get BASE_URL vars
+  const sandboxEnv = resolveEnv(config.sandbox?.env);
+  const hostAddr = getSandboxHostAddress();
+  let proxy: AuthProxyHandle | undefined;
+  let proxyEnv: Record<string, string> | undefined;
+
+  const { proxyTargets, baseUrlVarMap, cleanEnv } = rewriteEnv(sandboxEnv);
+  if (proxyTargets.length > 0) {
+    spinner.start('Starting auth proxy...');
+    proxy = await startAuthProxy(proxyTargets, baseUrlVarMap);
+    proxyEnv = applyProxyUrls(cleanEnv, proxy.listeners, hostAddr);
+    const ports = proxy.listeners.map((l) => `${l.baseUrlVar}→:${l.port}`).join(', ');
+    spinner.succeed(`Auth proxy listening (${ports})`);
+  } else if (sandboxEnv && Object.keys(sandboxEnv).length > 0) {
+    // No known secrets found, pass through as-is
+    proxyEnv = sandboxEnv;
+  }
+
   const concurrency = config.sandbox.concurrency ?? 3;
 
-  for (const target of config.targets) {
-    console.log(chalk.bold(`\nTarget: ${target.name} (${target.image})`));
-    console.log(chalk.dim(`Concurrency: ${concurrency}\n`));
+  try {
+    for (const target of config.targets) {
+      console.log(chalk.bold(`\nTarget: ${target.name} (${target.image})`));
+      console.log(chalk.dim(`Concurrency: ${concurrency}\n`));
 
-    const startTime = Date.now();
-    const pool = new WorkerPool(concurrency);
+      const startTime = Date.now();
+      const pool = new WorkerPool(concurrency);
 
-    const executeFn = async (tc: TestCase): Promise<void> => {
-      try {
-        await executeTestCase(tc, target, config, paths, pool);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        await saveResult(paths, tc.id, 'error.log', message, target.name);
-        throw err;
+      const executeFn = async (tc: TestCase): Promise<void> => {
+        try {
+          await executeTestCase(tc, target, config, paths, pool, proxyEnv);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          await saveResult(paths, tc.id, 'error.log', message, target.name);
+          throw err;
+        }
+      };
+
+      const { passed, failed } = await pool.run(testCases, executeFn, (info, tc, event) => {
+        const elapsed = formatElapsed(Date.now() - startTime);
+        if (event === 'start') {
+          console.log(chalk.dim(`[${info.completed + info.running}/${info.total}] ${tc.id} (${tc.difficulty}) — running... [${elapsed}]`));
+        } else if (event === 'done') {
+          console.log(chalk.green(`[${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — done [${elapsed}]`));
+        } else {
+          console.log(chalk.red(`[${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — failed [${elapsed}]`));
+        }
+      });
+
+      console.log('');
+      console.log(chalk.bold(`Execution Summary (${target.name})`));
+      console.log(`  Total:  ${testCases.length}`);
+      console.log(chalk.green(`  Passed: ${passed}`));
+      if (failed > 0) {
+        console.log(chalk.red(`  Failed: ${failed}`));
       }
-    };
-
-    const { passed, failed } = await pool.run(testCases, executeFn, (info, tc, event) => {
-      const elapsed = formatElapsed(Date.now() - startTime);
-      if (event === 'start') {
-        console.log(chalk.dim(`[${info.completed + info.running}/${info.total}] ${tc.id} (${tc.difficulty}) — running... [${elapsed}]`));
-      } else if (event === 'done') {
-        console.log(chalk.green(`[${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — done [${elapsed}]`));
-      } else {
-        console.log(chalk.red(`[${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — failed [${elapsed}]`));
-      }
-    });
-
-    console.log('');
-    console.log(chalk.bold(`Execution Summary (${target.name})`));
-    console.log(`  Total:  ${testCases.length}`);
-    console.log(chalk.green(`  Passed: ${passed}`));
-    if (failed > 0) {
-      console.log(chalk.red(`  Failed: ${failed}`));
+      console.log(chalk.dim(`  Elapsed: ${formatElapsed(Date.now() - startTime)}`));
     }
-    console.log(chalk.dim(`  Elapsed: ${formatElapsed(Date.now() - startTime)}`));
+  } finally {
+    await proxy?.stop();
   }
 }

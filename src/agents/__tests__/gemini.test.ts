@@ -74,7 +74,7 @@ describe('GeminiAdapter', () => {
   describe('sandboxCommand', () => {
     it('returns shell command wrapped with su sandbox', () => {
       const cmd = adapter.sandboxCommand('task');
-      expect(cmd).toMatch(/^su sandbox -c '/);
+      expect(cmd).toMatch(/^su -p sandbox -c '/);
       expect(cmd).toContain('gemini --yolo');
     });
   });

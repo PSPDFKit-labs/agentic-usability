@@ -80,7 +80,7 @@ describe('ClaudeAdapter', () => {
   describe('sandboxCommand', () => {
     it('returns correct shell string wrapped with su sandbox', () => {
       const cmd = adapter.sandboxCommand('do something');
-      expect(cmd).toMatch(/^su sandbox -c '/);
+      expect(cmd).toMatch(/^su -p sandbox -c '/);
       expect(cmd).toContain('claude --print --dangerously-skip-permissions');
       expect(cmd).toContain('do something');
     });

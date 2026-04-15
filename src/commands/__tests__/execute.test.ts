@@ -30,8 +30,20 @@ vi.mock('../../sandbox/opensandbox.js', () => {
     Object.assign(this, mockSandboxInstance);
   }) as any;
   MockSandboxClient.checkConnectivity = vi.fn();
-  return { SandboxClient: MockSandboxClient };
+  return {
+    SandboxClient: MockSandboxClient,
+    getSandboxHostAddress: vi.fn().mockReturnValue('host.docker.internal'),
+  };
 });
+
+vi.mock('../../proxy/env-rewriter.js', () => ({
+  rewriteEnv: vi.fn().mockReturnValue({ proxyTargets: [], baseUrlVarMap: new Map(), cleanEnv: {} }),
+  applyProxyUrls: vi.fn().mockReturnValue({}),
+}));
+
+vi.mock('../../proxy/auth-proxy.js', () => ({
+  startAuthProxy: vi.fn().mockResolvedValue({ listeners: [], stop: vi.fn() }),
+}));
 
 vi.mock('../../sandbox/scaffolding.js', () => ({
   scaffoldWorkspace: vi.fn().mockResolvedValue('setup log'),
