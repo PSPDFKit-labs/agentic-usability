@@ -15,7 +15,6 @@ vi.mock('../../core/suite-io.js', () => ({
 
 vi.mock('node:fs/promises', () => ({
   readFile: vi.fn(),
-  writeFile: vi.fn(),
 }));
 
 vi.mock('ora', () => ({
@@ -29,8 +28,8 @@ vi.mock('ora', () => ({
 
 import { loadConfig } from '../../core/config.js';
 import { loadTestSuite } from '../../core/suite-io.js';
-import { readFile, writeFile } from 'node:fs/promises';
-import { reportCommand, exportResultsCommand } from '../report.js';
+import { readFile } from 'node:fs/promises';
+import { reportCommand } from '../report.js';
 
 const paths = makeProjectPaths();
 
@@ -224,38 +223,3 @@ describe('reportCommand', () => {
   });
 });
 
-describe('exportResultsCommand', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-
-    vi.mocked(loadConfig).mockResolvedValue(
-      makeConfig({ targets: [{ name: 'claude', image: 'node:20' }] }),
-    );
-    vi.mocked(loadTestSuite).mockResolvedValue([
-      makeTestCase({
-        id: 'TC-001',
-        difficulty: 'easy',
-        targetApis: ['createClient'],
-        expectedTokens: ['import'],
-      }),
-    ]);
-    setupReadFileMock();
-    vi.mocked(writeFile).mockResolvedValue(undefined);
-  });
-
-  it('writes aggregated results to the specified output file', async () => {
-    await exportResultsCommand(paths, { output: '/tmp/results.json' });
-
-    expect(writeFile).toHaveBeenCalledWith(
-      expect.stringContaining('results.json'),
-      expect.any(String),
-      'utf-8',
-    );
-
-    const writtenContent = vi.mocked(writeFile).mock.calls[0][1] as string;
-    const parsed = JSON.parse(writtenContent);
-    expect(parsed.targets).toHaveLength(1);
-    expect(parsed.targets[0].target).toBe('claude');
-  });
-});

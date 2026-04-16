@@ -153,11 +153,7 @@ pipelines/my-sdk-eval/           # project root (= CWD or -p target)
 | `report` | Display terminal scorecard | `--json` |
 | `run` | Full pipeline end-to-end | `--resume`, `--fresh`, `--skip-judge` |
 | `inspect` | Open web UI to inspect, edit, and run the pipeline | `--port <number>` |
-| `edit` | Open test suite in `$EDITOR` | |
-| `export` | Export test suite to a file | `--output <path>` (required) |
-| `import` | Import test suite from a file | `--input <path>` (required) |
 | `insights` | Interactive AI analysis of pipeline results | `--fresh` |
-| `export-results` | Export all results to a single JSON file | `--output <path>` (required) |
 
 ## Configuration Reference
 
@@ -295,17 +291,13 @@ Docker environments where agents solve problems. Each target runs independently 
 
 ### Workspace
 
-Template files, setup scripts, and environment variables for the test workspace:
+Template files and setup scripts for the test workspace:
 
 ```json
 {
   "workspace": {
     "template": "./templates/workspace",
-    "setupScript": "./scripts/setup.sh",
-    "env": {
-      "API_KEY": "$API_KEY",
-      "NODE_ENV": "production"
-    }
+    "setupScript": "./scripts/setup.sh"
   }
 }
 ```
@@ -314,11 +306,8 @@ Template files, setup scripts, and environment variables for the test workspace:
 |-------|-------------|
 | `template` | Local directory uploaded to `/workspace/` in the sandbox |
 | `setupScript` | Script file uploaded and executed during scaffolding |
-| `env` | Environment variables baked into the sandbox container. Available to setup scripts **and** agent-generated code. Use this for non-secret config or test API keys that the solution code needs. |
 
-Values in `env` that start with `$` are resolved from your host environment at execution time. This keeps secrets out of your config file. If a referenced variable is not set, execution fails with a clear error.
-
-You can also create a `.env` file in your project root (loaded automatically, git-ignored by default):
+You can create a `.env` file in your project root (loaded automatically, git-ignored by default):
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...
@@ -458,13 +447,6 @@ The test suite (`suite.json`) is a JSON array of test cases. Difficulty levels h
     "setupInstructions": "npm install @example/sdk"
   }
 ]
-```
-
-Edit the suite manually with `npx agentic-usability edit`, or export/import for sharing:
-
-```bash
-npx agentic-usability export -p pipelines/my-sdk-eval --output my-suite.json
-npx agentic-usability import -p pipelines/my-sdk-eval --input my-suite.json
 ```
 
 ## Scoring

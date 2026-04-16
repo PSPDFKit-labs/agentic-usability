@@ -9,13 +9,10 @@ import { loadDotenv } from './core/env.js';
 import { resolveProjectPaths, ensureProjectDirs } from './core/paths.js';
 import { initCommand } from './commands/init.js';
 import { generateCommand } from './commands/generate.js';
-import { editCommand } from './commands/edit.js';
-import { exportCommand } from './commands/export.js';
-import { importCommand } from './commands/import.js';
 import { executeCommand } from './commands/execute.js';
 import { analyzeCommand } from './commands/analyze.js';
 import { judgeCommand } from './commands/judge.js';
-import { reportCommand, exportResultsCommand } from './commands/report.js';
+import { reportCommand } from './commands/report.js';
 import { runCommand } from './commands/run.js';
 import { inspectCommand } from './commands/inspect.js';
 import { insightsCommand } from './commands/insights.js';
@@ -110,29 +107,6 @@ program
   });
 
 program
-  .command('export')
-  .description('Export the test suite to a file')
-  .requiredOption('--output <path>', 'Output file path')
-  .action(async (opts: { output: string }) => {
-    await exportCommand(getPaths(), { output: opts.output });
-  });
-
-program
-  .command('import')
-  .description('Import a test suite from a file')
-  .requiredOption('--input <path>', 'Input file path')
-  .action(async (opts: { input: string }) => {
-    await importCommand(getPaths(), { input: opts.input });
-  });
-
-program
-  .command('edit')
-  .description('Open the test suite in your editor for manual curation')
-  .action(async () => {
-    await editCommand(getPaths());
-  });
-
-program
   .command('inspect')
   .description('Open the web UI to inspect, edit, and run the pipeline')
   .option('--port <number>', 'Port for the local server', '7373')
@@ -148,14 +122,6 @@ program
     const paths = getPaths();
     await ensureProjectDirs(paths);
     await insightsCommand(paths, { fresh: opts.fresh });
-  });
-
-program
-  .command('export-results')
-  .description('Export all benchmark results to a single JSON file')
-  .requiredOption('--output <path>', 'Output file path')
-  .action(async (opts: { output: string }) => {
-    await exportResultsCommand(getPaths(), { output: opts.output });
   });
 
 program.parseAsync().catch((err: unknown) => {

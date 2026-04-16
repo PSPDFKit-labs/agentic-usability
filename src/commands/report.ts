@@ -1,8 +1,6 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import ora from 'ora';
-import { writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import { loadConfig } from '../core/config.js';
 import { loadTestSuite } from '../core/suite-io.js';
 import type { ProjectPaths } from '../core/paths.js';
@@ -166,24 +164,3 @@ export async function reportCommand(paths: ProjectPaths, options: { json?: boole
   }
 }
 
-export async function exportResultsCommand(paths: ProjectPaths, options: { output: string }): Promise<void> {
-  const config = await loadConfig(paths.config);
-
-  const spinner = ora('Loading test suite and results...').start();
-  const testCases = await loadTestSuite(paths);
-  spinner.succeed(`Loaded ${testCases.length} test case(s)`);
-
-  const allAggregates: AggregateResults[] = [];
-
-  for (const target of config.targets) {
-    const testResults = await loadAllResults(paths, testCases, target.name);
-    const aggregates = computeAggregates(testResults, target.name);
-    allAggregates.push(aggregates);
-  }
-
-  const output = buildJsonOutput(allAggregates);
-  const outputPath = resolve(options.output);
-
-  await writeFile(outputPath, JSON.stringify(output, null, 2), 'utf-8');
-  console.log(chalk.green(`Results exported to ${outputPath}`));
-}
