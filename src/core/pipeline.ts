@@ -14,11 +14,10 @@ export class PipelineStateManager {
 
   private static freshState(): PipelineState {
     return {
-      stage: 'generate',
+      stage: 'execute',
       startedAt: new Date().toISOString(),
       testCases: 0,
       completed: {
-        generate: [],
         execute: [],
         analyze: [],
         judge: [],

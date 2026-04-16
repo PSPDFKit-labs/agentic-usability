@@ -73,7 +73,6 @@ function interpolateSystemPrompt(
 }
 
 function buildAgentPrompt(
-  testCase: TestCase,
   config: Config,
 ): string {
   const systemPrompt = config.sandbox?.systemPrompt
@@ -222,7 +221,7 @@ export async function executeTestCase(
     }
 
     // Run agent — secrets are proxied, only BASE_URL vars enter the sandbox
-    const prompt = buildAgentPrompt(testCase, config);
+    const prompt = buildAgentPrompt(config);
     const agentCmd = adapter.sandboxCommand(prompt);
     await saveResult(paths, testCase.id, 'agent-cmd.log', agentCmd, target.name);
     const agentResult = await client.runCommandTimed(agentCmd);

@@ -5,8 +5,8 @@ const mockStateManager = {
   load: vi.fn(),
   save: vi.fn(),
   getState: vi.fn().mockReturnValue({
-    stage: 'generate',
-    completed: { generate: [], execute: [], analyze: [], judge: [] },
+    stage: 'execute',
+    completed: { execute: [], analyze: [], judge: [] },
     testCases: 0,
     startedAt: '',
   }),
@@ -40,10 +40,6 @@ vi.mock('../../core/suite-io.js', () => ({
   loadSolution: vi.fn().mockResolvedValue([{ path: 'a.ts', content: 'code' }]),
   saveResult: vi.fn(),
   formatElapsed: vi.fn().mockReturnValue('1s'),
-}));
-
-vi.mock('../generate.js', () => ({
-  generateCommand: vi.fn(),
 }));
 
 vi.mock('../report.js', () => ({
@@ -114,14 +110,13 @@ vi.mock('ora', () => ({
 
 import { loadConfig } from '../../core/config.js';
 import { loadTestSuite, loadSolution, saveResult } from '../../core/suite-io.js';
-import { generateCommand } from '../generate.js';
 import { reportCommand } from '../report.js';
 import { executeTestCase } from '../execute.js';
 import { SandboxClient } from '../../sandbox/opensandbox.js';
 import { analyzeTokens } from '../../scoring/tokens.js';
 import { runJudge } from '../../scoring/judge.js';
 import { PipelineStateManager } from '../../core/pipeline.js';
-import { runCommand } from '../run.js';
+import { evalCommand } from '../eval.js';
 
 const paths = makeProjectPaths();
 
@@ -131,14 +126,13 @@ const defaultConfig = makeConfig({
 });
 const defaultTestCase = makeTestCase({ id: 'TC-001' });
 
-describe('runCommand', () => {
+describe('evalCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(console, 'log').mockImplementation(() => {});
 
     vi.mocked(loadConfig).mockResolvedValue(defaultConfig);
     vi.mocked(loadTestSuite).mockResolvedValue([defaultTestCase]);
-    vi.mocked(generateCommand).mockResolvedValue(undefined);
     vi.mocked(reportCommand).mockResolvedValue(undefined);
     vi.mocked(executeTestCase).mockResolvedValue(undefined);
     (SandboxClient.checkConnectivity as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
@@ -149,8 +143,8 @@ describe('runCommand', () => {
     mockStateManager.load.mockResolvedValue(undefined);
     mockStateManager.save.mockResolvedValue(undefined);
     mockStateManager.getState.mockReturnValue({
-      stage: 'generate',
-      completed: { generate: [], execute: [], analyze: [], judge: [] },
+      stage: 'execute',
+      completed: { execute: [], analyze: [], judge: [] },
       testCases: 0,
       startedAt: '',
     });
@@ -160,10 +154,9 @@ describe('runCommand', () => {
     mockStateManager.reset.mockResolvedValue(undefined);
   });
 
-  it('runs all stages in order', async () => {
-    await runCommand(paths);
+  it('runs all eval stages in order', async () => {
+    await evalCommand(paths);
 
-    expect(generateCommand).toHaveBeenCalled();
     expect(executeTestCase).toHaveBeenCalled();
     expect(analyzeTokens).toHaveBeenCalled();
     expect(runJudge).toHaveBeenCalled();
@@ -171,41 +164,39 @@ describe('runCommand', () => {
   });
 
   it('skips judge stage when skipJudge is true', async () => {
-    await runCommand(paths, { skipJudge: true });
+    await evalCommand(paths, { skipJudge: true });
 
-    expect(generateCommand).toHaveBeenCalled();
     expect(executeTestCase).toHaveBeenCalled();
     expect(analyzeTokens).toHaveBeenCalled();
     expect(runJudge).not.toHaveBeenCalled();
     expect(reportCommand).toHaveBeenCalled();
   });
 
-  it('resumes from saved state and skips generate if stage > generate', async () => {
+  it('resumes from saved state and skips execute if stage > execute', async () => {
     mockStateManager.getState.mockReturnValue({
-      stage: 'execute',
-      completed: { generate: ['TC-001'], execute: [], analyze: [], judge: [] },
+      stage: 'analyze',
+      completed: { execute: ['TC-001'], analyze: [], judge: [] },
       testCases: 1,
       startedAt: '',
     });
 
-    await runCommand(paths, { resume: true });
+    await evalCommand(paths, { resume: true });
 
     expect(mockStateManager.load).toHaveBeenCalled();
-    expect(generateCommand).not.toHaveBeenCalled();
-    expect(executeTestCase).toHaveBeenCalled();
+    expect(executeTestCase).not.toHaveBeenCalled();
+    expect(analyzeTokens).toHaveBeenCalled();
   });
 
   it('calls advanceStage after each completed stage', async () => {
-    await runCommand(paths);
+    await evalCommand(paths);
 
-    expect(mockStateManager.advanceStage).toHaveBeenCalledWith('execute');
     expect(mockStateManager.advanceStage).toHaveBeenCalledWith('analyze');
     expect(mockStateManager.advanceStage).toHaveBeenCalledWith('judge');
     expect(mockStateManager.advanceStage).toHaveBeenCalledWith('report');
   });
 
   it('saves pipeline state after stage transitions', async () => {
-    await runCommand(paths);
+    await evalCommand(paths);
 
     // save is called multiple times for state persistence
     expect(mockStateManager.save).toHaveBeenCalled();

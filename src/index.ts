@@ -13,7 +13,7 @@ import { executeCommand } from './commands/execute.js';
 import { analyzeCommand } from './commands/analyze.js';
 import { judgeCommand } from './commands/judge.js';
 import { reportCommand } from './commands/report.js';
-import { runCommand } from './commands/run.js';
+import { evalCommand } from './commands/eval.js';
 import { inspectCommand } from './commands/inspect.js';
 import { insightsCommand } from './commands/insights.js';
 
@@ -97,13 +97,13 @@ program
   });
 
 program
-  .command('run')
-  .description('Execute the full benchmark pipeline end-to-end')
+  .command('eval')
+  .description('Run the evaluation pipeline: execute → analyze → judge → report')
   .option('--resume', 'Resume from last checkpoint')
   .option('--fresh', 'Clear existing pipeline state before starting')
   .option('--skip-judge', 'Skip the LLM judge stage')
   .action(async (opts: { resume?: boolean; fresh?: boolean; skipJudge?: boolean }) => {
-    await runCommand(getPaths(), { resume: opts.resume, fresh: opts.fresh, skipJudge: opts.skipJudge });
+    await evalCommand(getPaths(), { resume: opts.resume, fresh: opts.fresh, skipJudge: opts.skipJudge });
   });
 
 program

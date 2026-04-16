@@ -7,7 +7,6 @@ import { loadConfig } from '../core/config.js';
 import { ensureProjectDirs, type ProjectPaths } from '../core/paths.js';
 import { PipelineStateManager } from '../core/pipeline.js';
 import { loadTestSuite, loadSolution, saveResult, formatElapsed } from '../core/suite-io.js';
-import { generateCommand } from './generate.js';
 import { reportCommand } from './report.js';
 import { executeTestCase, startProxy } from './execute.js';
 import { SandboxClient } from '../sandbox/opensandbox.js';
@@ -16,14 +15,14 @@ import { WorkerPool } from '../sandbox/worker-pool.js';
 import { analyzeTokens } from '../scoring/tokens.js';
 import { runJudge } from '../scoring/judge.js';
 
-const STAGE_ORDER = ['generate', 'execute', 'analyze', 'judge', 'report'];
+const STAGE_ORDER = ['execute', 'analyze', 'judge', 'report'];
 
 function stageIndex(stage: string): number {
   const idx = STAGE_ORDER.indexOf(stage);
   return idx === -1 ? 0 : idx;
 }
 
-export async function runCommand(paths: ProjectPaths, options: {
+export async function evalCommand(paths: ProjectPaths, options: {
   resume?: boolean;
   fresh?: boolean;
   skipJudge?: boolean;
@@ -56,31 +55,16 @@ export async function runCommand(paths: ProjectPaths, options: {
     console.log(chalk.dim(`Resuming from stage: ${stateManager.getState().stage}`));
   }
 
-  const totalStages = options.skipJudge ? 4 : 5;
+  const totalStages = options.skipJudge ? 3 : 4;
 
-  // Stage 1: Generate
-  const genStageNum = 1;
-  if (stageIndex(stateManager.getState().stage) <= stageIndex('generate')) {
-    console.log(
-      chalk.bold.blue(`\n[Stage ${genStageNum}/${totalStages}] Generating test suite...`),
-    );
-    await generateCommand(paths, { fresh: options.fresh });
-    stateManager.advanceStage('execute');
-    await stateManager.save();
-  } else {
-    console.log(
-      chalk.dim(`[Stage ${genStageNum}/${totalStages}] Generate — skipped (already complete)`),
-    );
-  }
-
-  // Load test suite for subsequent stages
+  // Load test suite for all stages
   const testCases = await loadTestSuite(paths);
   const allTestIds = testCases.map((tc) => tc.id);
   stateManager.getState().testCases = testCases.length;
   await stateManager.save();
 
-  // Stage 2: Execute (per target)
-  const execStageNum = 2;
+  // Stage 1: Execute (per target)
+  const execStageNum = 1;
   if (stageIndex(stateManager.getState().stage) <= stageIndex('execute')) {
     console.log(
       chalk.bold.blue(`\n[Stage ${execStageNum}/${totalStages}] Executing test cases...`),
@@ -167,8 +151,8 @@ export async function runCommand(paths: ProjectPaths, options: {
     );
   }
 
-  // Stage 3: Analyze (per target)
-  const analyzeStageNum = 3;
+  // Stage 2: Analyze (per target)
+  const analyzeStageNum = 2;
   if (stageIndex(stateManager.getState().stage) <= stageIndex('analyze')) {
     console.log(
       chalk.bold.blue(`\n[Stage ${analyzeStageNum}/${totalStages}] Analyzing solutions...`),
@@ -222,9 +206,9 @@ export async function runCommand(paths: ProjectPaths, options: {
     );
   }
 
-  // Stage 4: Judge (optional, per target)
+  // Stage 3: Judge (optional, per target)
   if (!options.skipJudge) {
-    const judgeStageNum = 4;
+    const judgeStageNum = 3;
     if (stageIndex(stateManager.getState().stage) <= stageIndex('judge')) {
       console.log(
         chalk.bold.blue(`\n[Stage ${judgeStageNum}/${totalStages}] Judging solutions...`),
@@ -301,5 +285,5 @@ export async function runCommand(paths: ProjectPaths, options: {
   await reportCommand(paths);
 
   process.removeListener('SIGINT', onSigint);
-  console.log(chalk.bold.green('\nPipeline complete!'));
+  console.log(chalk.bold.green('\nEvaluation complete!'));
 }

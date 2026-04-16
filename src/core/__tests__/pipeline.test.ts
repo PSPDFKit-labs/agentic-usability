@@ -22,7 +22,7 @@ describe('PipelineStateManager', () => {
   describe('constructor', () => {
     it('initializes with fresh state', () => {
       const state = manager.getState();
-      expect(state.stage).toBe('generate');
+      expect(state.stage).toBe('execute');
       expect(state.completed.execute).toEqual([]);
     });
   });
@@ -30,27 +30,27 @@ describe('PipelineStateManager', () => {
   describe('load', () => {
     it('reads and parses state from disk', async () => {
       const savedState = {
-        stage: 'execute',
+        stage: 'analyze',
         startedAt: '2024-01-01T00:00:00.000Z',
         testCases: 5,
-        completed: { generate: ['TC-001'], execute: [], analyze: [], judge: [] },
+        completed: { execute: ['TC-001'], analyze: [], judge: [] },
       };
       mockReadFile.mockResolvedValue(JSON.stringify(savedState));
       const state = await manager.load();
-      expect(state.stage).toBe('execute');
-      expect(state.completed.generate).toEqual(['TC-001']);
+      expect(state.stage).toBe('analyze');
+      expect(state.completed.execute).toEqual(['TC-001']);
     });
 
     it('returns fresh state when file does not exist', async () => {
       mockReadFile.mockRejectedValue(new Error('ENOENT'));
       const state = await manager.load();
-      expect(state.stage).toBe('generate');
+      expect(state.stage).toBe('execute');
     });
 
     it('returns fresh state when file contains invalid JSON', async () => {
       mockReadFile.mockResolvedValue('not json');
       const state = await manager.load();
-      expect(state.stage).toBe('generate');
+      expect(state.stage).toBe('execute');
     });
   });
 
@@ -121,7 +121,7 @@ describe('PipelineStateManager', () => {
       manager.markTestComplete('execute', 'TC-001');
       manager.advanceStage('analyze');
       await manager.reset();
-      expect(manager.getState().stage).toBe('generate');
+      expect(manager.getState().stage).toBe('execute');
       expect(manager.getState().completed.execute).toEqual([]);
       expect(mockUnlink).toHaveBeenCalled();
     });

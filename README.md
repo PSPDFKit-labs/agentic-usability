@@ -58,7 +58,7 @@ curl http://localhost:8080/health
 Each target in your config references a Docker image. Pre-pull them to avoid slow first-run times:
 
 ```bash
-docker pull node:20-slim
+docker pull opensandbox/code-interpreter:v1.0.2
 ```
 
 ## Installation
@@ -96,10 +96,10 @@ The wizard explains each field and provides sensible defaults. You can also `cd`
 ### 2. Run the pipeline
 
 ```bash
-npx agentic-usability run -p pipelines/my-sdk-eval
+npx agentic-usability eval -p pipelines/my-sdk-eval
 ```
 
-This executes all stages: **generate → execute → analyze → judge → report**.
+This runs the evaluation pipeline: **execute → analyze → judge → report**.
 
 Or run stages individually:
 
@@ -151,7 +151,7 @@ pipelines/my-sdk-eval/           # project root (= CWD or -p target)
 | `analyze` | Regex-based token analysis of generated solutions | `--tests <ids>` |
 | `judge` | LLM comparison of reference vs generated solutions | `--skip-judge`, `--tests <ids>` |
 | `report` | Display terminal scorecard | `--json` |
-| `run` | Full pipeline end-to-end | `--resume`, `--fresh`, `--skip-judge` |
+| `eval` | Run evaluation pipeline: execute → analyze → judge → report | `--resume`, `--fresh`, `--skip-judge` |
 | `inspect` | Open web UI to inspect, edit, and run the pipeline | `--port <number>` |
 | `insights` | Interactive AI analysis of pipeline results | `--fresh` |
 
@@ -411,17 +411,17 @@ Ask about failure patterns, documentation gaps, API design issues, or request pr
 
 ## Pipeline and Resume
 
-The `run` command orchestrates 5 stages: **generate → execute → analyze → judge → report**. Pipeline state is checkpointed after each test case in `logs/pipeline-state.json`.
+The `eval` command orchestrates 4 stages: **execute → analyze → judge → report**. Pipeline state is checkpointed after each test case in `logs/pipeline-state.json`. Run `generate` separately to create the test suite first.
 
 ```bash
 # Resume after interruption
-npx agentic-usability run -p pipelines/my-sdk-eval --resume
+npx agentic-usability eval -p pipelines/my-sdk-eval --resume
 
 # Start fresh (clears all state)
-npx agentic-usability run -p pipelines/my-sdk-eval --fresh
+npx agentic-usability eval -p pipelines/my-sdk-eval --fresh
 
 # Skip the LLM judge stage (faster, token-analysis only)
-npx agentic-usability run -p pipelines/my-sdk-eval --skip-judge
+npx agentic-usability eval -p pipelines/my-sdk-eval --skip-judge
 ```
 
 ## Test Suite Format
