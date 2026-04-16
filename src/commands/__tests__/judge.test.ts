@@ -72,6 +72,7 @@ describe('judgeCommand', () => {
       [makeSolutionFile()],
       expect.objectContaining({ command: 'claude' }),
       'claude',
+      undefined,
     );
   });
 

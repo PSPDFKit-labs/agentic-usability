@@ -74,6 +74,7 @@ function makeTestResult(overrides: Partial<TestResult> = {}): TestResult {
       notes: 'good',
     },
     generatedSolution: [{ path: 'a.ts', content: 'code' }],
+    agentNotes: null,
     ...overrides,
   };
 }

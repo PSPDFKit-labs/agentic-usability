@@ -78,6 +78,7 @@ function makeTestResult(overrides: Partial<TestResult> = {}): TestResult {
     tokenAnalysis: makeTokenAnalysis(),
     judgeScore: makeJudgeScore(),
     generatedSolution: [{ path: 'solution.ts', content: 'code' }],
+    agentNotes: null,
     ...overrides,
   };
 }

@@ -114,7 +114,12 @@ Implement the solution and write all output files to the /workspace/solution/ di
 Prefix every solution file name with "solution__" (e.g. solution__main.py, solution__utils.py, solution__requirements.txt).
 Only files with this prefix will be collected for evaluation.
 
-Make sure to create the /workspace/solution/ directory first if it does not exist.`;
+Make sure to create the /workspace/solution/ directory first if it does not exist.
+
+Throughout your work, maintain a file at /workspace/notes.md to record your progress.
+Use it as a working log — note what you tried, what worked, what didn't, and any gotchas or surprises you encountered. Be candid: if something is confusing, broken, or you can't figure it out, say so plainly.
+
+You are allowed to fail. A partial solution with honest notes about what went wrong is more valuable than a complete-looking solution that papers over problems. If you get stuck, document what you tried and why it didn't work, then move on to what you can solve.`;
 }
 
 
@@ -151,6 +156,14 @@ async function extractSolution(
     }
   }
   return solution;
+}
+
+async function extractNotes(client: SandboxClient): Promise<string | null> {
+  try {
+    return await client.readFile('/workspace/notes.md');
+  } catch {
+    return null;
+  }
 }
 
 export async function executeTestCase(
@@ -227,14 +240,7 @@ export async function executeTestCase(
     ].join('\n');
     await saveResult(paths, testCase.id, 'agent-output.log', agentLog, target.name);
 
-    // Fail early if agent exited with an error
-    if (agentResult.exitCode !== 0) {
-      throw new Error(
-        `Agent exited with code ${agentResult.exitCode}: ${agentResult.stderr || agentResult.stdout}`.slice(0, 500),
-      );
-    }
-
-    // Extract solution
+    // Extract solution and notes even on non-zero exit — partial progress is valuable
     const solution = await extractSolution(client);
     await saveResult(
       paths,
@@ -243,6 +249,11 @@ export async function executeTestCase(
       JSON.stringify(solution, null, 2),
       target.name,
     );
+
+    const notes = await extractNotes(client);
+    if (notes) {
+      await saveResult(paths, testCase.id, 'agent-notes.md', notes, target.name);
+    }
   } finally {
     // Save proxy logs for this test case (even on failure, for debugging)
     if (proxyHandle) {

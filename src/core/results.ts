@@ -12,6 +12,7 @@ export interface TestResult {
   tokenAnalysis: TokenAnalysis | null;
   judgeScore: JudgeScore | null;
   generatedSolution: SolutionFile[] | null;
+  agentNotes: string | null;
 }
 
 export interface AggregateResults {
@@ -27,6 +28,14 @@ export interface AggregateResults {
   byDifficulty: Record<string, { avgApiCoverage: number; avgTokenCoverage: number; avgApiDiscovery: number; avgCallCorrectness: number; avgCompleteness: number; avgFunctionalCorrectness: number; passRate: number; count: number }>;
   worstApis: Array<{ api: string; missRate: number; missCount: number; totalCount: number }>;
   missedTokens: Array<{ token: string; missRate: number; missCount: number; totalCount: number }>;
+}
+
+async function loadTextFile(filePath: string): Promise<string | null> {
+  try {
+    return await readFile(filePath, 'utf-8');
+  } catch {
+    return null;
+  }
 }
 
 export async function loadJsonFile<T>(filePath: string): Promise<T | null> {
@@ -47,6 +56,7 @@ export async function loadAllResults(paths: ProjectPaths, testCases: TestCase[],
     const tokenAnalysis = await loadJsonFile<TokenAnalysis>(join(dir, 'token-analysis.json'));
     const judgeScore = await loadJsonFile<JudgeScore>(join(dir, 'judge.json'));
     const generatedSolution = await loadJsonFile<SolutionFile[]>(join(dir, 'generated-solution.json'));
+    const agentNotes = await loadTextFile(join(dir, 'agent-notes.md'));
 
     results.push({
       testId: tc.id,
@@ -57,6 +67,7 @@ export async function loadAllResults(paths: ProjectPaths, testCases: TestCase[],
       tokenAnalysis,
       judgeScore,
       generatedSolution,
+      agentNotes,
     });
   }
 

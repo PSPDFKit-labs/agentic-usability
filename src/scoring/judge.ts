@@ -35,7 +35,11 @@ export function formatSolution(files: SolutionFile[]): string {
     .join('\n\n');
 }
 
-function buildJudgePrompt(testCase: TestCase, referenceSolution: string, generatedSolution: string): string {
+function buildJudgePrompt(testCase: TestCase, referenceSolution: string, generatedSolution: string, agentNotes?: string): string {
+  const agentNotesSection = agentNotes
+    ? `\n## Agent Self-Report\nThe agent left the following notes about its process:\n\n---BEGIN AGENT NOTES---\n${agentNotes}\n---END AGENT NOTES---\n\nConsider these notes when writing your evaluation — they may explain gaps in the solution.\n`
+: '';
+
   return `You are an expert code reviewer judging an AI-generated solution's use of an SDK/API compared to a reference solution.
 
 IMPORTANT: Focus your evaluation on SDK/API usage. Ignore cosmetic differences in:
@@ -52,7 +56,7 @@ ${referenceSolution}
 
 ## Generated Solution
 ${generatedSolution}
-
+${agentNotesSection}
 ## Your Task
 Compare the generated solution to the reference solution and score it on the following criteria:
 
@@ -92,13 +96,14 @@ export async function runJudge(
   generatedSolution: SolutionFile[],
   judgeConfig: AgentConfig,
   target: string,
+  agentNotes?: string,
 ): Promise<JudgeScore> {
   const adapter = createAdapter(judgeConfig);
 
   const referenceSolutionText = formatSolution(testCase.referenceSolution);
   const generatedSolutionText = formatSolution(generatedSolution);
 
-  const prompt = buildJudgePrompt(testCase, referenceSolutionText, generatedSolutionText);
+  const prompt = buildJudgePrompt(testCase, referenceSolutionText, generatedSolutionText, agentNotes);
 
   // adapter.run() handles envelope unwrapping and retry internally
   const result = await adapter.run(prompt, JUDGE_SCHEMA, process.cwd());

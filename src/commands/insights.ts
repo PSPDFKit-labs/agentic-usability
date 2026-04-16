@@ -75,6 +75,13 @@ function buildTestResultsSection(agg: AggregateResults): string {
       }
     }
 
+    if (r.agentNotes) {
+      const notes = r.agentNotes.length > 500
+        ? r.agentNotes.slice(0, 500) + '...'
+        : r.agentNotes;
+      parts.push(`**Agent Notes:** ${notes}`);
+    }
+
     if (!r.tokenAnalysis && !r.judgeScore) {
       parts.push('**Status:** No results available');
     }
@@ -96,6 +103,7 @@ function buildFilePathsSection(paths: ProjectPaths, allAggregates: AggregateResu
     for (const r of agg.testResults) {
       const dir = join(paths.results, agg.target, r.testId);
       lines.push(`- ${dir}/generated-solution.json — agent's generated solution`);
+      lines.push(`- ${dir}/agent-notes.md — agent's self-reported progress and gotchas`);
       lines.push(`- ${dir}/token-analysis.json — detailed token match results`);
       lines.push(`- ${dir}/judge.json — full judge assessment`);
     }
@@ -173,6 +181,7 @@ Analyze these benchmark results and help the developer understand:
 3. **API Design Issues**: Are there naming conventions, parameter patterns, or workflows that trip up agents? Would renaming, simplifying, or adding convenience methods help?
 4. **Prioritized Recommendations**: Which specific improvements would fix the most failures? Rank them by impact.
 5. **Deep Dives**: Read the SDK source code, reference solutions, and generated solutions to understand the root causes of failures.
+6. **Agent Self-Reports**: The executing agent was asked to keep a notes.md log. Where available, these contain first-person accounts of confusion, failed attempts, and gotchas. Use them to understand the agent's experience with the SDK.
 
 Start by giving an overview of the key findings, then let the developer guide the conversation into specific areas of interest.`);
 

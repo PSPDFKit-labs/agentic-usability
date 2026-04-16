@@ -1,5 +1,7 @@
 import chalk from 'chalk';
 import ora from 'ora';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { loadConfig } from '../core/config.js';
 import { loadTestSuite, loadSolution, saveResult } from '../core/suite-io.js';
 import { runJudge } from '../scoring/judge.js';
@@ -35,10 +37,17 @@ export async function judgeCommand(paths: ProjectPaths, options: { skipJudge?: b
         continue;
       }
 
+      let agentNotes: string | undefined;
+      try {
+        agentNotes = await readFile(join(paths.results, target.name, tc.id, 'agent-notes.md'), 'utf-8');
+      } catch {
+        // No notes available
+      }
+
       const judgeSpinner = ora(`${tc.id}: Running judge...`).start();
 
       try {
-        const score = await runJudge(tc, solution, judgeConfig, target.name);
+        const score = await runJudge(tc, solution, judgeConfig, target.name, agentNotes);
 
         await saveResult(
           paths,

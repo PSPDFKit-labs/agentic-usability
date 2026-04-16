@@ -1,4 +1,6 @@
 import chalk from 'chalk';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { loadDotenv } from '../core/env.js';
 import { loadConfig } from '../core/config.js';
@@ -243,8 +245,15 @@ export async function runCommand(paths: ProjectPaths, options: {
             continue;
           }
 
+          let agentNotes: string | undefined;
           try {
-            const score = await runJudge(tc, solution, judgeConfig, target.name);
+            agentNotes = await readFile(join(paths.results, target.name, tc.id, 'agent-notes.md'), 'utf-8');
+          } catch {
+            // No notes available
+          }
+
+          try {
+            const score = await runJudge(tc, solution, judgeConfig, target.name, agentNotes);
             await saveResult(
               paths,
               tc.id,
