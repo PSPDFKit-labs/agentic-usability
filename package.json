@@ -7,9 +7,9 @@
     "agentic-usability": "dist/index.js"
   },
   "scripts": {
-    "build": "npm run build:ui && tsc",
+    "build": "npm run build:ui && npm run build:server",
     "build:ui": "npm run build --prefix ui",
-    "build:server": "tsc",
+    "build:server": "tsc && chmod +x dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "test": "vitest run",

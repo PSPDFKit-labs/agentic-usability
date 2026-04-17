@@ -18,7 +18,7 @@ const colors = {
 
 function pct(v: number | null | undefined): string {
   if (v == null) return '—';
-  return `${Math.round(v * 100)}%`;
+  return `${Math.round(v)}%`;
 }
 
 function VerdictBadge({ pass }: { pass: boolean }) {
@@ -183,7 +183,7 @@ function MissedList({
             >
               <span style={{ fontFamily: 'monospace', color: colors.text }}>{label}</span>
               <span style={{ color: colors.fail, fontSize: '11px' }}>
-                {Math.round(item.missRate * 100)}% miss ({item.missCount}/{item.totalCount})
+                {Math.round(item.missRate)}% miss ({item.missCount}/{item.totalCount})
               </span>
             </div>
           );
@@ -252,6 +252,7 @@ function TargetSection({ targetResult }: { targetResult: TargetResults }) {
 
 export function Dashboard() {
   const [targets, setTargets] = useState<TargetResults[]>([]);
+  const [activeTarget, setActiveTarget] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -259,6 +260,7 @@ export function Dashboard() {
     getAllResults()
       .then((data) => {
         setTargets(data.targets);
+        if (data.targets.length > 0) setActiveTarget(data.targets[0].target);
         setLoading(false);
       })
       .catch((err: Error) => {
@@ -304,12 +306,38 @@ export function Dashboard() {
     );
   }
 
+  const activeResult = targets.find((t) => t.target === activeTarget) ?? targets[0];
+
   return (
     <div style={{ color: colors.text }}>
       <h1 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '24px' }}>Dashboard</h1>
-      {targets.map((t) => (
-        <TargetSection key={t.target} targetResult={t} />
-      ))}
+
+      {/* Target selector */}
+      {targets.length > 1 && (
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
+          {targets.map((t) => (
+            <button
+              key={t.target}
+              onClick={() => setActiveTarget(t.target)}
+              style={{
+                padding: '6px 14px',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                fontWeight: activeTarget === t.target ? 600 : 400,
+                color: activeTarget === t.target ? colors.accent : colors.textMuted,
+                background: activeTarget === t.target ? 'rgba(88,166,255,0.12)' : colors.headerBg,
+                border: `1px solid ${activeTarget === t.target ? colors.accent : colors.border}`,
+                borderRadius: '6px 6px 0 0',
+                cursor: 'pointer',
+              }}
+            >
+              {t.target}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <TargetSection targetResult={activeResult} />
     </div>
   );
 }

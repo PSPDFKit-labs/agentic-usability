@@ -4,3 +4,4 @@ dist-ui/
 .agentic-usability/
 .env
 /pipelines/
+tsconfig.tsbuildinfo

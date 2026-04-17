@@ -15,6 +15,7 @@ vi.mock('../../core/suite-io.js', () => ({
 
 vi.mock('node:fs/promises', () => ({
   readFile: vi.fn(),
+  writeFile: vi.fn(),
 }));
 
 vi.mock('ora', () => ({

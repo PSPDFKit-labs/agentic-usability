@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { getTestCase, getAllResults, getTestResult, TestCase, TargetResults, TokenResult, SolutionFile } from '../api';
 import { MetricBar } from '../components/MetricBar';
 import { CodeViewer } from '../components/CodeViewer';
-import { DiffViewer } from '../components/DiffViewer';
 
 const colors = {
   bg: '#0d1117',
@@ -97,6 +96,68 @@ function TokenList({ items, label }: { items: TokenResult[]; label: string }) {
 
 // ─── Tab panels ───────────────────────────────────────────────────────────────
 
+function InfoPanel({ testCase }: { testCase: TestCase }) {
+  return (
+    <div>
+      <SectionLabel>Problem Statement</SectionLabel>
+      <div
+        style={{
+          background: colors.codeBg,
+          border: `1px solid ${colors.border}`,
+          borderRadius: '6px',
+          padding: '16px',
+          fontFamily: 'monospace',
+          fontSize: '13px',
+          lineHeight: '1.7',
+          color: colors.text,
+          whiteSpace: 'pre-wrap',
+        }}
+      >
+        {testCase.problemStatement}
+      </div>
+
+      {testCase.setupInstructions && (
+        <>
+          <SectionLabel>Setup Instructions</SectionLabel>
+          <div
+            style={{
+              background: colors.codeBg,
+              border: `1px solid ${colors.border}`,
+              borderRadius: '6px',
+              padding: '16px',
+              fontFamily: 'monospace',
+              fontSize: '13px',
+              lineHeight: '1.7',
+              color: colors.textMuted,
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {testCase.setupInstructions}
+          </div>
+        </>
+      )}
+
+      <SectionLabel>Target APIs</SectionLabel>
+      <div style={{ marginBottom: '4px' }}>
+        {testCase.targetApis.map((api) => (
+          <Tag key={api} color={colors.accent}>
+            {api}
+          </Tag>
+        ))}
+      </div>
+
+      <SectionLabel>Expected Tokens</SectionLabel>
+      <div style={{ marginBottom: '4px' }}>
+        {testCase.expectedTokens.map((tok) => (
+          <Tag key={tok} color="#d2a8ff">
+            {tok}
+          </Tag>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TokenAnalysisPanel({ targetResult }: { targetResult: TargetResults; testId: string }) {
   const result = targetResult.testResults[0];
   const ta = result?.tokenAnalysis;
@@ -116,8 +177,8 @@ function TokenAnalysisPanel({ targetResult }: { targetResult: TargetResults; tes
 
   return (
     <div>
-      <MetricBar label="API Coverage" value={ta.apiCoverage * 100} />
-      <MetricBar label="Token Coverage" value={ta.tokenCoverage * 100} />
+      <MetricBar label="API Coverage" value={ta.apiCoverage} />
+      <MetricBar label="Token Coverage" value={ta.tokenCoverage} />
       <div style={{ marginTop: '16px' }}>
         <TokenList items={foundApis} label="APIs Found" />
         <TokenList items={missedApis} label="APIs Not Found" />
@@ -142,10 +203,10 @@ function JudgeScoresPanel({ targetResult }: { targetResult: TargetResults }) {
 
   return (
     <div>
-      <MetricBar label="API Discovery" value={js.apiDiscovery * 100} />
-      <MetricBar label="Call Correctness" value={js.callCorrectness * 100} />
-      <MetricBar label="Completeness" value={js.completeness * 100} />
-      <MetricBar label="Functional Correctness" value={js.functionalCorrectness * 100} />
+      <MetricBar label="API Discovery" value={js.apiDiscovery} />
+      <MetricBar label="Call Correctness" value={js.callCorrectness} />
+      <MetricBar label="Completeness" value={js.completeness} />
+      <MetricBar label="Functional Correctness" value={js.functionalCorrectness} />
 
       <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
         <span style={{ fontSize: '13px', color: colors.textMuted }}>Verdict:</span>
@@ -191,6 +252,63 @@ function JudgeScoresPanel({ targetResult }: { targetResult: TargetResults }) {
   );
 }
 
+function SolutionPane({
+  label,
+  files,
+}: {
+  label: string;
+  files: SolutionFile[];
+}) {
+  const [selectedIdx, setSelectedIdx] = useState(0);
+
+  if (files.length === 0) {
+    return (
+      <div style={{ color: colors.textMuted, fontSize: '13px', padding: '16px 0' }}>
+        No {label.toLowerCase()} available.
+      </div>
+    );
+  }
+
+  const file = files[selectedIdx] ?? files[0];
+
+  const normalize = (p: string) => p.replace(/^solution__/, '').replace(/^solution\//, '');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ fontSize: '12px', fontWeight: 600, color: colors.textMuted }}>{label}</div>
+        {files.length > 1 ? (
+          <select
+            value={selectedIdx}
+            onChange={(e) => setSelectedIdx(Number(e.target.value))}
+            style={{
+              background: colors.bg,
+              color: colors.text,
+              border: `1px solid ${colors.border}`,
+              borderRadius: '4px',
+              padding: '3px 8px',
+              fontSize: '11px',
+              fontFamily: 'monospace',
+              cursor: 'pointer',
+            }}
+          >
+            {files.map((f, i) => (
+              <option key={f.path} value={i}>
+                {normalize(f.path)}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div style={{ fontSize: '11px', fontFamily: 'monospace', color: colors.textMuted }}>
+            {normalize(file.path)}
+          </div>
+        )}
+      </div>
+      <CodeViewer code={file.content} filename={file.path} height="600px" />
+    </div>
+  );
+}
+
 function SolutionPanel({
   targetResult,
   referenceSolution,
@@ -209,41 +327,10 @@ function SolutionPanel({
     );
   }
 
-  // Build pairs: match by normalized filename, then show unmatched files standalone
-  const normalize = (p: string) => p.replace(/^solution__/, '').replace(/^solution\//, '');
-  const genMap = new Map(generated.map((f) => [normalize(f.path), f]));
-  const refMap = new Map(referenceSolution.map((f) => [normalize(f.path), f]));
-  const allKeys = new Set([...refMap.keys(), ...genMap.keys()]);
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {[...allKeys].map((key) => {
-        const ref = refMap.get(key);
-        const gen = genMap.get(key);
-
-        if (ref && gen) {
-          return (
-            <DiffViewer
-              key={key}
-              original={ref.content}
-              modified={gen.content}
-              language={detectLang(ref.path)}
-              originalLabel={`Reference: ${ref.path}`}
-              modifiedLabel={`Generated: ${gen.path}`}
-              height="400px"
-            />
-          );
-        }
-
-        const file = ref ?? gen!;
-        const label = ref ? `Reference only: ${file.path}` : `Generated only: ${file.path}`;
-        return (
-          <div key={key}>
-            <div style={{ fontSize: '12px', color: colors.textMuted, marginBottom: '4px' }}>{label}</div>
-            <CodeViewer code={file.content} filename={file.path} height="300px" />
-          </div>
-        );
-      })}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+      <SolutionPane label="Generated Solution" files={generated} />
+      <SolutionPane label="Reference Solution" files={referenceSolution} />
     </div>
   );
 }
@@ -262,12 +349,13 @@ function detectLang(path: string): string {
 
 // ─── Target tabs ─────────────────────────────────────────────────────────────
 
-type TabKey = 'token' | 'judge' | 'solution' | 'logs';
+type TabKey = 'info' | 'token' | 'judge' | 'solution' | 'logs';
 
 const TAB_LABELS: Record<TabKey, string> = {
+  info: 'Info',
   token: 'Token Analysis',
   judge: 'Judge Scores',
-  solution: 'Solution Comparison',
+  solution: 'Solutions',
   logs: 'Logs',
 };
 
@@ -279,6 +367,8 @@ interface LogFiles {
 }
 
 function LogsPanel({ logs }: { logs: LogFiles | null }) {
+  const [selectedIdx, setSelectedIdx] = useState(0);
+
   if (!logs) {
     return (
       <div style={{ color: colors.textMuted, fontSize: '13px', padding: '16px 0' }}>
@@ -304,16 +394,34 @@ function LogsPanel({ logs }: { logs: LogFiles | null }) {
     );
   }
 
+  const current = available[selectedIdx] ?? available[0];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {available.map((entry) => (
-        <div key={entry.filename}>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: colors.textMuted, marginBottom: '6px' }}>
-            {entry.label}
-          </div>
-          <CodeViewer code={entry.content!} filename={entry.filename} height="300px" />
-        </div>
-      ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ fontSize: '12px', fontWeight: 600, color: colors.textMuted }}>Log File</div>
+        <select
+          value={selectedIdx}
+          onChange={(e) => setSelectedIdx(Number(e.target.value))}
+          style={{
+            background: colors.bg,
+            color: colors.text,
+            border: `1px solid ${colors.border}`,
+            borderRadius: '4px',
+            padding: '3px 8px',
+            fontSize: '11px',
+            fontFamily: 'monospace',
+            cursor: 'pointer',
+          }}
+        >
+          {available.map((entry, i) => (
+            <option key={entry.filename} value={i}>
+              {entry.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <CodeViewer code={current.content!} filename={current.filename} height="600px" />
     </div>
   );
 }
@@ -322,13 +430,15 @@ function TargetPanel({
   targetResult,
   referenceSolution,
   logs,
+  testCase,
 }: {
   targetResult: TargetResults;
   referenceSolution: SolutionFile[];
   logs: LogFiles | null;
+  testCase: TestCase;
 }) {
-  const [activeTab, setActiveTab] = useState<TabKey>('token');
-  const tabs: TabKey[] = ['token', 'judge', 'solution', 'logs'];
+  const [activeTab, setActiveTab] = useState<TabKey>('info');
+  const tabs: TabKey[] = ['info', 'token', 'judge', 'solution', 'logs'];
 
   const hasResult = targetResult.testResults.length > 0;
 
@@ -385,6 +495,7 @@ function TargetPanel({
           padding: '20px',
         }}
       >
+        {activeTab === 'info' && <InfoPanel testCase={testCase} />}
         {activeTab === 'token' && (
           <TokenAnalysisPanel
             targetResult={targetResult}
@@ -405,6 +516,7 @@ function TargetPanel({
 
 export function TestCaseDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [testCase, setTestCase] = useState<TestCase | null>(null);
   const [allTargets, setAllTargets] = useState<TargetResults[]>([]);
   const [loading, setLoading] = useState(true);
@@ -433,13 +545,6 @@ export function TestCaseDetail() {
     Promise.all([getTestCase(id), getAllResults()])
       .then(([tc, results]) => {
         setTestCase(tc);
-        // Filter each target's results to only include this test case
-        const filtered = results.targets
-          .map((t) => ({
-            ...t,
-            testResults: t.testResults.filter((r) => r.testId === id),
-          }))
-          .filter((t) => t.testResults.length > 0 || results.targets.some((rt) => rt.target === t.target));
         // Keep all targets that ran at all
         const allT = results.targets.map((t) => ({
           ...t,
@@ -491,7 +596,7 @@ export function TestCaseDetail() {
   return (
     <div style={{ color: colors.text, maxWidth: '1200px' }}>
       {/* Header */}
-      <div style={{ marginBottom: '24px' }}>
+      <div style={{ marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
           <h1 style={{ fontSize: '20px', fontWeight: 700, margin: 0, fontFamily: 'monospace', color: colors.accent }}>
             {testCase.id}
@@ -519,81 +624,33 @@ export function TestCaseDetail() {
           >
             {testCase.difficulty}
           </span>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0' }}>
-          {testCase.tags.map((tag) => (
-            <Tag key={tag}>{tag}</Tag>
-          ))}
-        </div>
-      </div>
-
-      {/* Problem Statement */}
-      <SectionLabel>Problem Statement</SectionLabel>
-      <div
-        style={{
-          background: colors.codeBg,
-          border: `1px solid ${colors.border}`,
-          borderRadius: '6px',
-          padding: '16px',
-          fontFamily: 'monospace',
-          fontSize: '13px',
-          lineHeight: '1.7',
-          color: colors.text,
-          whiteSpace: 'pre-wrap',
-          marginBottom: '8px',
-        }}
-      >
-        {testCase.problemStatement}
-      </div>
-
-      {/* Setup Instructions */}
-      {testCase.setupInstructions && (
-        <>
-          <SectionLabel>Setup Instructions</SectionLabel>
-          <div
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0' }}>
+            {testCase.tags.map((tag) => (
+              <Tag key={tag}>{tag}</Tag>
+            ))}
+          </div>
+          <button
+            onClick={() => navigate(`/suite?select=${testCase.id}`)}
             style={{
-              background: colors.codeBg,
-              border: `1px solid ${colors.border}`,
-              borderRadius: '6px',
-              padding: '16px',
-              fontFamily: 'monospace',
-              fontSize: '13px',
-              lineHeight: '1.7',
-              color: colors.textMuted,
-              whiteSpace: 'pre-wrap',
-              marginBottom: '8px',
+              marginLeft: 'auto',
+              padding: '5px 14px',
+              fontSize: '12px',
+              fontWeight: 600,
+              color: colors.accent,
+              background: 'rgba(88,166,255,0.1)',
+              border: `1px solid ${colors.accent}`,
+              borderRadius: '4px',
+              cursor: 'pointer',
             }}
           >
-            {testCase.setupInstructions}
-          </div>
-        </>
-      )}
-
-      {/* Target APIs */}
-      <SectionLabel>Target APIs</SectionLabel>
-      <div style={{ marginBottom: '4px' }}>
-        {testCase.targetApis.map((api) => (
-          <Tag key={api} color={colors.accent}>
-            {api}
-          </Tag>
-        ))}
+            Edit
+          </button>
+        </div>
       </div>
 
-      {/* Expected Tokens */}
-      <SectionLabel>Expected Tokens</SectionLabel>
-      <div style={{ marginBottom: '4px' }}>
-        {testCase.expectedTokens.map((tok) => (
-          <Tag key={tok} color="#d2a8ff">
-            {tok}
-          </Tag>
-        ))}
-      </div>
-
-      {/* Per-target results */}
+      {/* Target selector + tabbed panels */}
       {allTargets.length > 0 && (
-        <div style={{ marginTop: '32px' }}>
-          <SectionLabel>Results by Target</SectionLabel>
-
+        <div>
           {/* Target selector */}
           <div style={{ display: 'flex', gap: '6px', marginBottom: '0', flexWrap: 'wrap' }}>
             {allTargets.map((t) => (
@@ -627,6 +684,7 @@ export function TestCaseDetail() {
               targetResult={activeTargetResult}
               referenceSolution={testCase.referenceSolution}
               logs={logs}
+              testCase={testCase}
             />
           )}
         </div>
@@ -635,16 +693,13 @@ export function TestCaseDetail() {
       {allTargets.length === 0 && (
         <div
           style={{
-            marginTop: '32px',
-            padding: '20px',
-            color: colors.textMuted,
-            fontSize: '13px',
             background: colors.sidebar,
             border: `1px solid ${colors.border}`,
             borderRadius: '6px',
+            padding: '20px',
           }}
         >
-          No results yet. Run the pipeline to evaluate this test case.
+          <InfoPanel testCase={testCase} />
         </div>
       )}
     </div>

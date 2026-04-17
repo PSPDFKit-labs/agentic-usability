@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import {
   getSuite,
@@ -117,6 +118,7 @@ function editStateToTc(s: EditState): TestCase {
 }
 
 export function SuiteEditor() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
@@ -131,6 +133,16 @@ export function SuiteEditor() {
     try {
       const suite = await getSuite();
       setTestCases(suite);
+      // Auto-select from ?select= query param
+      const selectId = searchParams.get('select');
+      if (selectId) {
+        const found = suite.find((tc) => tc.id === selectId);
+        if (found) {
+          setSelectedId(found.id);
+          setEditState(tcToEditState(found));
+        }
+        setSearchParams({}, { replace: true });
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -490,23 +502,30 @@ export function SuiteEditor() {
 
             {/* Target APIs */}
             <div style={fieldStyle}>
-              <label style={labelStyle}>Target APIs (comma-separated)</label>
+              <label style={labelStyle}>Target APIs (comma-separated, optional)</label>
+              <div style={{ fontSize: '11px', color: colors.textMuted, marginBottom: '4px', lineHeight: '1.5' }}>
+                SDK functions or endpoints the solution should use. Matched via word-boundary check against generated code.
+                REST-style entries (e.g. <span style={{ fontFamily: 'monospace' }}>POST /builds</span>) are split into separate HTTP method + path checks.
+              </div>
               <input
                 value={editState.targetApis}
                 onChange={(e) => updateEdit({ targetApis: e.target.value })}
                 style={inputStyle}
-                placeholder="e.g. fs.readFile, path.join"
+                placeholder="e.g. Client.query, POST /api/users"
               />
             </div>
 
             {/* Expected Tokens */}
             <div style={fieldStyle}>
-              <label style={labelStyle}>Expected Tokens (comma-separated)</label>
+              <label style={labelStyle}>Expected Tokens (comma-separated, optional)</label>
+              <div style={{ fontSize: '11px', color: colors.textMuted, marginBottom: '4px', lineHeight: '1.5' }}>
+                Regex patterns matched against generated code (dotAll + multiline). Invalid regex is treated as a literal string match.
+              </div>
               <input
                 value={editState.expectedTokens}
                 onChange={(e) => updateEdit({ expectedTokens: e.target.value })}
                 style={inputStyle}
-                placeholder="e.g. readFileSync, writeFile"
+                placeholder={'e.g. new Client\\\\(, \\\\.query\\\\('}
               />
             </div>
 
@@ -618,7 +637,7 @@ export function SuiteEditor() {
                   </div>
                   {/* File content */}
                   <Editor
-                    height="300px"
+                    height="500px"
                     language={detectLanguage(file.path)}
                     value={file.content}
                     onChange={(value) => updateFile(idx, { content: value ?? '' })}

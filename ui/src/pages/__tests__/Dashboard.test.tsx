@@ -112,7 +112,7 @@ describe('Dashboard', () => {
     });
   });
 
-  it('renders multiple targets when present', async () => {
+  it('renders target selector tabs when multiple targets present', async () => {
     mockGetAllResults.mockResolvedValueOnce({
       targets: [makeTargetResults('claude'), makeTargetResults('gpt-4')],
     });
@@ -120,8 +120,11 @@ describe('Dashboard', () => {
     renderDashboard();
 
     await waitFor(() => {
-      expect(screen.getByText('claude')).toBeInTheDocument();
-      expect(screen.getByText('gpt-4')).toBeInTheDocument();
+      // Both targets should appear as tab buttons
+      const buttons = screen.getAllByRole('button');
+      const targetNames = buttons.map((b) => b.textContent);
+      expect(targetNames).toContain('claude');
+      expect(targetNames).toContain('gpt-4');
     });
   });
 });
