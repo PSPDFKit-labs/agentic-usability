@@ -1,4 +1,4 @@
-import type { TestCase } from '../core/types.js';
+import type { TestCase } from '../types.js';
 
 export interface ProgressInfo {
   completed: number;

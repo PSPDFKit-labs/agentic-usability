@@ -3,7 +3,7 @@ import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import TurndownService from 'turndown';
-import type { Config, SourceConfig } from './types.js';
+import type { Config, SourceConfig } from '../types.js';
 
 export interface ResolveOptions {
   fresh?: boolean;

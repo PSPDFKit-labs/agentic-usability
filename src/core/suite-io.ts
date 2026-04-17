@@ -1,7 +1,6 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { TestCase, SolutionFile } from './types.js';
-import type { ProjectPaths } from './paths.js';
+import type { TestCase, SolutionFile, ProjectPaths } from '../types.js';
 
 export async function loadTestSuite(paths: ProjectPaths): Promise<TestCase[]> {
   let raw: string;

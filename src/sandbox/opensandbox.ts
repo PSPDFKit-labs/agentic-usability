@@ -3,7 +3,7 @@ import {
   ConnectionConfig,
   type SandboxCreateOptions,
 } from '@alibaba-group/opensandbox';
-import type { SandboxConfig } from '../core/types.js';
+import type { SandboxConfig } from '../types.js';
 
 export interface CommandResult {
   stdout: string;

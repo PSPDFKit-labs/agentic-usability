@@ -1,5 +1,5 @@
 import { readFile, writeFile, unlink } from 'node:fs/promises';
-import { PipelineState } from './types.js';
+import { PipelineState } from '../types.js';
 
 type PipelineStage = keyof PipelineState['completed'];
 

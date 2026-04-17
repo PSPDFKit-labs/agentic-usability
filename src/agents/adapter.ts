@@ -1,4 +1,4 @@
-import { AgentConfig, AgentResult } from '../core/types.js';
+import { AgentConfig, AgentResult } from '../types.js';
 import { ClaudeAdapter } from './claude.js';
 import { CodexAdapter } from './codex.js';
 import { GeminiAdapter } from './gemini.js';

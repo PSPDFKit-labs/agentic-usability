@@ -1,36 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ProjectPaths } from './paths.js';
-import type { TestCase, TokenAnalysis, JudgeScore, SolutionFile } from './types.js';
+import type { ProjectPaths, TestCase, TokenAnalysis, JudgeScore, SolutionFile, TestResult, AggregateResults } from '../types.js';
 
-export interface TestResult {
-  testId: string;
-  difficulty: 'easy' | 'medium' | 'hard';
-  problemStatement: string;
-  targetApis: string[];
-  expectedTokens: string[];
-  tokenAnalysis: TokenAnalysis | null;
-  judgeScore: JudgeScore | null;
-  generatedSolution: SolutionFile[] | null;
-  agentNotes: string | null;
-}
-
-export interface AggregateResults {
-  target: string;
-  testResults: TestResult[];
-  avgApiCoverage: number;
-  avgTokenCoverage: number;
-  avgApiDiscovery: number;
-  avgCallCorrectness: number;
-  avgCompleteness: number;
-  avgFunctionalCorrectness: number;
-  passRate: number;
-  byDifficulty: Record<string, { avgApiCoverage: number; avgTokenCoverage: number; avgApiDiscovery: number; avgCallCorrectness: number; avgCompleteness: number; avgFunctionalCorrectness: number; passRate: number; count: number }>;
-  worstApis: Array<{ api: string; missRate: number; missCount: number; totalCount: number }>;
-  missedTokens: Array<{ token: string; missRate: number; missCount: number; totalCount: number }>;
-}
-
-async function loadTextFile(filePath: string): Promise<string | null> {
+export async function loadTextFile(filePath: string): Promise<string | null> {
   try {
     return await readFile(filePath, 'utf-8');
   } catch {

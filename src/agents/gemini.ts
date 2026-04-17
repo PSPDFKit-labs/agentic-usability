@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentResult } from '../core/types.js';
+import type { AgentConfig, AgentResult } from '../types.js';
 import { BaseAdapter } from './base.js';
 
 export class GeminiAdapter extends BaseAdapter {
@@ -12,7 +12,7 @@ export class GeminiAdapter extends BaseAdapter {
   sandboxCommand(prompt: string, workDir = '/workspace'): string {
     const escaped = this.escapeForShell(prompt);
     const args = this.config.args ?? [];
-    const cmd = `cd ${workDir} && gemini --yolo -p '${escaped}' ${args.join(' ')}`.trimEnd();
+    const cmd = `cd ${workDir} && GEMINI_SANDBOX=false gemini --yolo -p '${escaped}' ${args.join(' ')}`.trimEnd();
     return cmd;
   }
 

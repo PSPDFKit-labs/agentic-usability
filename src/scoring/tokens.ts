@@ -1,4 +1,4 @@
-import type { SolutionFile, TokenResult, TokenAnalysis } from '../core/types.js';
+import type { SolutionFile, TokenResult, TokenAnalysis } from '../types.js';
 
 function isRestStyleApi(api: string): boolean {
   return /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\//.test(api);

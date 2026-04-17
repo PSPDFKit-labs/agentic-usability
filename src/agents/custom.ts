@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentResult } from '../core/types.js';
+import type { AgentConfig, AgentResult } from '../types.js';
 import { BaseAdapter } from './base.js';
 
 export class CustomAdapter extends BaseAdapter {

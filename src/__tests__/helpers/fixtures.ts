@@ -1,5 +1,4 @@
-import type { TestCase, SolutionFile, Config, AgentConfig, AgentResult } from '../../core/types.js';
-import type { ProjectPaths } from '../../core/paths.js';
+import type { TestCase, SolutionFile, Config, AgentConfig, AgentResult, ProjectPaths } from '../../types.js';
 
 export function makeTestCase(overrides: Partial<TestCase> = {}): TestCase {
   return {

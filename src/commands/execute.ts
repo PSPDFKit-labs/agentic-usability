@@ -8,8 +8,7 @@ import { startAuthProxy, type AuthProxyHandle } from '../proxy/auth-proxy.js';
 import { scaffoldWorkspace } from '../sandbox/scaffolding.js';
 import { WorkerPool } from '../sandbox/worker-pool.js';
 import { createAdapter } from '../agents/adapter.js';
-import type { ProjectPaths } from '../core/paths.js';
-import type { Config, TestCase, SolutionFile, TargetConfig } from '../core/types.js';
+import type { Config, TestCase, SolutionFile, TargetConfig, ProjectPaths } from '../types.js';
 
 export interface ProxySetupResult {
   proxy?: AuthProxyHandle;

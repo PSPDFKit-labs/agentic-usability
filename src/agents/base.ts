@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentResult } from '../core/types.js';
+import type { AgentConfig, AgentResult } from '../types.js';
 import type { AgentAdapter } from './adapter.js';
 import { spawnAgent, spawnInteractive } from './spawn.js';
 

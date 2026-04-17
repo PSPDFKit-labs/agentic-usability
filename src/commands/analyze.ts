@@ -3,7 +3,7 @@ import ora from 'ora';
 import { loadConfig } from '../core/config.js';
 import { loadTestSuite, loadSolution, saveResult } from '../core/suite-io.js';
 import { analyzeTokens } from '../scoring/tokens.js';
-import type { ProjectPaths } from '../core/paths.js';
+import type { ProjectPaths } from '../types.js';
 
 export async function analyzeCommand(paths: ProjectPaths, options: { testIds?: string[] } = {}): Promise<void> {
   const config = await loadConfig(paths.config);

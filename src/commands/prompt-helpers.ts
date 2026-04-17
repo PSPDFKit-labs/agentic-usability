@@ -1,4 +1,4 @@
-import type { Config } from '../core/types.js';
+import type { Config } from '../types.js';
 
 /**
  * Build a bullet list of source paths with inline additionalContext.

@@ -1,7 +1,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import type { SandboxClient } from './opensandbox.js';
-import type { Config, TestCase } from '../core/types.js';
+import type { Config, TestCase } from '../types.js';
 
 /**
  * Recursively reads all files from a local directory, returning relative paths and content.

@@ -3,7 +3,7 @@ import { access, mkdir, writeFile, rm } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { resolveSource, resolveSources } from '../source-resolver.js';
 import { makeConfig } from '../../__tests__/helpers/fixtures.js';
-import type { SourceConfig } from '../types.js';
+import type { SourceConfig } from '../../types.js';
 
 vi.mock('node:fs/promises', () => ({
   access: vi.fn(),

@@ -1,0 +1,652 @@
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { getTestCase, getAllResults, getTestResult, TestCase, TargetResults, TokenResult, SolutionFile } from '../api';
+import { MetricBar } from '../components/MetricBar';
+import { CodeViewer } from '../components/CodeViewer';
+import { DiffViewer } from '../components/DiffViewer';
+
+const colors = {
+  bg: '#0d1117',
+  sidebar: '#161b22',
+  border: '#30363d',
+  text: '#e6edf3',
+  textMuted: '#8b949e',
+  accent: '#58a6ff',
+  pass: '#3fb950',
+  fail: '#f85149',
+  codeBg: '#161b22',
+};
+
+// ─── Small helpers ────────────────────────────────────────────────────────────
+
+function Tag({ children, color = colors.accent }: { children: React.ReactNode; color?: string }) {
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '2px 8px',
+        borderRadius: '4px',
+        fontSize: '11px',
+        background: `${color}18`,
+        color,
+        border: `1px solid ${color}40`,
+        marginRight: '6px',
+        marginBottom: '6px',
+        fontFamily: 'monospace',
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        fontSize: '11px',
+        fontWeight: 600,
+        color: colors.textMuted,
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+        marginBottom: '8px',
+        marginTop: '20px',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function TokenList({ items, label }: { items: TokenResult[]; label: string }) {
+  if (!items.length) return null;
+  return (
+    <div style={{ marginBottom: '12px' }}>
+      <div style={{ fontSize: '12px', fontWeight: 600, color: colors.textMuted, marginBottom: '6px' }}>
+        {label}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+        {items.map((item) => (
+          <span
+            key={item.token}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '3px 10px',
+              borderRadius: '4px',
+              fontSize: '11px',
+              fontFamily: 'monospace',
+              background: item.found ? 'rgba(63,185,80,0.1)' : 'rgba(248,81,73,0.1)',
+              color: item.found ? colors.pass : colors.fail,
+              border: `1px solid ${item.found ? colors.pass : colors.fail}40`,
+            }}
+          >
+            <span>{item.found ? '✓' : '✗'}</span>
+            <span>{item.token}</span>
+            {item.foundIn && (
+              <span style={{ color: colors.textMuted, fontSize: '10px' }}>({item.foundIn})</span>
+            )}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+// ─── Tab panels ───────────────────────────────────────────────────────────────
+
+function TokenAnalysisPanel({ targetResult }: { targetResult: TargetResults; testId: string }) {
+  const result = targetResult.testResults[0];
+  const ta = result?.tokenAnalysis;
+
+  if (!ta) {
+    return (
+      <div style={{ color: colors.textMuted, fontSize: '13px', padding: '16px 0' }}>
+        No token analysis available.
+      </div>
+    );
+  }
+
+  const foundApis = ta.apis.filter((a) => a.found);
+  const missedApis = ta.apis.filter((a) => !a.found);
+  const foundTokens = ta.tokens.filter((t) => t.found);
+  const missedTokens = ta.tokens.filter((t) => !t.found);
+
+  return (
+    <div>
+      <MetricBar label="API Coverage" value={ta.apiCoverage * 100} />
+      <MetricBar label="Token Coverage" value={ta.tokenCoverage * 100} />
+      <div style={{ marginTop: '16px' }}>
+        <TokenList items={foundApis} label="APIs Found" />
+        <TokenList items={missedApis} label="APIs Not Found" />
+        <TokenList items={foundTokens} label="Tokens Found" />
+        <TokenList items={missedTokens} label="Tokens Not Found" />
+      </div>
+    </div>
+  );
+}
+
+function JudgeScoresPanel({ targetResult }: { targetResult: TargetResults }) {
+  const result = targetResult.testResults[0];
+  const js = result?.judgeScore;
+
+  if (!js) {
+    return (
+      <div style={{ color: colors.textMuted, fontSize: '13px', padding: '16px 0' }}>
+        No judge scores available.
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <MetricBar label="API Discovery" value={js.apiDiscovery * 100} />
+      <MetricBar label="Call Correctness" value={js.callCorrectness * 100} />
+      <MetricBar label="Completeness" value={js.completeness * 100} />
+      <MetricBar label="Functional Correctness" value={js.functionalCorrectness * 100} />
+
+      <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <span style={{ fontSize: '13px', color: colors.textMuted }}>Verdict:</span>
+        <span
+          style={{
+            display: 'inline-block',
+            padding: '3px 12px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            fontWeight: 700,
+            letterSpacing: '0.05em',
+            background: js.overallVerdict ? 'rgba(63,185,80,0.15)' : 'rgba(248,81,73,0.15)',
+            color: js.overallVerdict ? colors.pass : colors.fail,
+            border: `1px solid ${js.overallVerdict ? colors.pass : colors.fail}`,
+          }}
+        >
+          {js.overallVerdict ? 'PASS' : 'FAIL'}
+        </span>
+      </div>
+
+      {js.notes && (
+        <div style={{ marginTop: '16px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: colors.textMuted, marginBottom: '6px' }}>
+            Notes
+          </div>
+          <div
+            style={{
+              background: colors.codeBg,
+              border: `1px solid ${colors.border}`,
+              borderRadius: '6px',
+              padding: '12px',
+              fontSize: '13px',
+              color: colors.text,
+              lineHeight: '1.6',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {js.notes}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SolutionPanel({
+  targetResult,
+  referenceSolution,
+}: {
+  targetResult: TargetResults;
+  referenceSolution: SolutionFile[];
+}) {
+  const result = targetResult.testResults[0];
+  const generated = result?.generatedSolution ?? [];
+
+  if (referenceSolution.length === 0 && generated.length === 0) {
+    return (
+      <div style={{ color: colors.textMuted, fontSize: '13px', padding: '16px 0' }}>
+        No solutions available.
+      </div>
+    );
+  }
+
+  // Build pairs: match by normalized filename, then show unmatched files standalone
+  const normalize = (p: string) => p.replace(/^solution__/, '').replace(/^solution\//, '');
+  const genMap = new Map(generated.map((f) => [normalize(f.path), f]));
+  const refMap = new Map(referenceSolution.map((f) => [normalize(f.path), f]));
+  const allKeys = new Set([...refMap.keys(), ...genMap.keys()]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {[...allKeys].map((key) => {
+        const ref = refMap.get(key);
+        const gen = genMap.get(key);
+
+        if (ref && gen) {
+          return (
+            <DiffViewer
+              key={key}
+              original={ref.content}
+              modified={gen.content}
+              language={detectLang(ref.path)}
+              originalLabel={`Reference: ${ref.path}`}
+              modifiedLabel={`Generated: ${gen.path}`}
+              height="400px"
+            />
+          );
+        }
+
+        const file = ref ?? gen!;
+        const label = ref ? `Reference only: ${file.path}` : `Generated only: ${file.path}`;
+        return (
+          <div key={key}>
+            <div style={{ fontSize: '12px', color: colors.textMuted, marginBottom: '4px' }}>{label}</div>
+            <CodeViewer code={file.content} filename={file.path} height="300px" />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Detect language from file path for Monaco */
+function detectLang(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase();
+  const map: Record<string, string> = {
+    ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
+    py: 'python', json: 'json', md: 'markdown', sh: 'shell', yaml: 'yaml', yml: 'yaml',
+    html: 'html', css: 'css', sql: 'sql', go: 'go', rs: 'rust', java: 'java',
+    rb: 'ruby', php: 'php', c: 'c', cpp: 'cpp', txt: 'plaintext',
+  };
+  return map[ext ?? ''] ?? 'plaintext';
+}
+
+// ─── Target tabs ─────────────────────────────────────────────────────────────
+
+type TabKey = 'token' | 'judge' | 'solution' | 'logs';
+
+const TAB_LABELS: Record<TabKey, string> = {
+  token: 'Token Analysis',
+  judge: 'Judge Scores',
+  solution: 'Solution Comparison',
+  logs: 'Logs',
+};
+
+interface LogFiles {
+  agentOutput: string | null;
+  agentCmd: string | null;
+  setupLog: string | null;
+  agentNotes: string | null;
+}
+
+function LogsPanel({ logs }: { logs: LogFiles | null }) {
+  if (!logs) {
+    return (
+      <div style={{ color: colors.textMuted, fontSize: '13px', padding: '16px 0' }}>
+        Loading logs...
+      </div>
+    );
+  }
+
+  const entries: { label: string; content: string | null; filename: string }[] = [
+    { label: 'Agent Output', content: logs.agentOutput, filename: 'agent-output.log' },
+    { label: 'Agent Command', content: logs.agentCmd, filename: 'agent-cmd.log' },
+    { label: 'Setup Log', content: logs.setupLog, filename: 'setup.log' },
+    { label: 'Agent Notes', content: logs.agentNotes, filename: 'agent-notes.md' },
+  ];
+
+  const available = entries.filter((e) => e.content);
+
+  if (available.length === 0) {
+    return (
+      <div style={{ color: colors.textMuted, fontSize: '13px', padding: '16px 0' }}>
+        No log files available.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {available.map((entry) => (
+        <div key={entry.filename}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: colors.textMuted, marginBottom: '6px' }}>
+            {entry.label}
+          </div>
+          <CodeViewer code={entry.content!} filename={entry.filename} height="300px" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TargetPanel({
+  targetResult,
+  referenceSolution,
+  logs,
+}: {
+  targetResult: TargetResults;
+  referenceSolution: SolutionFile[];
+  logs: LogFiles | null;
+}) {
+  const [activeTab, setActiveTab] = useState<TabKey>('token');
+  const tabs: TabKey[] = ['token', 'judge', 'solution', 'logs'];
+
+  const hasResult = targetResult.testResults.length > 0;
+
+  if (!hasResult) {
+    return (
+      <div
+        style={{
+          padding: '20px',
+          color: colors.textMuted,
+          fontSize: '13px',
+          background: colors.sidebar,
+          border: `1px solid ${colors.border}`,
+          borderRadius: '0 6px 6px 6px',
+        }}
+      >
+        No results yet for this target.
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Tab buttons */}
+      <div style={{ display: 'flex', borderBottom: `1px solid ${colors.border}`, marginBottom: '0' }}>
+        {tabs.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              padding: '8px 16px',
+              fontSize: '12px',
+              fontWeight: activeTab === tab ? 600 : 400,
+              color: activeTab === tab ? colors.accent : colors.textMuted,
+              background: activeTab === tab ? colors.sidebar : 'transparent',
+              border: 'none',
+              borderBottom: activeTab === tab ? `2px solid ${colors.accent}` : '2px solid transparent',
+              cursor: 'pointer',
+              marginBottom: '-1px',
+              transition: 'color 0.15s',
+            }}
+          >
+            {TAB_LABELS[tab]}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div
+        style={{
+          background: colors.sidebar,
+          border: `1px solid ${colors.border}`,
+          borderTop: 'none',
+          borderRadius: '0 0 6px 6px',
+          padding: '20px',
+        }}
+      >
+        {activeTab === 'token' && (
+          <TokenAnalysisPanel
+            targetResult={targetResult}
+            testId={targetResult.testResults[0]?.testId ?? ''}
+          />
+        )}
+        {activeTab === 'judge' && <JudgeScoresPanel targetResult={targetResult} />}
+        {activeTab === 'solution' && (
+          <SolutionPanel targetResult={targetResult} referenceSolution={referenceSolution} />
+        )}
+        {activeTab === 'logs' && <LogsPanel logs={logs} />}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+export function TestCaseDetail() {
+  const { id } = useParams<{ id: string }>();
+  const [testCase, setTestCase] = useState<TestCase | null>(null);
+  const [allTargets, setAllTargets] = useState<TargetResults[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTarget, setActiveTarget] = useState<string | null>(null);
+  const [logs, setLogs] = useState<LogFiles | null>(null);
+
+  // Fetch log files when active target changes
+  useEffect(() => {
+    if (!id || !activeTarget) { setLogs(null); return; }
+    setLogs(null);
+    getTestResult(activeTarget, id)
+      .then((result) => {
+        setLogs({
+          agentOutput: result.agentOutput,
+          agentCmd: result.agentCmd,
+          setupLog: result.setupLog,
+          agentNotes: result.agentNotes,
+        });
+      })
+      .catch(() => setLogs(null));
+  }, [id, activeTarget]);
+
+  useEffect(() => {
+    if (!id) return;
+    Promise.all([getTestCase(id), getAllResults()])
+      .then(([tc, results]) => {
+        setTestCase(tc);
+        // Filter each target's results to only include this test case
+        const filtered = results.targets
+          .map((t) => ({
+            ...t,
+            testResults: t.testResults.filter((r) => r.testId === id),
+          }))
+          .filter((t) => t.testResults.length > 0 || results.targets.some((rt) => rt.target === t.target));
+        // Keep all targets that ran at all
+        const allT = results.targets.map((t) => ({
+          ...t,
+          testResults: t.testResults.filter((r) => r.testId === id),
+        }));
+        setAllTargets(allT);
+        if (allT.length > 0) setActiveTarget(allT[0].target);
+        setLoading(false);
+      })
+      .catch((err: Error) => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div style={{ color: colors.textMuted, fontSize: '14px', paddingTop: '40px', textAlign: 'center' }}>
+        Loading…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        style={{
+          color: colors.fail,
+          background: 'rgba(248,81,73,0.1)',
+          border: `1px solid ${colors.fail}`,
+          borderRadius: '6px',
+          padding: '16px',
+          fontSize: '13px',
+        }}
+      >
+        Error: {error}
+      </div>
+    );
+  }
+
+  if (!testCase) {
+    return (
+      <div style={{ color: colors.textMuted, fontSize: '14px' }}>Test case not found.</div>
+    );
+  }
+
+  const activeTargetResult = allTargets.find((t) => t.target === activeTarget) ?? null;
+
+  return (
+    <div style={{ color: colors.text, maxWidth: '1200px' }}>
+      {/* Header */}
+      <div style={{ marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+          <h1 style={{ fontSize: '20px', fontWeight: 700, margin: 0, fontFamily: 'monospace', color: colors.accent }}>
+            {testCase.id}
+          </h1>
+          <span
+            style={{
+              textTransform: 'capitalize',
+              fontSize: '12px',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              fontWeight: 600,
+              background:
+                testCase.difficulty === 'easy'
+                  ? 'rgba(63,185,80,0.12)'
+                  : testCase.difficulty === 'medium'
+                  ? 'rgba(227,179,65,0.12)'
+                  : 'rgba(248,81,73,0.12)',
+              color:
+                testCase.difficulty === 'easy'
+                  ? colors.pass
+                  : testCase.difficulty === 'medium'
+                  ? '#e3b341'
+                  : colors.fail,
+            }}
+          >
+            {testCase.difficulty}
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0' }}>
+          {testCase.tags.map((tag) => (
+            <Tag key={tag}>{tag}</Tag>
+          ))}
+        </div>
+      </div>
+
+      {/* Problem Statement */}
+      <SectionLabel>Problem Statement</SectionLabel>
+      <div
+        style={{
+          background: colors.codeBg,
+          border: `1px solid ${colors.border}`,
+          borderRadius: '6px',
+          padding: '16px',
+          fontFamily: 'monospace',
+          fontSize: '13px',
+          lineHeight: '1.7',
+          color: colors.text,
+          whiteSpace: 'pre-wrap',
+          marginBottom: '8px',
+        }}
+      >
+        {testCase.problemStatement}
+      </div>
+
+      {/* Setup Instructions */}
+      {testCase.setupInstructions && (
+        <>
+          <SectionLabel>Setup Instructions</SectionLabel>
+          <div
+            style={{
+              background: colors.codeBg,
+              border: `1px solid ${colors.border}`,
+              borderRadius: '6px',
+              padding: '16px',
+              fontFamily: 'monospace',
+              fontSize: '13px',
+              lineHeight: '1.7',
+              color: colors.textMuted,
+              whiteSpace: 'pre-wrap',
+              marginBottom: '8px',
+            }}
+          >
+            {testCase.setupInstructions}
+          </div>
+        </>
+      )}
+
+      {/* Target APIs */}
+      <SectionLabel>Target APIs</SectionLabel>
+      <div style={{ marginBottom: '4px' }}>
+        {testCase.targetApis.map((api) => (
+          <Tag key={api} color={colors.accent}>
+            {api}
+          </Tag>
+        ))}
+      </div>
+
+      {/* Expected Tokens */}
+      <SectionLabel>Expected Tokens</SectionLabel>
+      <div style={{ marginBottom: '4px' }}>
+        {testCase.expectedTokens.map((tok) => (
+          <Tag key={tok} color="#d2a8ff">
+            {tok}
+          </Tag>
+        ))}
+      </div>
+
+      {/* Per-target results */}
+      {allTargets.length > 0 && (
+        <div style={{ marginTop: '32px' }}>
+          <SectionLabel>Results by Target</SectionLabel>
+
+          {/* Target selector */}
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '0', flexWrap: 'wrap' }}>
+            {allTargets.map((t) => (
+              <button
+                key={t.target}
+                onClick={() => setActiveTarget(t.target)}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: activeTarget === t.target ? 600 : 400,
+                  color: activeTarget === t.target ? colors.accent : colors.textMuted,
+                  background:
+                    activeTarget === t.target ? 'rgba(88,166,255,0.12)' : colors.sidebar,
+                  border: `1px solid ${activeTarget === t.target ? colors.accent : colors.border}`,
+                  borderBottom:
+                    activeTarget === t.target ? `1px solid ${colors.sidebar}` : `1px solid ${colors.border}`,
+                  borderRadius: '6px 6px 0 0',
+                  cursor: 'pointer',
+                  marginBottom: '-1px',
+                  position: 'relative',
+                  zIndex: activeTarget === t.target ? 1 : 0,
+                }}
+              >
+                {t.target}
+              </button>
+            ))}
+          </div>
+
+          {activeTargetResult && (
+            <TargetPanel
+              targetResult={activeTargetResult}
+              referenceSolution={testCase.referenceSolution}
+              logs={logs}
+            />
+          )}
+        </div>
+      )}
+
+      {allTargets.length === 0 && (
+        <div
+          style={{
+            marginTop: '32px',
+            padding: '20px',
+            color: colors.textMuted,
+            fontSize: '13px',
+            background: colors.sidebar,
+            border: `1px solid ${colors.border}`,
+            borderRadius: '6px',
+          }}
+        >
+          No results yet. Run the pipeline to evaluate this test case.
+        </div>
+      )}
+    </div>
+  );
+}

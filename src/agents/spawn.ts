@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { AgentResult } from '../core/types.js';
+import { AgentResult } from '../types.js';
 
 const DEFAULT_TIMEOUT = 300_000; // 5 minutes
 

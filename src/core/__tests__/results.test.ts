@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { loadJsonFile, computeAggregates, loadAllResults } from '../results.js';
-import type { TestResult } from '../results.js';
+import type { TestResult } from '../../types.js';
 import { makeTestCase, makeProjectPaths } from '../../__tests__/helpers/fixtures.js';
 
 vi.mock('node:fs/promises', () => ({

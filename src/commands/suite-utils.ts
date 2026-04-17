@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
-import { TestCase } from '../core/types.js';
+import { TestCase } from '../types.js';
 
 export function validateTestCase(tc: unknown, index: number, options: { requireId?: boolean } = {}): string[] {
   const errors: string[] = [];

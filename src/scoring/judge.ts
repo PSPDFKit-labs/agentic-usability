@@ -1,4 +1,4 @@
-import type { SolutionFile, JudgeScore, TestCase, AgentConfig } from '../core/types.js';
+import type { SolutionFile, JudgeScore, TestCase, AgentConfig } from '../types.js';
 import { createAdapter } from '../agents/adapter.js';
 import { JUDGE_SCORING_CRITERIA, extractJson } from '../commands/prompt-helpers.js';
 

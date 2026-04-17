@@ -5,9 +5,8 @@ import { loadConfig } from '../core/config.js';
 import { resolveSources } from '../core/source-resolver.js';
 import { loadTestSuite } from '../core/suite-io.js';
 import { createAdapter } from '../agents/adapter.js';
-import { type AggregateResults, loadAllResults, computeAggregates } from '../core/results.js';
-import type { Config } from '../core/types.js';
-import type { ProjectPaths } from '../core/paths.js';
+import type { AggregateResults, ProjectPaths, Config } from '../types.js';
+import { loadAllResults, computeAggregates } from '../core/results.js';
 import { buildSourceList, DIFFICULTY_RUBRIC, JUDGE_SCORING_CRITERIA } from './prompt-helpers.js';
 
 function formatPercent(value: number): string {

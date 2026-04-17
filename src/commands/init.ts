@@ -3,8 +3,8 @@ import { stdin, stdout } from 'node:process';
 import { writeFile, access } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import chalk from 'chalk';
-import { ensureProjectDirs, type ProjectPaths } from '../core/paths.js';
-import type { Config } from '../core/types.js';
+import { ensureProjectDirs } from '../core/paths.js';
+import type { Config, ProjectPaths } from '../types.js';
 
 async function prompt(rl: ReturnType<typeof createInterface>, question: string, defaultValue?: string): Promise<string> {
   const suffix = defaultValue ? ` ${chalk.dim(`(${defaultValue})`)}` : '';

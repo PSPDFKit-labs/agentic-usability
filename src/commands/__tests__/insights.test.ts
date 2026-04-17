@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeConfig, makeTestCase, makeProjectPaths } from '../../__tests__/helpers/fixtures.js';
-import type { AggregateResults, TestResult } from '../../core/results.js';
-import type { TokenAnalysis, JudgeScore } from '../../core/types.js';
+import type { AggregateResults, TestResult, TokenAnalysis, JudgeScore } from '../../types.js';
 
 vi.mock('../../core/config.js', () => ({
   loadConfig: vi.fn(),

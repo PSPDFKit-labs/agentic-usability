@@ -4,8 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { loadConfig } from '../core/config.js';
 import { resolveSources } from '../core/source-resolver.js';
 import { createAdapter, type AgentAdapter } from '../agents/adapter.js';
-import { TestCase, Config } from '../core/types.js';
-import type { ProjectPaths } from '../core/paths.js';
+import type { TestCase, Config, ProjectPaths } from '../types.js';
 import { printSuiteTable, validateTestCase } from './suite-utils.js';
 import { buildSourceList, DIFFICULTY_RUBRIC, extractJson } from './prompt-helpers.js';
 

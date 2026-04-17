@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import open from 'open';
 import { createServer } from '../server/index.js';
-import type { ProjectPaths } from '../core/paths.js';
+import type { ProjectPaths } from '../types.js';
 
 export async function inspectCommand(paths: ProjectPaths, options: { port?: number } = {}): Promise<void> {
   const port = options.port ?? 7373;

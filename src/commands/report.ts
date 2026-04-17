@@ -3,8 +3,8 @@ import Table from 'cli-table3';
 import ora from 'ora';
 import { loadConfig } from '../core/config.js';
 import { loadTestSuite } from '../core/suite-io.js';
-import type { ProjectPaths } from '../core/paths.js';
-import { type AggregateResults, loadAllResults, computeAggregates } from '../core/results.js';
+import type { AggregateResults, ProjectPaths } from '../types.js';
+import { loadAllResults, computeAggregates } from '../core/results.js';
 
 function formatPercent(value: number): string {
   return `${Math.round(value)}%`;

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { loadConfig } from '../core/config.js';
 import { loadTestSuite, loadSolution, saveResult } from '../core/suite-io.js';
 import { runJudge } from '../scoring/judge.js';
-import type { ProjectPaths } from '../core/paths.js';
+import type { ProjectPaths } from '../types.js';
 
 export async function judgeCommand(paths: ProjectPaths, options: { skipJudge?: boolean; testIds?: string[] } = {}): Promise<void> {
   if (options.skipJudge) {

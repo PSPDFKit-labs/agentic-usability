@@ -135,3 +135,51 @@ export interface PipelineState {
     judge: string[];
   };
 }
+
+export interface TestResult {
+  testId: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  problemStatement: string;
+  targetApis: string[];
+  expectedTokens: string[];
+  tokenAnalysis: TokenAnalysis | null;
+  judgeScore: JudgeScore | null;
+  generatedSolution: SolutionFile[] | null;
+  agentNotes: string | null;
+}
+
+export interface AggregateResults {
+  target: string;
+  testResults: TestResult[];
+  avgApiCoverage: number;
+  avgTokenCoverage: number;
+  avgApiDiscovery: number;
+  avgCallCorrectness: number;
+  avgCompleteness: number;
+  avgFunctionalCorrectness: number;
+  passRate: number;
+  byDifficulty: Record<string, { avgApiCoverage: number; avgTokenCoverage: number; avgApiDiscovery: number; avgCallCorrectness: number; avgCompleteness: number; avgFunctionalCorrectness: number; passRate: number; count: number }>;
+  worstApis: Array<{ api: string; missRate: number; missCount: number; totalCount: number }>;
+  missedTokens: Array<{ token: string; missRate: number; missCount: number; totalCount: number }>;
+}
+
+export interface ProjectPaths {
+  /** Absolute path to the project root directory. */
+  root: string;
+  /** Absolute path to the config file. */
+  config: string;
+  /** Absolute path to the suite JSON file. */
+  suite: string;
+  /** Absolute path to the results directory. */
+  results: string;
+  /** Absolute path to the reports directory. */
+  reports: string;
+  /** Absolute path to the logs directory. */
+  logs: string;
+  /** Absolute path to the cache root directory. */
+  cache: string;
+  /** Absolute path to the git repos cache directory. */
+  cacheRepos: string;
+  /** Absolute path to the pipeline state file. */
+  pipelineState: string;
+}

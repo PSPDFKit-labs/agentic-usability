@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { analyzeTokens } from '../tokens.js';
-import type { SolutionFile } from '../../core/types.js';
+import type { SolutionFile } from '../../types.js';
 
 describe('analyzeTokens', () => {
   const solution: SolutionFile[] = [

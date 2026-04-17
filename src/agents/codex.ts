@@ -1,7 +1,7 @@
 import { writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { AgentConfig, AgentResult } from '../core/types.js';
+import type { AgentConfig, AgentResult } from '../types.js';
 import { BaseAdapter } from './base.js';
 
 export class CodexAdapter extends BaseAdapter {
