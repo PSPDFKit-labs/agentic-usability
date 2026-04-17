@@ -6,6 +6,7 @@ import cors from 'cors';
 import configRouter from './routes/config.js';
 import suiteRouter from './routes/suite.js';
 import resultsRouter from './routes/results.js';
+import runsRouter from './routes/runs.js';
 import type { ProjectPaths } from '../types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -29,6 +30,7 @@ export function createServer(paths: ProjectPaths): http.Server {
   app.use('/api/config', configRouter);
   app.use('/api/suite', suiteRouter);
   app.use('/api/results', resultsRouter);
+  app.use('/api/runs', runsRouter);
 
   // Serve UI static files
   app.use(express.static(uiDir));

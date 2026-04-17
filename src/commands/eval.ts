@@ -1,22 +1,36 @@
 import chalk from 'chalk';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { loadDotenv } from '../core/env.js';
 import { loadConfig } from '../core/config.js';
-import type { ProjectPaths } from '../types.js';
-import { ensureProjectDirs } from '../core/paths.js';
+import type { ProjectPaths, RunInfo } from '../types.js';
+import { ensureProjectDirs, resolveRunPaths } from '../core/paths.js';
 import { PipelineStateManager } from '../core/pipeline.js';
 import { loadTestSuite, loadSolution, saveResult, formatElapsed } from '../core/suite-io.js';
 import { reportCommand } from './report.js';
 import { executeTestCase, startProxy } from './execute.js';
 import { SandboxClient } from '../sandbox/opensandbox.js';
+import { generateRunId, saveRunInfo, loadRunInfo, listRuns } from '../core/runs.js';
 
 import { WorkerPool } from '../sandbox/worker-pool.js';
 import { analyzeTokens } from '../scoring/tokens.js';
 import { runJudge } from '../scoring/judge.js';
 
 const STAGE_ORDER = ['execute', 'analyze', 'judge', 'report'];
+
+/** Find the latest run whose pipeline state is not yet complete. */
+async function findIncompleteRun(paths: ProjectPaths, runs: RunInfo[]): Promise<string | null> {
+  for (const run of runs) {
+    const rp = resolveRunPaths(paths, run.id);
+    const mgr = new PipelineStateManager(rp.pipelineState);
+    await mgr.load();
+    if (mgr.getState().stage !== 'report') {
+      return run.id;
+    }
+  }
+  return null;
+}
 
 function stageIndex(stage: string): number {
   const idx = STAGE_ORDER.indexOf(stage);
@@ -27,6 +41,8 @@ export async function evalCommand(paths: ProjectPaths, options: {
   resume?: boolean;
   fresh?: boolean;
   skipJudge?: boolean;
+  label?: string;
+  run?: string;
 } = {}): Promise<void> {
   let pipelineAborted = false;
   const onSigint = () => { pipelineAborted = true; };
@@ -34,7 +50,33 @@ export async function evalCommand(paths: ProjectPaths, options: {
 
   const config = await loadConfig(paths.config);
   await ensureProjectDirs(paths);
-  const stateManager = new PipelineStateManager(paths.pipelineState);
+
+  // Determine which run to use
+  let runId: string;
+  if (options.resume) {
+    // Find the run to resume
+    if (options.run) {
+      runId = options.run;
+    } else {
+      // Find latest incomplete run
+      const runs = await listRuns(paths.results);
+      const incompleteRun = await findIncompleteRun(paths, runs);
+      if (!incompleteRun) {
+        console.log(chalk.yellow('No incomplete run found to resume. Starting a new run.'));
+        runId = generateRunId();
+      } else {
+        runId = incompleteRun;
+      }
+    }
+  } else {
+    runId = generateRunId();
+  }
+
+  // Resolve paths scoped to this run
+  const runPaths = resolveRunPaths(paths, runId);
+  await mkdir(runPaths.results, { recursive: true });
+
+  const stateManager = new PipelineStateManager(runPaths.pipelineState);
 
   // Handle --fresh: clear state with confirmation
   if (options.fresh) {
@@ -53,7 +95,10 @@ export async function evalCommand(paths: ProjectPaths, options: {
   // Load existing state on --resume
   if (options.resume) {
     await stateManager.load();
-    console.log(chalk.dim(`Resuming from stage: ${stateManager.getState().stage}`));
+    console.log(chalk.dim(`Resuming run ${runId} from stage: ${stateManager.getState().stage}`));
+  } else {
+    const labelStr = options.label ? ` "${options.label}"` : '';
+    console.log(chalk.dim(`Starting run ${runId}${labelStr}`));
   }
 
   const totalStages = options.skipJudge ? 3 : 4;
@@ -63,6 +108,24 @@ export async function evalCommand(paths: ProjectPaths, options: {
   const allTestIds = testCases.map((tc) => tc.id);
   stateManager.getState().testCases = testCases.length;
   await stateManager.save();
+
+  // Write run manifest (create or update)
+  const runInfo: RunInfo = {
+    id: runId,
+    createdAt: new Date().toISOString(),
+    targets: config.targets.map((t) => t.name),
+    testCount: testCases.length,
+    label: options.label ?? null,
+  };
+  // Preserve existing label/createdAt on resume
+  if (options.resume) {
+    const existing = await loadRunInfo(runPaths.results);
+    if (existing) {
+      runInfo.createdAt = existing.createdAt;
+      runInfo.label = existing.label;
+    }
+  }
+  await saveRunInfo(runPaths.results, runInfo);
 
   // Stage 1: Execute (per target)
   const execStageNum = 1;
@@ -107,12 +170,12 @@ export async function evalCommand(paths: ProjectPaths, options: {
         incompleteTestCases,
         async (tc) => {
           try {
-            await executeTestCase(tc, target, config, paths, pool, proxyEnv, proxy);
+            await executeTestCase(tc, target, config, runPaths, pool, proxyEnv, proxy);
             stateManager.markTestComplete('execute', tc.id);
             await stateManager.save();
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            await saveResult(paths, tc.id, 'error.log', message, target.name);
+            await saveResult(runPaths, tc.id, 'error.log', message, target.name);
             throw err;
           }
         },
@@ -165,7 +228,7 @@ export async function evalCommand(paths: ProjectPaths, options: {
       for (const tc of testCases) {
         if (!incomplete.includes(tc.id)) continue;
 
-        const solution = await loadSolution(paths, tc.id, target.name);
+        const solution = await loadSolution(runPaths, tc.id, target.name);
         const analysis = analyzeTokens(
           solution ?? [],
           tc.targetApis,
@@ -175,7 +238,7 @@ export async function evalCommand(paths: ProjectPaths, options: {
         );
 
         await saveResult(
-          paths,
+          runPaths,
           tc.id,
           'token-analysis.json',
           JSON.stringify(analysis, null, 2),
@@ -222,7 +285,7 @@ export async function evalCommand(paths: ProjectPaths, options: {
         for (const tc of testCases) {
           if (!incomplete.includes(tc.id)) continue;
 
-          const solution = await loadSolution(paths, tc.id, target.name);
+          const solution = await loadSolution(runPaths, tc.id, target.name);
           if (!solution) {
             console.log(
               chalk.yellow(`  ${tc.id} [${target.name}]: No solution found — skipping judge`),
@@ -232,7 +295,7 @@ export async function evalCommand(paths: ProjectPaths, options: {
 
           let agentNotes: string | undefined;
           try {
-            agentNotes = await readFile(join(paths.results, target.name, tc.id, 'agent-notes.md'), 'utf-8');
+            agentNotes = await readFile(join(runPaths.results, target.name, tc.id, 'agent-notes.md'), 'utf-8');
           } catch {
             // No notes available
           }
@@ -256,7 +319,7 @@ export async function evalCommand(paths: ProjectPaths, options: {
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             console.log(chalk.red(`  ${tc.id} [${target.name}]: Judge failed — ${message}`));
-            await saveResult(paths, tc.id, 'judge-error.log', message, target.name);
+            await saveResult(runPaths, tc.id, 'judge-error.log', message, target.name);
           }
         }
       }
@@ -283,7 +346,7 @@ export async function evalCommand(paths: ProjectPaths, options: {
   console.log(
     chalk.bold.blue(`\n[Stage ${totalStages}/${totalStages}] Generating report...`),
   );
-  await reportCommand(paths);
+  await reportCommand(runPaths);
 
   process.removeListener('SIGINT', onSigint);
   console.log(chalk.bold.green('\nEvaluation complete!'));

@@ -27,6 +27,7 @@ vi.mock('../../core/config.js', () => ({
 
 vi.mock('../../core/paths.js', () => ({
   ensureProjectDirs: vi.fn(),
+  resolveRunPaths: vi.fn().mockImplementation((paths: any, _runId: string) => paths),
 }));
 
 vi.mock('../../core/pipeline.js', () => ({
@@ -40,6 +41,14 @@ vi.mock('../../core/suite-io.js', () => ({
   loadSolution: vi.fn().mockResolvedValue([{ path: 'a.ts', content: 'code' }]),
   saveResult: vi.fn(),
   formatElapsed: vi.fn().mockReturnValue('1s'),
+}));
+
+vi.mock('../../core/runs.js', () => ({
+  generateRunId: vi.fn().mockReturnValue('run-test-id'),
+  saveRunInfo: vi.fn(),
+  loadRunInfo: vi.fn().mockResolvedValue(null),
+  listRuns: vi.fn().mockResolvedValue([]),
+  getLatestRunId: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('../report.js', () => ({
@@ -97,6 +106,11 @@ vi.mock('node:readline/promises', () => ({
     question: vi.fn().mockResolvedValue('y'),
     close: vi.fn(),
   }),
+}));
+
+vi.mock('node:fs/promises', () => ({
+  readFile: vi.fn().mockRejectedValue(new Error('not found')),
+  mkdir: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('ora', () => ({
@@ -173,6 +187,15 @@ describe('evalCommand', () => {
   });
 
   it('resumes from saved state and skips execute if stage > execute', async () => {
+    const { listRuns } = await import('../../core/runs.js');
+    vi.mocked(listRuns).mockResolvedValue([{
+      id: 'run-existing',
+      createdAt: new Date().toISOString(),
+      targets: ['claude'],
+      testCount: 1,
+      label: null,
+    }]);
+
     mockStateManager.getState.mockReturnValue({
       stage: 'analyze',
       completed: { execute: ['TC-001'], analyze: [], judge: [] },

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAllResults, TargetResults, TestResult } from '../api';
+import { getRunResults, TargetResults, TestResult } from '../api';
 import { ScoreCard } from '../components/ScoreCard';
+import { useRuns } from '../context/RunContext';
 
 const colors = {
   bg: '#0d1117',
@@ -251,13 +252,21 @@ function TargetSection({ targetResult }: { targetResult: TargetResults }) {
 }
 
 export function Dashboard() {
+  const { activeRunId } = useRuns();
   const [targets, setTargets] = useState<TargetResults[]>([]);
   const [activeTarget, setActiveTarget] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getAllResults()
+    if (!activeRunId) {
+      setTargets([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    getRunResults(activeRunId)
       .then((data) => {
         setTargets(data.targets);
         if (data.targets.length > 0) setActiveTarget(data.targets[0].target);
@@ -267,7 +276,7 @@ export function Dashboard() {
         setError(err.message);
         setLoading(false);
       });
-  }, []);
+  }, [activeRunId]);
 
   if (loading) {
     return (

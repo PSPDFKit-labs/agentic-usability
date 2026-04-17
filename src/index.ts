@@ -6,7 +6,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { loadDotenv } from './core/env.js';
-import { resolveProjectPaths, ensureProjectDirs } from './core/paths.js';
+import { resolveProjectPaths, resolveRunPaths, ensureProjectDirs } from './core/paths.js';
+import { getLatestRunId } from './core/runs.js';
 import { initCommand } from './commands/init.js';
 import { generateCommand } from './commands/generate.js';
 import { executeCommand } from './commands/execute.js';
@@ -56,23 +57,29 @@ program
   .command('execute')
   .description('Execute test cases in sandboxed environments with AI agents')
   .option('--tests <ids>', 'Comma-separated list of test case IDs to run')
-  .action(async (opts: { tests?: string }) => {
+  .option('--run <runId>', 'Target run (default: latest)')
+  .action(async (opts: { tests?: string; run?: string }) => {
     await loadDotenv();
     const paths = getPaths();
     await ensureProjectDirs(paths);
+    const runId = opts.run ?? await getLatestRunId(paths.results);
+    if (!runId) { console.error(chalk.red('No runs found. Run "eval" first.')); process.exit(1); }
     const testIds = opts.tests?.split(',').map(s => s.trim());
-    await executeCommand(paths, { testIds });
+    await executeCommand(resolveRunPaths(paths, runId), { testIds });
   });
 
 program
   .command('analyze')
   .description('Analyze generated solutions for expected SDK API calls and patterns')
   .option('--tests <ids>', 'Comma-separated list of test case IDs to run')
-  .action(async (opts: { tests?: string }) => {
+  .option('--run <runId>', 'Target run (default: latest)')
+  .action(async (opts: { tests?: string; run?: string }) => {
     const paths = getPaths();
     await ensureProjectDirs(paths);
+    const runId = opts.run ?? await getLatestRunId(paths.results);
+    if (!runId) { console.error(chalk.red('No runs found. Run "eval" first.')); process.exit(1); }
     const testIds = opts.tests?.split(',').map(s => s.trim());
-    await analyzeCommand(paths, { testIds });
+    await analyzeCommand(resolveRunPaths(paths, runId), { testIds });
   });
 
 program
@@ -80,20 +87,26 @@ program
   .description('Have an LLM compare reference and generated solutions')
   .option('--skip-judge', 'Skip the judge stage')
   .option('--tests <ids>', 'Comma-separated list of test case IDs to run')
-  .action(async (opts: { skipJudge?: boolean; tests?: string }) => {
+  .option('--run <runId>', 'Target run (default: latest)')
+  .action(async (opts: { skipJudge?: boolean; tests?: string; run?: string }) => {
     const paths = getPaths();
     await ensureProjectDirs(paths);
+    const runId = opts.run ?? await getLatestRunId(paths.results);
+    if (!runId) { console.error(chalk.red('No runs found. Run "eval" first.')); process.exit(1); }
     const testIds = opts.tests?.split(',').map(s => s.trim());
-    await judgeCommand(paths, { skipJudge: opts.skipJudge, testIds });
+    await judgeCommand(resolveRunPaths(paths, runId), { skipJudge: opts.skipJudge, testIds });
   });
 
 program
   .command('report')
   .description('Display a terminal scorecard of benchmark results')
   .option('--json', 'Output raw structured JSON instead of the table')
-  .action(async (opts: { json?: boolean }) => {
+  .option('--run <runId>', 'Target run (default: latest)')
+  .action(async (opts: { json?: boolean; run?: string }) => {
     const paths = getPaths();
-    await reportCommand(paths, { json: opts.json });
+    const runId = opts.run ?? await getLatestRunId(paths.results);
+    if (!runId) { console.error(chalk.red('No runs found. Run "eval" first.')); process.exit(1); }
+    await reportCommand(resolveRunPaths(paths, runId), { json: opts.json });
   });
 
 program
@@ -102,8 +115,10 @@ program
   .option('--resume', 'Resume from last checkpoint')
   .option('--fresh', 'Clear existing pipeline state before starting')
   .option('--skip-judge', 'Skip the LLM judge stage')
-  .action(async (opts: { resume?: boolean; fresh?: boolean; skipJudge?: boolean }) => {
-    await evalCommand(getPaths(), { resume: opts.resume, fresh: opts.fresh, skipJudge: opts.skipJudge });
+  .option('--label <name>', 'Label for this eval run')
+  .option('--run <runId>', 'Resume a specific run (with --resume)')
+  .action(async (opts: { resume?: boolean; fresh?: boolean; skipJudge?: boolean; label?: string; run?: string }) => {
+    await evalCommand(getPaths(), { resume: opts.resume, fresh: opts.fresh, skipJudge: opts.skipJudge, label: opts.label, run: opts.run });
   });
 
 program

@@ -127,19 +127,22 @@ Each pipeline project is a self-contained directory. Without `-p`, the CLI treat
 pipelines/my-sdk-eval/           # project root (= CWD or -p target)
   config.json                    # pipeline configuration
   suite.json                     # generated test cases
-  results/                       # per-target solution files + analysis
-    node-20/
-      TC-001/
-        generated-solution.json
-        agent-output.log
-        token-analysis.json
-        judge.json
-  reports/                       # scorecard exports
-  logs/                          # pipeline state for resume
-    pipeline-state.json
+  results/                       # all evaluation runs
+    run-2026-04-17T10-30-00-604Z/  # one directory per run
+      run.json                   # run metadata (id, label, targets, testCount)
+      pipeline-state.json        # resume checkpoint for this run
+      report.json                # scorecard export for this run
+      node-20/                   # per-target results
+        TC-001/
+          generated-solution.json
+          agent-output.log
+          token-analysis.json
+          judge.json
   cache/                         # git repo clones
     repos/
 ```
+
+Each `eval` invocation creates a new run directory. Previous runs are preserved and browsable in the web UI.
 
 ## Commands
 
@@ -147,11 +150,11 @@ pipelines/my-sdk-eval/           # project root (= CWD or -p target)
 |---------|-------------|-------|
 | `init` | Create a new pipeline project (interactive wizard) | `-p <dir>` |
 | `generate` | Generate test suite from SDK source | `--fresh`, `--non-interactive` |
-| `execute` | Run agents in sandboxes to solve test cases | `--tests <ids>` |
-| `analyze` | Regex-based token analysis of generated solutions | `--tests <ids>` |
-| `judge` | LLM comparison of reference vs generated solutions | `--skip-judge`, `--tests <ids>` |
-| `report` | Display terminal scorecard | `--json` |
-| `eval` | Run evaluation pipeline: execute → analyze → judge → report | `--resume`, `--fresh`, `--skip-judge` |
+| `execute` | Run agents in sandboxes to solve test cases | `--tests <ids>`, `--run <runId>` |
+| `analyze` | Regex-based token analysis of generated solutions | `--tests <ids>`, `--run <runId>` |
+| `judge` | LLM comparison of reference vs generated solutions | `--skip-judge`, `--tests <ids>`, `--run <runId>` |
+| `report` | Display terminal scorecard | `--json`, `--run <runId>` |
+| `eval` | Run evaluation pipeline: execute → analyze → judge → report | `--resume`, `--fresh`, `--skip-judge`, `--label <name>`, `--run <runId>` |
 | `inspect` | Open web UI to inspect, edit, and run the pipeline | `--port <number>` |
 | `insights` | Interactive AI analysis of pipeline results | `--fresh` |
 
@@ -381,11 +384,12 @@ npx agentic-usability inspect -p pipelines/my-sdk-eval --port 8888
 ```
 
 The UI includes:
-- **Dashboard** — scorecard overview with aggregate metrics per target
-- **Test Cases** — filterable list with per-test-case detail view, including side-by-side reference vs generated solution comparison
+- **Dashboard** — scorecard overview with aggregate metrics per target, scoped to the selected run
+- **Runs** — browse, rename, and delete evaluation runs; view per-test-case results with filterable verdicts
 - **Suite Editor** — add, edit, and delete test cases with a form-based editor
 - **Config Editor** — edit `config.json` with a Monaco JSON editor
-- **Pipeline Runner** — trigger individual stages or full runs with real-time streaming output
+
+A global run selector in the header lets you switch between runs. The selection persists across page navigation.
 
 The server reads and writes directly to the pipeline project directory. Press Ctrl+C in the terminal to stop.
 
@@ -409,17 +413,30 @@ Ask about failure patterns, documentation gaps, API design issues, or request pr
 
 ## Pipeline and Resume
 
-The `eval` command orchestrates 4 stages: **execute → analyze → judge → report**. Pipeline state is checkpointed after each test case in `logs/pipeline-state.json`. Run `generate` separately to create the test suite first.
+The `eval` command orchestrates 4 stages: **execute → analyze → judge → report**. Each eval creates a new **run** — an isolated directory under `results/` with its own pipeline state and artifacts. Previous runs are preserved and browsable in the web UI.
 
 ```bash
-# Resume after interruption
+# Basic run
+npx agentic-usability eval -p pipelines/my-sdk-eval
+
+# Label a run for easy identification
+npx agentic-usability eval -p pipelines/my-sdk-eval --label "baseline v2"
+
+# Resume after interruption (finds latest incomplete run)
 npx agentic-usability eval -p pipelines/my-sdk-eval --resume
 
-# Start fresh (clears all state)
-npx agentic-usability eval -p pipelines/my-sdk-eval --fresh
+# Resume a specific run
+npx agentic-usability eval -p pipelines/my-sdk-eval --resume --run run-2026-04-17T10-30-00-604Z
 
 # Skip the LLM judge stage (faster, token-analysis only)
 npx agentic-usability eval -p pipelines/my-sdk-eval --skip-judge
+```
+
+Run standalone stages against a specific run (defaults to the latest run):
+
+```bash
+npx agentic-usability analyze -p pipelines/my-sdk-eval --run run-2026-04-17T10-30-00-604Z
+npx agentic-usability report  -p pipelines/my-sdk-eval --run run-2026-04-17T10-30-00-604Z
 ```
 
 ## Test Suite Format

@@ -163,6 +163,14 @@ export interface AggregateResults {
   missedTokens: Array<{ token: string; missRate: number; missCount: number; totalCount: number }>;
 }
 
+export interface RunInfo {
+  id: string;
+  createdAt: string;
+  targets: string[];
+  testCount: number;
+  label: string | null;
+}
+
 export interface ProjectPaths {
   /** Absolute path to the project root directory. */
   root: string;
@@ -172,10 +180,6 @@ export interface ProjectPaths {
   suite: string;
   /** Absolute path to the results directory. */
   results: string;
-  /** Absolute path to the reports directory. */
-  reports: string;
-  /** Absolute path to the logs directory. */
-  logs: string;
   /** Absolute path to the cache root directory. */
   cache: string;
   /** Absolute path to the git repos cache directory. */

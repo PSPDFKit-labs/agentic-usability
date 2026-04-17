@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { loadAllResults, computeAggregates, loadJsonFile, loadTextFile } from '../../core/results.js';
 import { loadConfig } from '../../core/config.js';
 import { loadTestSuite } from '../../core/suite-io.js';
+import { getLatestRunId } from '../../core/runs.js';
+import { resolveRunPaths } from '../../core/paths.js';
 import type { ProjectPaths } from '../../types.js';
 import type { TokenAnalysis, JudgeScore, SolutionFile } from '../../types.js';
 
@@ -14,16 +16,26 @@ function safeName(s: string): string | null {
   return s;
 }
 
-// GET / — results for all targets
+/** Resolve paths to the latest run. Returns null if no runs exist. */
+async function resolveLatestRunPaths(paths: ProjectPaths): Promise<ProjectPaths | null> {
+  const runId = await getLatestRunId(paths.results);
+  if (!runId) return null;
+  return resolveRunPaths(paths, runId);
+}
+
+// GET / — results for all targets (latest run)
 router.get('/', async (req, res) => {
   const paths = req.app.locals['paths'] as ProjectPaths;
   try {
+    const runPaths = await resolveLatestRunPaths(paths);
+    if (!runPaths) { res.json({ targets: [] }); return; }
+
     const config = await loadConfig(paths.config);
     const testCases = await loadTestSuite(paths);
 
     const targets = await Promise.all(
       config.targets.map(async (t) => {
-        const testResults = await loadAllResults(paths, testCases, t.name);
+        const testResults = await loadAllResults(runPaths, testCases, t.name);
         const aggregates = computeAggregates(testResults, t.name);
         return { target: t.name, testResults, aggregates };
       })
@@ -36,14 +48,17 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /:target — results for a single target
+// GET /:target — results for a single target (latest run)
 router.get('/:target', async (req, res) => {
   const paths = req.app.locals['paths'] as ProjectPaths;
   const target = safeName(req.params['target']!);
   if (!target) { res.status(400).json({ error: 'Invalid target name' }); return; }
   try {
+    const runPaths = await resolveLatestRunPaths(paths);
+    if (!runPaths) { res.json({ target, testResults: [], aggregates: null }); return; }
+
     const testCases = await loadTestSuite(paths);
-    const testResults = await loadAllResults(paths, testCases, target);
+    const testResults = await loadAllResults(runPaths, testCases, target);
     const aggregates = computeAggregates(testResults, target);
     res.json({ target, testResults, aggregates });
   } catch (err) {
@@ -52,14 +67,17 @@ router.get('/:target', async (req, res) => {
   }
 });
 
-// GET /:target/:testId — detailed files for one test case
+// GET /:target/:testId — detailed files for one test case (latest run)
 router.get('/:target/:testId', async (req, res) => {
   const paths = req.app.locals['paths'] as ProjectPaths;
   const target = safeName(req.params['target']!);
   const testId = safeName(req.params['testId']!);
   if (!target || !testId) { res.status(400).json({ error: 'Invalid target or testId' }); return; }
   try {
-    const dir = join(paths.results, target, testId);
+    const runPaths = await resolveLatestRunPaths(paths);
+    if (!runPaths) { res.json({ tokenAnalysis: null, judgeScore: null, generatedSolution: null, agentOutput: null, agentCmd: null, setupLog: null, agentNotes: null }); return; }
+
+    const dir = join(runPaths.results, target, testId);
     const [tokenAnalysis, judgeScore, generatedSolution, agentOutput, agentCmd, setupLog, agentNotes] = await Promise.all([
       loadJsonFile<TokenAnalysis>(join(dir, 'token-analysis.json')),
       loadJsonFile<JudgeScore>(join(dir, 'judge.json')),

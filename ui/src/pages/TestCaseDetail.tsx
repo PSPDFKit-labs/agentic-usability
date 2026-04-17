@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getTestCase, getAllResults, getTestResult, TestCase, TargetResults, TokenResult, SolutionFile } from '../api';
+import { getTestCase, getRunResults, getRunTestResult, TestCase, TargetResults, TokenResult, SolutionFile } from '../api';
 import { MetricBar } from '../components/MetricBar';
 import { CodeViewer } from '../components/CodeViewer';
+import { useRuns } from '../context/RunContext';
 
 const colors = {
   bg: '#0d1117',
@@ -517,6 +518,7 @@ function TargetPanel({
 export function TestCaseDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { activeRunId } = useRuns();
   const [testCase, setTestCase] = useState<TestCase | null>(null);
   const [allTargets, setAllTargets] = useState<TargetResults[]>([]);
   const [loading, setLoading] = useState(true);
@@ -526,9 +528,9 @@ export function TestCaseDetail() {
 
   // Fetch log files when active target changes
   useEffect(() => {
-    if (!id || !activeTarget) { setLogs(null); return; }
+    if (!id || !activeTarget || !activeRunId) { setLogs(null); return; }
     setLogs(null);
-    getTestResult(activeTarget, id)
+    getRunTestResult(activeRunId, activeTarget, id)
       .then((result) => {
         setLogs({
           agentOutput: result.agentOutput,
@@ -538,11 +540,13 @@ export function TestCaseDetail() {
         });
       })
       .catch(() => setLogs(null));
-  }, [id, activeTarget]);
+  }, [id, activeTarget, activeRunId]);
 
   useEffect(() => {
-    if (!id) return;
-    Promise.all([getTestCase(id), getAllResults()])
+    if (!id || !activeRunId) return;
+    setLoading(true);
+    setError(null);
+    Promise.all([getTestCase(id), getRunResults(activeRunId)])
       .then(([tc, results]) => {
         setTestCase(tc);
         // Keep all targets that ran at all
@@ -558,7 +562,7 @@ export function TestCaseDetail() {
         setError(err.message);
         setLoading(false);
       });
-  }, [id]);
+  }, [id, activeRunId]);
 
   if (loading) {
     return (

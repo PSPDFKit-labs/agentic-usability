@@ -19,12 +19,29 @@ vi.mock('../../core/results.js', () => ({
   loadTextFile: vi.fn(),
 }));
 
+vi.mock('../../core/runs.js', () => ({
+  getLatestRunId: vi.fn(),
+}));
+
+vi.mock('../../core/paths.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../core/paths.js')>();
+  return {
+    ...actual,
+    resolveRunPaths: vi.fn(),
+  };
+});
+
 import { loadConfig } from '../../core/config.js';
 import { loadTestSuite } from '../../core/suite-io.js';
 import { loadAllResults, computeAggregates, loadJsonFile, loadTextFile } from '../../core/results.js';
+import { getLatestRunId } from '../../core/runs.js';
+import { resolveRunPaths } from '../../core/paths.js';
 import router from '../routes/results.js';
 
 const paths = makeProjectPaths();
+
+// Run-scoped paths returned by resolveRunPaths
+const runPaths = { ...paths, results: `${paths.results}/run-latest`, pipelineState: `${paths.results}/run-latest/pipeline-state.json` };
 
 function createApp() {
   const app = express();
@@ -85,6 +102,8 @@ function makeAggregates(target: string, testResults: TestResult[]): AggregateRes
 describe('GET /results', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getLatestRunId).mockResolvedValue('run-latest');
+    vi.mocked(resolveRunPaths).mockReturnValue(runPaths);
   });
 
   it('returns targets with results and aggregates', async () => {
@@ -107,6 +126,16 @@ describe('GET /results', () => {
     expect(res.body.targets[0].target).toBe('claude');
     expect(res.body.targets[0].testResults).toHaveLength(1);
     expect(res.body.targets[0].aggregates.avgApiCoverage).toBe(100);
+  });
+
+  it('returns empty targets when no runs exist', async () => {
+    vi.mocked(getLatestRunId).mockResolvedValue(null);
+
+    const app = createApp();
+    const res = await request(app).get('/');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ targets: [] });
   });
 
   it('calls loadAllResults and computeAggregates for each target', async () => {
@@ -148,6 +177,8 @@ describe('GET /results', () => {
 describe('GET /results/:target', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getLatestRunId).mockResolvedValue('run-latest');
+    vi.mocked(resolveRunPaths).mockReturnValue(runPaths);
   });
 
   it('returns single target results', async () => {
@@ -166,7 +197,7 @@ describe('GET /results/:target', () => {
     expect(res.body.target).toBe('claude');
     expect(res.body.testResults).toHaveLength(1);
     expect(res.body.aggregates).toBeDefined();
-    expect(loadAllResults).toHaveBeenCalledWith(paths, testCases, 'claude');
+    expect(loadAllResults).toHaveBeenCalledWith(runPaths, testCases, 'claude');
     expect(computeAggregates).toHaveBeenCalledWith(testResults, 'claude');
   });
 
@@ -185,6 +216,8 @@ describe('GET /results/:target', () => {
 describe('GET /results/:target/:testId', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getLatestRunId).mockResolvedValue('run-latest');
+    vi.mocked(resolveRunPaths).mockReturnValue(runPaths);
   });
 
   it('returns detail files for a test case', async () => {
@@ -250,7 +283,7 @@ describe('GET /results/:target/:testId', () => {
     const app = createApp();
     await request(app).get('/claude/TC-001');
 
-    const expectedDir = `${paths.results}/claude/TC-001`;
+    const expectedDir = `${runPaths.results}/claude/TC-001`;
     expect(loadJsonFile).toHaveBeenCalledWith(`${expectedDir}/token-analysis.json`);
     expect(loadJsonFile).toHaveBeenCalledWith(`${expectedDir}/judge.json`);
     expect(loadJsonFile).toHaveBeenCalledWith(`${expectedDir}/generated-solution.json`);

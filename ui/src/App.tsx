@@ -1,9 +1,11 @@
 import { Routes, Route, NavLink } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';
-import { TestCases } from './pages/TestCases';
+import { Runs } from './pages/Runs';
 import { TestCaseDetail } from './pages/TestCaseDetail';
 import { SuiteEditor } from './pages/SuiteEditor';
 import { ConfigEditor } from './pages/ConfigEditor';
+import { RunProvider, useRuns } from './context/RunContext';
+
 const colors = {
   bg: '#0d1117',
   sidebar: '#161b22',
@@ -15,12 +17,56 @@ const colors = {
 
 const navItems = [
   { to: '/', label: 'Dashboard', end: true },
-  { to: '/cases', label: 'Test Cases' },
+  { to: '/runs', label: 'Runs' },
   { to: '/suite', label: 'Suite Editor' },
   { to: '/config', label: 'Config' },
 ];
 
-export function App() {
+function formatRunDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
+      ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return iso;
+  }
+}
+
+function RunSelector() {
+  const { runs, activeRunId, setActiveRunId } = useRuns();
+
+  if (runs.length === 0) return null;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <span style={{ fontSize: '12px', fontWeight: 600, color: colors.text }}>Run:</span>
+      <select
+        value={activeRunId ?? ''}
+        onChange={(e) => setActiveRunId(e.target.value)}
+        style={{
+          background: colors.bg,
+          color: colors.accent,
+          border: `1px solid ${colors.border}`,
+          borderRadius: '4px',
+          padding: '4px 10px',
+          fontSize: '12px',
+          fontFamily: 'monospace',
+          fontWeight: 600,
+          cursor: 'pointer',
+          maxWidth: '320px',
+        }}
+      >
+        {runs.map((r) => (
+          <option key={r.id} value={r.id}>
+            {r.label || formatRunDate(r.createdAt)} ({r.testCount} tests)
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function AppContent() {
   return (
     <div
       style={{
@@ -141,15 +187,7 @@ export function App() {
             flexShrink: 0,
           }}
         >
-          <span
-            style={{
-              fontSize: '13px',
-              color: colors.textMuted,
-              fontWeight: 500,
-            }}
-          >
-            Agentic Usability
-          </span>
+          <RunSelector />
         </header>
 
         {/* Route content */}
@@ -162,7 +200,7 @@ export function App() {
         >
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/cases" element={<TestCases />} />
+            <Route path="/runs" element={<Runs />} />
             <Route path="/cases/:id" element={<TestCaseDetail />} />
             <Route path="/suite" element={<SuiteEditor />} />
             <Route path="/config" element={<ConfigEditor />} />
@@ -170,5 +208,13 @@ export function App() {
         </main>
       </div>
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <RunProvider>
+      <AppContent />
+    </RunProvider>
   );
 }

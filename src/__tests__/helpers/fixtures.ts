@@ -53,12 +53,10 @@ export function makeProjectPaths(overrides?: Partial<ProjectPaths>): ProjectPath
     config: '/fake/project/config.json',
     suite: '/fake/project/suite.json',
     results: '/fake/project/results',
-    reports: '/fake/project/reports',
-    logs: '/fake/project/logs',
     cache: '/fake/project/cache',
     cacheRepos: '/fake/project/cache/repos',
 
-    pipelineState: '/fake/project/logs/pipeline-state.json',
+    pipelineState: '/fake/project/results/pipeline-state.json',
     ...overrides,
   };
 }

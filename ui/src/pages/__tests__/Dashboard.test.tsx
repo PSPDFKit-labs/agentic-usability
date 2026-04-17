@@ -3,14 +3,17 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { Dashboard } from '../Dashboard';
 import type { TargetResults } from '../../api';
+import { RunProvider } from '../../context/RunContext';
 
 vi.mock('../../api', () => ({
-  getAllResults: vi.fn(),
+  getRunResults: vi.fn(),
+  getRuns: vi.fn(),
 }));
 
-import { getAllResults } from '../../api';
+import { getRunResults, getRuns } from '../../api';
 
-const mockGetAllResults = vi.mocked(getAllResults);
+const mockGetRunResults = vi.mocked(getRunResults);
+const mockGetRuns = vi.mocked(getRuns);
 
 function makeTargetResults(target = 'claude'): TargetResults {
   return {
@@ -58,27 +61,36 @@ function makeTargetResults(target = 'claude'): TargetResults {
 function renderDashboard() {
   return render(
     <BrowserRouter>
-      <Dashboard />
+      <RunProvider>
+        <Dashboard />
+      </RunProvider>
     </BrowserRouter>
   );
 }
 
 describe('Dashboard', () => {
   beforeEach(() => {
-    mockGetAllResults.mockReset();
+    mockGetRunResults.mockReset();
+    mockGetRuns.mockReset();
+    // Default: one run exists so the context provides an activeRunId
+    mockGetRuns.mockResolvedValue([
+      { id: 'run-test', createdAt: '2026-04-17T10:00:00Z', targets: ['claude'], testCount: 1, label: null },
+    ]);
   });
 
-  it('shows loading indicator initially', () => {
-    // Keep promise pending so loading state persists
-    mockGetAllResults.mockReturnValueOnce(new Promise(() => {}));
+  it('shows loading indicator initially', async () => {
+    // Keep promise pending so loading state persists after RunProvider resolves
+    mockGetRunResults.mockReturnValueOnce(new Promise(() => {}));
 
     renderDashboard();
 
-    expect(screen.getByText(/loading results/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/loading results/i)).toBeInTheDocument();
+    });
   });
 
   it('renders scorecard after data loads', async () => {
-    mockGetAllResults.mockResolvedValueOnce({ targets: [makeTargetResults('claude')] });
+    mockGetRunResults.mockResolvedValueOnce({ targets: [makeTargetResults('claude')] });
 
     renderDashboard();
 
@@ -91,7 +103,7 @@ describe('Dashboard', () => {
   });
 
   it('shows error message when fetch fails', async () => {
-    mockGetAllResults.mockRejectedValueOnce(new Error('Network error'));
+    mockGetRunResults.mockRejectedValueOnce(new Error('Network error'));
 
     renderDashboard();
 
@@ -103,7 +115,7 @@ describe('Dashboard', () => {
   });
 
   it('shows empty state when no targets are returned', async () => {
-    mockGetAllResults.mockResolvedValueOnce({ targets: [] });
+    mockGetRunResults.mockResolvedValueOnce({ targets: [] });
 
     renderDashboard();
 
@@ -113,7 +125,7 @@ describe('Dashboard', () => {
   });
 
   it('renders target selector tabs when multiple targets present', async () => {
-    mockGetAllResults.mockResolvedValueOnce({
+    mockGetRunResults.mockResolvedValueOnce({
       targets: [makeTargetResults('claude'), makeTargetResults('gpt-4')],
     });
 

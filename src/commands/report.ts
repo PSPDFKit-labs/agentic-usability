@@ -165,10 +165,9 @@ export async function reportCommand(paths: ProjectPaths, options: { json?: boole
     console.log(JSON.stringify(output, null, 2));
   }
 
-  // Always write a report file to the reports directory
+  // Write report file inside the run's results directory
   const output = buildJsonOutput(allAggregates);
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const reportPath = join(paths.reports, `report-${timestamp}.json`);
+  const reportPath = join(paths.results, 'report.json');
   await writeFile(reportPath, JSON.stringify(output, null, 2), 'utf-8');
   console.log(chalk.dim(`\nReport saved to ${reportPath}`));
 }
