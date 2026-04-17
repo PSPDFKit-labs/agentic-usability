@@ -1,6 +1,6 @@
 import { Routes, Route, NavLink } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';
-import { Runs } from './pages/Runs';
+import { EvalRun } from './pages/EvalRun';
 import { TestCaseDetail } from './pages/TestCaseDetail';
 import { SuiteEditor } from './pages/SuiteEditor';
 import { ConfigEditor } from './pages/ConfigEditor';
@@ -15,54 +15,49 @@ const colors = {
   accent: '#58a6ff',
 };
 
-const navItems = [
-  { to: '/', label: 'Dashboard', end: true },
-  { to: '/runs', label: 'Runs' },
-  { to: '/suite', label: 'Suite Editor' },
-  { to: '/config', label: 'Config' },
-];
+const navLinkStyle = (isActive: boolean): React.CSSProperties => ({
+  display: 'block',
+  padding: '8px 12px',
+  borderRadius: '6px',
+  marginBottom: '2px',
+  fontSize: '13px',
+  fontWeight: isActive ? 600 : 400,
+  color: isActive ? colors.accent : colors.text,
+  background: isActive ? 'rgba(88, 166, 255, 0.1)' : 'transparent',
+  textDecoration: 'none',
+  transition: 'background 0.15s, color 0.15s',
+});
 
-function formatRunDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
-      ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return iso;
-  }
-}
+const onNavEnter = (e: React.MouseEvent<HTMLAnchorElement>) => {
+  const el = e.currentTarget;
+  if (!el.getAttribute('aria-current')) el.style.background = 'rgba(255, 255, 255, 0.05)';
+};
+const onNavLeave = (e: React.MouseEvent<HTMLAnchorElement>) => {
+  const el = e.currentTarget;
+  if (!el.getAttribute('aria-current')) el.style.background = 'transparent';
+};
 
-function RunSelector() {
-  const { runs, activeRunId, setActiveRunId } = useRuns();
-
-  if (runs.length === 0) return null;
+function SidebarNav() {
+  const { runs } = useRuns();
+  const latestRunId = runs.length > 0 ? runs[0].id : null;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <span style={{ fontSize: '12px', fontWeight: 600, color: colors.text }}>Run:</span>
-      <select
-        value={activeRunId ?? ''}
-        onChange={(e) => setActiveRunId(e.target.value)}
-        style={{
-          background: colors.bg,
-          color: colors.accent,
-          border: `1px solid ${colors.border}`,
-          borderRadius: '4px',
-          padding: '4px 10px',
-          fontSize: '12px',
-          fontFamily: 'monospace',
-          fontWeight: 600,
-          cursor: 'pointer',
-          maxWidth: '320px',
-        }}
-      >
-        {runs.map((r) => (
-          <option key={r.id} value={r.id}>
-            {r.label || formatRunDate(r.createdAt)} ({r.testCount} tests)
-          </option>
-        ))}
-      </select>
-    </div>
+    <nav style={{ flex: 1, padding: '12px 8px' }}>
+      <NavLink to="/" end style={({ isActive }) => navLinkStyle(isActive)} onMouseEnter={onNavEnter} onMouseLeave={onNavLeave}>
+        Dashboard
+      </NavLink>
+      {latestRunId && (
+        <NavLink to={`/runs/${latestRunId}`} style={({ isActive }) => navLinkStyle(isActive)} onMouseEnter={onNavEnter} onMouseLeave={onNavLeave}>
+          Eval Run
+        </NavLink>
+      )}
+      <NavLink to="/suite" style={({ isActive }) => navLinkStyle(isActive)} onMouseEnter={onNavEnter} onMouseLeave={onNavLeave}>
+        Suite Editor
+      </NavLink>
+      <NavLink to="/config" style={({ isActive }) => navLinkStyle(isActive)} onMouseEnter={onNavEnter} onMouseLeave={onNavLeave}>
+        Config
+      </NavLink>
+    </nav>
   );
 }
 
@@ -88,72 +83,22 @@ function AppContent() {
           flexDirection: 'column',
         }}
       >
-        {/* Branding */}
         <div
           style={{
             padding: '20px 16px 16px',
             borderBottom: `1px solid ${colors.border}`,
           }}
         >
-          <div
-            style={{
-              fontSize: '14px',
-              fontWeight: 600,
-              color: colors.accent,
-              letterSpacing: '0.02em',
-            }}
-          >
+          <div style={{ fontSize: '14px', fontWeight: 600, color: colors.accent, letterSpacing: '0.02em' }}>
             Agentic Usability
           </div>
-          <div
-            style={{
-              fontSize: '11px',
-              color: colors.textMuted,
-              marginTop: '2px',
-            }}
-          >
+          <div style={{ fontSize: '11px', color: colors.textMuted, marginTop: '2px' }}>
             Evaluation Platform
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav style={{ flex: 1, padding: '12px 8px' }}>
-          {navItems.map(({ to, label, end }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              style={({ isActive }) => ({
-                display: 'block',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                marginBottom: '2px',
-                fontSize: '13px',
-                fontWeight: isActive ? 600 : 400,
-                color: isActive ? colors.accent : colors.text,
-                background: isActive ? 'rgba(88, 166, 255, 0.1)' : 'transparent',
-                textDecoration: 'none',
-                transition: 'background 0.15s, color 0.15s',
-              })}
-              onMouseEnter={(e) => {
-                const el = e.currentTarget;
-                if (!el.getAttribute('aria-current')) {
-                  el.style.background = 'rgba(255, 255, 255, 0.05)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                const el = e.currentTarget;
-                if (!el.getAttribute('aria-current')) {
-                  el.style.background = 'transparent';
-                }
-              }}
-            >
-              {label}
-            </NavLink>
-          ))}
-        </nav>
+        <SidebarNav />
 
-        {/* Footer */}
         <div
           style={{
             padding: '12px 16px',
@@ -167,46 +112,15 @@ function AppContent() {
       </aside>
 
       {/* Main content */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Header */}
-        <header
-          style={{
-            height: '48px',
-            borderBottom: `1px solid ${colors.border}`,
-            display: 'flex',
-            alignItems: 'center',
-            padding: '0 24px',
-            background: colors.sidebar,
-            flexShrink: 0,
-          }}
-        >
-          <RunSelector />
-        </header>
-
-        {/* Route content */}
-        <main
-          style={{
-            flex: 1,
-            overflow: 'auto',
-            padding: '24px',
-          }}
-        >
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/runs" element={<Runs />} />
-            <Route path="/cases/:id" element={<TestCaseDetail />} />
-            <Route path="/suite" element={<SuiteEditor />} />
-            <Route path="/config" element={<ConfigEditor />} />
-          </Routes>
-        </main>
-      </div>
+      <main style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/runs/:runId" element={<EvalRun />} />
+          <Route path="/runs/:runId/cases/:id" element={<TestCaseDetail />} />
+          <Route path="/suite" element={<SuiteEditor />} />
+          <Route path="/config" element={<ConfigEditor />} />
+        </Routes>
+      </main>
     </div>
   );
 }

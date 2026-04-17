@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getTestCase, getRunResults, getRunTestResult, TestCase, TargetResults, TokenResult, SolutionFile } from '../api';
 import { MetricBar } from '../components/MetricBar';
 import { CodeViewer } from '../components/CodeViewer';
-import { useRuns } from '../context/RunContext';
 
 const colors = {
   bg: '#0d1117',
@@ -516,9 +515,8 @@ function TargetPanel({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function TestCaseDetail() {
-  const { id } = useParams<{ id: string }>();
+  const { id, runId } = useParams<{ id: string; runId: string }>();
   const navigate = useNavigate();
-  const { activeRunId } = useRuns();
   const [testCase, setTestCase] = useState<TestCase | null>(null);
   const [allTargets, setAllTargets] = useState<TargetResults[]>([]);
   const [loading, setLoading] = useState(true);
@@ -528,9 +526,9 @@ export function TestCaseDetail() {
 
   // Fetch log files when active target changes
   useEffect(() => {
-    if (!id || !activeTarget || !activeRunId) { setLogs(null); return; }
+    if (!id || !activeTarget || !runId) { setLogs(null); return; }
     setLogs(null);
-    getRunTestResult(activeRunId, activeTarget, id)
+    getRunTestResult(runId, activeTarget, id)
       .then((result) => {
         setLogs({
           agentOutput: result.agentOutput,
@@ -540,13 +538,13 @@ export function TestCaseDetail() {
         });
       })
       .catch(() => setLogs(null));
-  }, [id, activeTarget, activeRunId]);
+  }, [id, activeTarget, runId]);
 
   useEffect(() => {
-    if (!id || !activeRunId) return;
+    if (!id || !runId) return;
     setLoading(true);
     setError(null);
-    Promise.all([getTestCase(id), getRunResults(activeRunId)])
+    Promise.all([getTestCase(id), getRunResults(runId)])
       .then(([tc, results]) => {
         setTestCase(tc);
         // Keep all targets that ran at all
@@ -562,7 +560,7 @@ export function TestCaseDetail() {
         setError(err.message);
         setLoading(false);
       });
-  }, [id, activeRunId]);
+  }, [id, runId]);
 
   if (loading) {
     return (

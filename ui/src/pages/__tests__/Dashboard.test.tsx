@@ -2,61 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { Dashboard } from '../Dashboard';
-import type { TargetResults } from '../../api';
 import { RunProvider } from '../../context/RunContext';
 
 vi.mock('../../api', () => ({
-  getRunResults: vi.fn(),
   getRuns: vi.fn(),
+  getRunResults: vi.fn(),
 }));
 
-import { getRunResults, getRuns } from '../../api';
+import { getRuns, getRunResults } from '../../api';
 
-const mockGetRunResults = vi.mocked(getRunResults);
 const mockGetRuns = vi.mocked(getRuns);
-
-function makeTargetResults(target = 'claude'): TargetResults {
-  return {
-    target,
-    testResults: [
-      {
-        testId: 'TC-001',
-        difficulty: 'easy',
-        problemStatement: 'Test problem',
-        targetApis: ['apiA'],
-        expectedTokens: ['tok1'],
-        tokenAnalysis: {
-          testId: 'TC-001', target,
-          apis: [{ token: 'apiA', found: true }],
-          tokens: [{ token: 'tok1', found: true }],
-          apiCoverage: 100, tokenCoverage: 100,
-        },
-        judgeScore: {
-          testId: 'TC-001', target,
-          apiDiscovery: 90, callCorrectness: 85,
-          completeness: 80, functionalCorrectness: 88,
-          overallVerdict: true, notes: 'good',
-        },
-        generatedSolution: null,
-        agentNotes: null,
-      },
-    ],
-    aggregates: {
-      target,
-      testResults: [],
-      avgApiCoverage: 100,
-      avgTokenCoverage: 100,
-      avgApiDiscovery: 90,
-      avgCallCorrectness: 85,
-      avgCompleteness: 80,
-      avgFunctionalCorrectness: 88,
-      passRate: 100,
-      byDifficulty: {},
-      worstApis: [],
-      missedTokens: [],
-    },
-  };
-}
+const mockGetRunResults = vi.mocked(getRunResults);
 
 function renderDashboard() {
   return render(
@@ -70,73 +26,55 @@ function renderDashboard() {
 
 describe('Dashboard', () => {
   beforeEach(() => {
-    mockGetRunResults.mockReset();
     mockGetRuns.mockReset();
-    // Default: one run exists so the context provides an activeRunId
-    mockGetRuns.mockResolvedValue([
-      { id: 'run-test', createdAt: '2026-04-17T10:00:00Z', targets: ['claude'], testCount: 1, label: null },
+    mockGetRunResults.mockReset();
+    mockGetRunResults.mockResolvedValue({ targets: [] });
+  });
+
+  it('shows loading indicator initially', () => {
+    mockGetRuns.mockReturnValueOnce(new Promise(() => {}));
+    renderDashboard();
+    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+  });
+
+  it('shows empty state when no runs exist', async () => {
+    mockGetRuns.mockResolvedValueOnce([]);
+    renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText(/no evaluation runs yet/i)).toBeInTheDocument();
+    });
+  });
+
+  it('renders run cards when runs exist', async () => {
+    mockGetRuns.mockResolvedValueOnce([
+      { id: 'run-1', createdAt: '2026-04-17T10:00:00Z', targets: ['claude'], testCount: 12, label: 'baseline' },
     ]);
+    renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText('baseline')).toBeInTheDocument();
+    });
+    expect(screen.getByText('12 tests')).toBeInTheDocument();
   });
 
-  it('shows loading indicator initially', async () => {
-    // Keep promise pending so loading state persists after RunProvider resolves
-    mockGetRunResults.mockReturnValueOnce(new Promise(() => {}));
-
+  it('renders multiple runs', async () => {
+    mockGetRuns.mockResolvedValueOnce([
+      { id: 'run-1', createdAt: '2026-04-17T10:00:00Z', targets: ['claude'], testCount: 12, label: 'Run A' },
+      { id: 'run-2', createdAt: '2026-04-15T09:00:00Z', targets: ['gpt-4'], testCount: 8, label: 'Run B' },
+    ]);
     renderDashboard();
-
     await waitFor(() => {
-      expect(screen.getByText(/loading results/i)).toBeInTheDocument();
+      expect(screen.getByText('Run A')).toBeInTheDocument();
+      expect(screen.getByText('Run B')).toBeInTheDocument();
     });
   });
 
-  it('renders scorecard after data loads', async () => {
-    mockGetRunResults.mockResolvedValueOnce({ targets: [makeTargetResults('claude')] });
-
+  it('shows delete button for each run', async () => {
+    mockGetRuns.mockResolvedValueOnce([
+      { id: 'run-1', createdAt: '2026-04-17T10:00:00Z', targets: ['claude'], testCount: 5, label: null },
+    ]);
     renderDashboard();
-
     await waitFor(() => {
-      expect(screen.getByText('Aggregate Scores')).toBeInTheDocument();
-    });
-
-    // Target name should appear
-    expect(screen.getByText('claude')).toBeInTheDocument();
-  });
-
-  it('shows error message when fetch fails', async () => {
-    mockGetRunResults.mockRejectedValueOnce(new Error('Network error'));
-
-    renderDashboard();
-
-    await waitFor(() => {
-      expect(screen.getByText(/error loading results/i)).toBeInTheDocument();
-    });
-
-    expect(screen.getByText(/network error/i)).toBeInTheDocument();
-  });
-
-  it('shows empty state when no targets are returned', async () => {
-    mockGetRunResults.mockResolvedValueOnce({ targets: [] });
-
-    renderDashboard();
-
-    await waitFor(() => {
-      expect(screen.getByText(/no results yet/i)).toBeInTheDocument();
-    });
-  });
-
-  it('renders target selector tabs when multiple targets present', async () => {
-    mockGetRunResults.mockResolvedValueOnce({
-      targets: [makeTargetResults('claude'), makeTargetResults('gpt-4')],
-    });
-
-    renderDashboard();
-
-    await waitFor(() => {
-      // Both targets should appear as tab buttons
-      const buttons = screen.getAllByRole('button');
-      const targetNames = buttons.map((b) => b.textContent);
-      expect(targetNames).toContain('claude');
-      expect(targetNames).toContain('gpt-4');
+      expect(screen.getByText('Delete')).toBeInTheDocument();
     });
   });
 });

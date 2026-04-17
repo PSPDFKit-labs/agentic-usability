@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getRunResults, TargetResults, TestResult } from '../api';
-import { ScoreCard } from '../components/ScoreCard';
 import { useRuns } from '../context/RunContext';
+import { getRunResults, type RunInfo, type TargetResults } from '../api';
 
 const colors = {
   bg: '#0d1117',
@@ -11,342 +10,217 @@ const colors = {
   text: '#e6edf3',
   textMuted: '#8b949e',
   accent: '#58a6ff',
-  rowAlt: 'rgba(255,255,255,0.025)',
-  headerBg: '#161b22',
   pass: '#3fb950',
   fail: '#f85149',
+  headerBg: '#161b22',
 };
+
+function formatDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) +
+      ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return iso;
+  }
+}
 
 function pct(v: number | null | undefined): string {
   if (v == null) return '—';
   return `${Math.round(v)}%`;
 }
 
-function VerdictBadge({ pass }: { pass: boolean }) {
-  return (
-    <span
+function EditableLabel({ run, onRename }: { run: RunInfo; onRename: (id: string, label: string) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(run.label || '');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  const save = async () => {
+    setEditing(false);
+    const trimmed = value.trim();
+    if (trimmed !== (run.label || '')) {
+      await onRename(run.id, trimmed);
+    }
+  };
+
+  return editing ? (
+    <input
+      ref={inputRef}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
+      onClick={(e) => e.stopPropagation()}
       style={{
-        display: 'inline-block',
-        padding: '2px 8px',
-        borderRadius: '4px',
-        fontSize: '11px',
-        fontWeight: 700,
-        letterSpacing: '0.05em',
-        background: pass ? 'rgba(63,185,80,0.15)' : 'rgba(248,81,73,0.15)',
-        color: pass ? colors.pass : colors.fail,
-        border: `1px solid ${pass ? colors.pass : colors.fail}`,
+        background: colors.bg, color: colors.text,
+        border: `1px solid ${colors.accent}`, borderRadius: '3px',
+        padding: '2px 6px', fontSize: '12px', fontFamily: 'monospace', width: '200px',
       }}
+    />
+  ) : (
+    <span
+      onClick={(e) => { e.stopPropagation(); setEditing(true); setValue(run.label || ''); }}
+      style={{ cursor: 'text', fontSize: '12px', fontFamily: 'monospace', color: run.label ? colors.text : colors.textMuted }}
+      title="Click to rename"
     >
-      {pass ? 'PASS' : 'FAIL'}
+      {run.label || run.id}
     </span>
   );
 }
 
-function ResultsTable({ results }: { results: TestResult[] }) {
-  const navigate = useNavigate();
+function ScoresTable({ results }: { results: TargetResults[] }) {
+  if (results.length === 0) {
+    return <span style={{ color: colors.textMuted, fontSize: '11px' }}>No results yet</span>;
+  }
 
   const thStyle: React.CSSProperties = {
-    padding: '8px 12px',
-    textAlign: 'left',
-    fontSize: '11px',
-    fontWeight: 600,
-    color: colors.textMuted,
-    borderBottom: `1px solid ${colors.border}`,
-    background: colors.headerBg,
-    whiteSpace: 'nowrap',
+    padding: '6px 12px', textAlign: 'left', fontSize: '10px', fontWeight: 600,
+    color: colors.textMuted, borderBottom: `1px solid ${colors.border}`,
+    background: colors.headerBg, whiteSpace: 'nowrap',
   };
-
   const tdStyle: React.CSSProperties = {
-    padding: '8px 12px',
-    fontSize: '12px',
-    color: colors.text,
-    borderBottom: `1px solid ${colors.border}`,
-    verticalAlign: 'middle',
+    padding: '6px 12px', fontSize: '11px', color: colors.text,
+    borderBottom: `1px solid ${colors.border}`, whiteSpace: 'nowrap',
   };
 
   return (
     <div style={{ overflowX: 'auto', borderRadius: '6px', border: `1px solid ${colors.border}` }}>
-      <table
-        style={{
-          width: '100%',
-          borderCollapse: 'collapse',
-          background: colors.bg,
-          fontSize: '12px',
-        }}
-      >
-        <thead>
-          <tr>
-            {['ID', 'Difficulty', 'API Cov', 'Token Cov', 'Discovery', 'Correctness', 'Completeness', 'Functional', 'Verdict'].map(
-              (h) => (
-                <th key={h} style={thStyle}>
-                  {h}
-                </th>
-              )
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {results.map((r, i) => {
-            const ta = r.tokenAnalysis;
-            const js = r.judgeScore;
-            const verdict = js?.overallVerdict ?? null;
-            return (
-              <tr
-                key={r.testId}
-                style={{
-                  background: i % 2 === 1 ? colors.rowAlt : 'transparent',
-                  cursor: 'pointer',
-                }}
-                onClick={() => navigate(`/cases/${r.testId}`)}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLTableRowElement).style.background =
-                    'rgba(88,166,255,0.06)';
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLTableRowElement).style.background =
-                    i % 2 === 1 ? colors.rowAlt : 'transparent';
-                }}
-              >
-                <td style={{ ...tdStyle, fontFamily: 'monospace', color: colors.accent }}>
-                  {r.testId}
-                </td>
-                <td style={tdStyle}>
-                  <span
-                    style={{
-                      textTransform: 'capitalize',
-                      color:
-                        r.difficulty === 'easy'
-                          ? colors.pass
-                          : r.difficulty === 'medium'
-                          ? '#e3b341'
-                          : colors.fail,
-                    }}
-                  >
-                    {r.difficulty}
-                  </span>
-                </td>
-                <td style={tdStyle}>{ta ? pct(ta.apiCoverage) : '—'}</td>
-                <td style={tdStyle}>{ta ? pct(ta.tokenCoverage) : '—'}</td>
-                <td style={tdStyle}>{js ? pct(js.apiDiscovery) : '—'}</td>
-                <td style={tdStyle}>{js ? pct(js.callCorrectness) : '—'}</td>
-                <td style={tdStyle}>{js ? pct(js.completeness) : '—'}</td>
-                <td style={tdStyle}>{js ? pct(js.functionalCorrectness) : '—'}</td>
-                <td style={tdStyle}>
-                  {verdict !== null ? <VerdictBadge pass={verdict} /> : <span style={{ color: colors.textMuted }}>—</span>}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function MissedList({
-  title,
-  items,
-}: {
-  title: string;
-  items: Array<{ api?: string; token?: string; missRate: number; missCount: number; totalCount: number }>;
-}) {
-  if (!items.length) return null;
-  return (
-    <div style={{ marginTop: '16px' }}>
-      <div
-        style={{
-          fontSize: '12px',
-          fontWeight: 600,
-          color: colors.textMuted,
-          marginBottom: '8px',
-          textTransform: 'uppercase',
-          letterSpacing: '0.06em',
-        }}
-      >
-        {title}
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-        {items.map((item, i) => {
-          const label = item.api ?? item.token ?? '';
+    <table style={{ width: '100%', borderCollapse: 'collapse', background: colors.bg }}>
+      <thead>
+        <tr>
+          <th style={thStyle}>Target</th>
+          <th style={thStyle}>Pass Rate</th>
+          <th style={thStyle}>API Cov</th>
+          <th style={thStyle}>Token Cov</th>
+          <th style={thStyle}>Discovery</th>
+          <th style={thStyle}>Correctness</th>
+          <th style={thStyle}>Completeness</th>
+          <th style={thStyle}>Functional</th>
+        </tr>
+      </thead>
+      <tbody>
+        {results.map((t) => {
+          const a = t.aggregates;
           return (
-            <div
-              key={i}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'rgba(248,81,73,0.1)',
-                border: `1px solid ${colors.fail}`,
-                borderRadius: '4px',
-                padding: '4px 10px',
-                fontSize: '12px',
-              }}
-            >
-              <span style={{ fontFamily: 'monospace', color: colors.text }}>{label}</span>
-              <span style={{ color: colors.fail, fontSize: '11px' }}>
-                {Math.round(item.missRate)}% miss ({item.missCount}/{item.totalCount})
-              </span>
-            </div>
+            <tr key={t.target}>
+              <td style={{ ...tdStyle, fontFamily: 'monospace', color: colors.accent }}>{t.target}</td>
+              <td style={{ ...tdStyle, color: a.passRate >= 80 ? colors.pass : a.passRate >= 50 ? '#e3b341' : colors.fail }}>{pct(a.passRate)}</td>
+              <td style={tdStyle}>{pct(a.avgApiCoverage)}</td>
+              <td style={tdStyle}>{pct(a.avgTokenCoverage)}</td>
+              <td style={tdStyle}>{pct(a.avgApiDiscovery)}</td>
+              <td style={tdStyle}>{pct(a.avgCallCorrectness)}</td>
+              <td style={tdStyle}>{pct(a.avgCompleteness)}</td>
+              <td style={tdStyle}>{pct(a.avgFunctionalCorrectness)}</td>
+            </tr>
           );
         })}
-      </div>
+      </tbody>
+    </table>
     </div>
   );
 }
 
-function TargetSection({ targetResult }: { targetResult: TargetResults }) {
-  const { target, aggregates, testResults } = targetResult;
-  return (
-    <div style={{ marginBottom: '40px' }}>
-      <h2
-        style={{
-          fontSize: '16px',
-          fontWeight: 600,
-          color: colors.text,
-          marginBottom: '16px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-        }}
-      >
-        <span
-          style={{
-            fontFamily: 'monospace',
-            background: 'rgba(88,166,255,0.1)',
-            color: colors.accent,
-            padding: '2px 8px',
-            borderRadius: '4px',
-            fontSize: '14px',
-          }}
-        >
-          {target}
-        </span>
-        <span style={{ color: colors.textMuted, fontSize: '13px', fontWeight: 400 }}>
-          {testResults.length} test{testResults.length !== 1 ? 's' : ''}
-        </span>
-      </h2>
+function RunCard({ run, results, onDelete, onRename }: {
+  run: RunInfo;
+  results: TargetResults[] | null;
+  onDelete: (id: string) => Promise<void>;
+  onRename: (id: string, label: string) => Promise<void>;
+}) {
+  const navigate = useNavigate();
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '280px 1fr',
-          gap: '20px',
-          alignItems: 'start',
-          marginBottom: '16px',
-        }}
-      >
-        <ScoreCard title="Aggregate Scores" aggregates={aggregates} />
-        <ResultsTable results={testResults} />
+  return (
+    <div
+      style={{
+        border: `1px solid ${colors.border}`, borderRadius: '8px',
+        background: colors.bg, cursor: 'pointer', transition: 'border-color 0.15s',
+      }}
+      onClick={() => navigate(`/runs/${run.id}`)}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = colors.accent; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = colors.border; }}
+    >
+      {/* Card header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 16px', borderBottom: `1px solid ${colors.border}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <EditableLabel run={run} onRename={onRename} />
+          <span style={{ fontSize: '11px', color: colors.textMuted }}>{run.testCount} tests</span>
+          <span style={{ fontSize: '11px', color: colors.textMuted }}>{formatDate(run.createdAt)}</span>
+        </div>
+        <div onClick={(e) => e.stopPropagation()}>
+          {confirmDelete ? (
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <button
+                onClick={async () => { await onDelete(run.id); setConfirmDelete(false); }}
+                style={{ padding: '2px 8px', fontSize: '10px', background: 'rgba(248,81,73,0.15)', color: colors.fail, border: `1px solid ${colors.fail}`, borderRadius: '3px', cursor: 'pointer' }}
+              >Confirm</button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                style={{ padding: '2px 8px', fontSize: '10px', background: 'transparent', color: colors.textMuted, border: `1px solid ${colors.border}`, borderRadius: '3px', cursor: 'pointer' }}
+              >Cancel</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              style={{ padding: '2px 8px', fontSize: '10px', background: 'transparent', color: colors.textMuted, border: `1px solid ${colors.border}`, borderRadius: '3px', cursor: 'pointer' }}
+            >Delete</button>
+          )}
+        </div>
       </div>
 
-      <MissedList
-        title="Worst APIs"
-        items={aggregates.worstApis.map((a) => ({ api: a.api, missRate: a.missRate, missCount: a.missCount, totalCount: a.totalCount }))}
-      />
-      <MissedList
-        title="Missed Tokens"
-        items={aggregates.missedTokens.map((t) => ({ token: t.token, missRate: t.missRate, missCount: t.missCount, totalCount: t.totalCount }))}
-      />
+      {/* Scores */}
+      <div style={{ padding: '8px 16px', overflowX: 'auto' }}>
+        {results === null ? (
+          <div style={{ color: colors.textMuted, fontSize: '11px' }}>Loading scores…</div>
+        ) : (
+          <ScoresTable results={results} />
+        )}
+      </div>
     </div>
   );
 }
 
 export function Dashboard() {
-  const { activeRunId } = useRuns();
-  const [targets, setTargets] = useState<TargetResults[]>([]);
-  const [activeTarget, setActiveTarget] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { runs, removeRun, renameRun, loading } = useRuns();
+  const [runResults, setRunResults] = useState<Record<string, TargetResults[] | null>>({});
 
   useEffect(() => {
-    if (!activeRunId) {
-      setTargets([]);
-      setLoading(false);
-      return;
+    for (const run of runs) {
+      if (runResults[run.id] !== undefined) continue;
+      setRunResults((prev) => ({ ...prev, [run.id]: null }));
+      getRunResults(run.id)
+        .then((data) => setRunResults((prev) => ({ ...prev, [run.id]: data.targets })))
+        .catch(() => setRunResults((prev) => ({ ...prev, [run.id]: [] })));
     }
-    setLoading(true);
-    setError(null);
-    getRunResults(activeRunId)
-      .then((data) => {
-        setTargets(data.targets);
-        if (data.targets.length > 0) setActiveTarget(data.targets[0].target);
-        setLoading(false);
-      })
-      .catch((err: Error) => {
-        setError(err.message);
-        setLoading(false);
-      });
-  }, [activeRunId]);
+  }, [runs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
-    return (
-      <div style={{ color: colors.textMuted, fontSize: '14px', paddingTop: '40px', textAlign: 'center' }}>
-        Loading results…
-      </div>
-    );
+    return <div style={{ color: colors.textMuted, fontSize: '14px', paddingTop: '40px', textAlign: 'center' }}>Loading…</div>;
   }
 
-  if (error) {
-    return (
-      <div
-        style={{
-          color: colors.fail,
-          background: 'rgba(248,81,73,0.1)',
-          border: `1px solid ${colors.fail}`,
-          borderRadius: '6px',
-          padding: '16px',
-          fontSize: '13px',
-          marginTop: '20px',
-        }}
-      >
-        Error loading results: {error}
-      </div>
-    );
-  }
-
-  if (!targets.length) {
+  if (runs.length === 0) {
     return (
       <div style={{ color: colors.text }}>
         <h1 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '8px' }}>Dashboard</h1>
-        <p style={{ color: colors.textMuted, fontSize: '14px' }}>
-          No results yet. Run the pipeline to generate evaluation results.
-        </p>
+        <p style={{ color: colors.textMuted, fontSize: '14px' }}>No evaluation runs yet. Run the pipeline to generate results.</p>
       </div>
     );
   }
 
-  const activeResult = targets.find((t) => t.target === activeTarget) ?? targets[0];
-
   return (
     <div style={{ color: colors.text }}>
-      <h1 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '24px' }}>Dashboard</h1>
-
-      {/* Target selector */}
-      {targets.length > 1 && (
-        <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
-          {targets.map((t) => (
-            <button
-              key={t.target}
-              onClick={() => setActiveTarget(t.target)}
-              style={{
-                padding: '6px 14px',
-                fontSize: '12px',
-                fontFamily: 'monospace',
-                fontWeight: activeTarget === t.target ? 600 : 400,
-                color: activeTarget === t.target ? colors.accent : colors.textMuted,
-                background: activeTarget === t.target ? 'rgba(88,166,255,0.12)' : colors.headerBg,
-                border: `1px solid ${activeTarget === t.target ? colors.accent : colors.border}`,
-                borderRadius: '6px 6px 0 0',
-                cursor: 'pointer',
-              }}
-            >
-              {t.target}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <TargetSection targetResult={activeResult} />
+      <h1 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '20px' }}>Dashboard</h1>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {runs.map((run) => (
+          <RunCard key={run.id} run={run} results={runResults[run.id] ?? null} onDelete={removeRun} onRename={renameRun} />
+        ))}
+      </div>
     </div>
   );
 }
