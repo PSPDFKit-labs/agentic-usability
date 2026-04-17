@@ -46,7 +46,7 @@ export function DiffViewer({
           <div
             style={{
               padding: '8px 16px',
-              fontSize: '12px',
+              fontSize: '14px',
               color: colors.textMuted,
               fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
               borderRight: `1px solid ${colors.border}`,
@@ -57,7 +57,7 @@ export function DiffViewer({
           <div
             style={{
               padding: '8px 16px',
-              fontSize: '12px',
+              fontSize: '14px',
               color: colors.textMuted,
               fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
             }}

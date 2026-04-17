@@ -29,7 +29,7 @@ const inputStyle: React.CSSProperties = {
   borderRadius: '6px',
   color: colors.text,
   padding: '7px 10px',
-  fontSize: '13px',
+  fontSize: '16px',
   width: '100%',
   boxSizing: 'border-box',
   outline: 'none',
@@ -43,7 +43,7 @@ const textareaStyle: React.CSSProperties = {
 };
 
 const labelStyle: React.CSSProperties = {
-  fontSize: '12px',
+  fontSize: '14px',
   color: colors.textMuted,
   marginBottom: '4px',
   display: 'block',
@@ -64,7 +64,7 @@ function DifficultyBadge({ difficulty }: { difficulty: string }) {
   return (
     <span
       style={{
-        fontSize: '10px',
+        fontSize: '12px',
         fontWeight: 600,
         padding: '2px 6px',
         borderRadius: '4px',
@@ -270,7 +270,7 @@ export function SuiteEditor() {
             gap: '8px',
           }}
         >
-          <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: colors.text }}>
+          <span style={{ flex: 1, fontSize: '16px', fontWeight: 600, color: colors.text }}>
             Test Cases {testCases.length > 0 && `(${testCases.length})`}
           </span>
           <button
@@ -282,7 +282,7 @@ export function SuiteEditor() {
               border: 'none',
               borderRadius: '5px',
               color: '#0d1117',
-              fontSize: '12px',
+              fontSize: '14px',
               fontWeight: 600,
               cursor: 'pointer',
               opacity: creating ? 0.6 : 1,
@@ -295,11 +295,11 @@ export function SuiteEditor() {
         {/* Scrollable list */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {loading ? (
-            <div style={{ padding: '16px', color: colors.textMuted, fontSize: '13px' }}>
+            <div style={{ padding: '16px', color: colors.textMuted, fontSize: '16px' }}>
               Loading...
             </div>
           ) : testCases.length === 0 ? (
-            <div style={{ padding: '16px', color: colors.textMuted, fontSize: '13px' }}>
+            <div style={{ padding: '16px', color: colors.textMuted, fontSize: '16px' }}>
               No test cases.
             </div>
           ) : (
@@ -320,7 +320,7 @@ export function SuiteEditor() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                     <span
                       style={{
-                        fontSize: '12px',
+                        fontSize: '14px',
                         fontWeight: 600,
                         color: isSelected ? colors.accent : colors.text,
                         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -337,7 +337,7 @@ export function SuiteEditor() {
                   <p
                     style={{
                       margin: 0,
-                      fontSize: '12px',
+                      fontSize: '14px',
                       color: colors.textMuted,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -371,7 +371,7 @@ export function SuiteEditor() {
               alignItems: 'center',
               justifyContent: 'center',
               color: colors.textMuted,
-              fontSize: '14px',
+              fontSize: '16px',
             }}
           >
             Select a test case to edit, or click + New.
@@ -390,7 +390,7 @@ export function SuiteEditor() {
               <h2
                 style={{
                   margin: 0,
-                  fontSize: '16px',
+                  fontSize: '18px',
                   fontWeight: 600,
                   color: colors.text,
                   flex: 1,
@@ -401,10 +401,10 @@ export function SuiteEditor() {
               </h2>
 
               {saveStatus === 'saved' && (
-                <span style={{ fontSize: '13px', color: colors.green }}>Saved</span>
+                <span style={{ fontSize: '16px', color: colors.green }}>Saved</span>
               )}
               {saveStatus === 'error' && (
-                <span style={{ fontSize: '13px', color: colors.red }}>Error</span>
+                <span style={{ fontSize: '16px', color: colors.red }}>Error</span>
               )}
 
               <button
@@ -416,7 +416,7 @@ export function SuiteEditor() {
                   border: `1px solid ${colors.red}`,
                   borderRadius: '6px',
                   color: colors.red,
-                  fontSize: '13px',
+                  fontSize: '16px',
                   cursor: 'pointer',
                   opacity: deleting ? 0.6 : 1,
                 }}
@@ -433,7 +433,7 @@ export function SuiteEditor() {
                   border: 'none',
                   borderRadius: '6px',
                   color: '#0d1117',
-                  fontSize: '13px',
+                  fontSize: '16px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   opacity: saveStatus === 'saving' ? 0.6 : 1,
@@ -453,7 +453,7 @@ export function SuiteEditor() {
                   border: `1px solid ${colors.red}`,
                   borderRadius: '6px',
                   color: colors.red,
-                  fontSize: '13px',
+                  fontSize: '16px',
                 }}
               >
                 {saveError}
@@ -503,7 +503,7 @@ export function SuiteEditor() {
             {/* Target APIs */}
             <div style={fieldStyle}>
               <label style={labelStyle}>Target APIs (comma-separated, optional)</label>
-              <div style={{ fontSize: '11px', color: colors.textMuted, marginBottom: '4px', lineHeight: '1.5' }}>
+              <div style={{ fontSize: '14px', color: colors.textMuted, marginBottom: '4px', lineHeight: '1.5' }}>
                 SDK functions or endpoints the solution should use. Matched via word-boundary check against generated code.
                 REST-style entries (e.g. <span style={{ fontFamily: 'monospace' }}>POST /builds</span>) are split into separate HTTP method + path checks.
               </div>
@@ -518,7 +518,7 @@ export function SuiteEditor() {
             {/* Expected Tokens */}
             <div style={fieldStyle}>
               <label style={labelStyle}>Expected Tokens (comma-separated, optional)</label>
-              <div style={{ fontSize: '11px', color: colors.textMuted, marginBottom: '4px', lineHeight: '1.5' }}>
+              <div style={{ fontSize: '14px', color: colors.textMuted, marginBottom: '4px', lineHeight: '1.5' }}>
                 Regex patterns matched against generated code (dotAll + multiline). Invalid regex is treated as a literal string match.
               </div>
               <input
@@ -573,7 +573,7 @@ export function SuiteEditor() {
                     border: `1px solid ${colors.border}`,
                     borderRadius: '5px',
                     color: colors.accent,
-                    fontSize: '12px',
+                    fontSize: '14px',
                     cursor: 'pointer',
                   }}
                 >
@@ -582,7 +582,7 @@ export function SuiteEditor() {
               </div>
 
               {editState.referenceSolution.length === 0 && (
-                <p style={{ color: colors.textMuted, fontSize: '13px', margin: 0 }}>
+                <p style={{ color: colors.textMuted, fontSize: '16px', margin: 0 }}>
                   No files. Click "Add File" to add one.
                 </p>
               )}
@@ -615,7 +615,7 @@ export function SuiteEditor() {
                       style={{
                         ...inputStyle,
                         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                        fontSize: '12px',
+                        fontSize: '14px',
                         padding: '5px 8px',
                       }}
                     />
@@ -627,7 +627,7 @@ export function SuiteEditor() {
                         border: `1px solid ${colors.red}`,
                         borderRadius: '5px',
                         color: colors.red,
-                        fontSize: '12px',
+                        fontSize: '14px',
                         cursor: 'pointer',
                         flexShrink: 0,
                       }}

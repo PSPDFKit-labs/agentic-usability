@@ -63,7 +63,7 @@ export function CodeViewer({ code, language, filename, height = '300px' }: CodeV
             background: colors.sidebar,
             borderBottom: `1px solid ${colors.border}`,
             padding: '8px 16px',
-            fontSize: '12px',
+            fontSize: '14px',
             color: colors.textMuted,
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
           }}

@@ -28,7 +28,7 @@ function VerdictBadge({ pass }: { pass: boolean }) {
     <span
       style={{
         display: 'inline-block', padding: '1px 6px', borderRadius: '4px',
-        fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em',
+        fontSize: '12px', fontWeight: 700, letterSpacing: '0.05em',
         background: pass ? 'rgba(63,185,80,0.15)' : 'rgba(248,81,73,0.15)',
         color: pass ? colors.pass : colors.fail,
         border: `1px solid ${pass ? colors.pass : colors.fail}`,
@@ -49,16 +49,16 @@ function MissedList({
   if (!items.length) return null;
   return (
     <div style={{ marginTop: '16px' }}>
-      <div style={{ fontSize: '12px', fontWeight: 600, color: colors.textMuted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+      <div style={{ fontSize: '14px', fontWeight: 600, color: colors.textMuted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
         {title}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
         {items.map((item, i) => {
           const label = item.api ?? item.token ?? '';
           return (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(248,81,73,0.1)', border: `1px solid ${colors.fail}`, borderRadius: '4px', padding: '4px 10px', fontSize: '12px' }}>
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(248,81,73,0.1)', border: `1px solid ${colors.fail}`, borderRadius: '4px', padding: '4px 10px', fontSize: '14px' }}>
               <span style={{ fontFamily: 'monospace', color: colors.text }}>{label}</span>
-              <span style={{ color: colors.fail, fontSize: '11px' }}>{Math.round(item.missRate)}% miss ({item.missCount}/{item.totalCount})</span>
+              <span style={{ color: colors.fail, fontSize: '14px' }}>{Math.round(item.missRate)}% miss ({item.missCount}/{item.totalCount})</span>
             </div>
           );
         })}
@@ -70,7 +70,7 @@ function MissedList({
 function selectStyle(): React.CSSProperties {
   return {
     background: colors.bg, color: colors.accent, border: `1px solid ${colors.border}`,
-    borderRadius: '4px', padding: '4px 10px', fontSize: '12px',
+    borderRadius: '4px', padding: '4px 10px', fontSize: '14px',
     fontFamily: 'monospace', fontWeight: 600, cursor: 'pointer',
   };
 }
@@ -115,12 +115,12 @@ function TagMultiSelect({ tags, selected, onToggle, onClear }: {
           display: 'flex', alignItems: 'center', gap: '6px',
           background: colors.sidebar, color: selected.size > 0 ? colors.accent : colors.textMuted,
           border: `1px solid ${selected.size > 0 ? colors.accent : colors.border}`,
-          borderRadius: '4px', padding: '5px 12px', fontSize: '12px', cursor: 'pointer',
+          borderRadius: '4px', padding: '5px 12px', fontSize: '14px', cursor: 'pointer',
           fontWeight: selected.size > 0 ? 600 : 400,
         }}
       >
         {label}
-        <span style={{ fontSize: '10px' }}>{open ? '▲' : '▼'}</span>
+        <span style={{ fontSize: '12px' }}>{open ? '▲' : '▼'}</span>
       </button>
       {open && (
         <div style={{
@@ -134,7 +134,7 @@ function TagMultiSelect({ tags, selected, onToggle, onClear }: {
               onClick={onClear}
               style={{
                 display: 'block', width: '100%', textAlign: 'left',
-                padding: '6px 12px', fontSize: '11px', color: colors.textMuted,
+                padding: '6px 12px', fontSize: '14px', color: colors.textMuted,
                 background: 'transparent', border: 'none', cursor: 'pointer',
                 borderBottom: `1px solid ${colors.border}`,
               }}
@@ -151,7 +151,7 @@ function TagMultiSelect({ tags, selected, onToggle, onClear }: {
                 style={{
                   display: 'flex', alignItems: 'center', gap: '8px',
                   width: '100%', textAlign: 'left',
-                  padding: '6px 12px', fontSize: '12px',
+                  padding: '6px 12px', fontSize: '14px',
                   color: active ? colors.accent : colors.text,
                   background: active ? 'rgba(88,166,255,0.08)' : 'transparent',
                   border: 'none', cursor: 'pointer',
@@ -162,7 +162,7 @@ function TagMultiSelect({ tags, selected, onToggle, onClear }: {
                   border: `1px solid ${active ? colors.accent : colors.border}`,
                   background: active ? colors.accent : 'transparent',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '10px', color: '#fff', flexShrink: 0,
+                  fontSize: '12px', color: '#fff', flexShrink: 0,
                 }}>
                   {active ? '✓' : ''}
                 </span>
@@ -239,12 +239,12 @@ export function EvalRun() {
   });
 
   if (loading) {
-    return <div style={{ color: colors.textMuted, fontSize: '14px', paddingTop: '40px', textAlign: 'center' }}>Loading…</div>;
+    return <div style={{ color: colors.textMuted, fontSize: '16px', paddingTop: '40px', textAlign: 'center' }}>Loading…</div>;
   }
 
   if (error) {
     return (
-      <div style={{ color: colors.fail, background: 'rgba(248,81,73,0.1)', border: `1px solid ${colors.fail}`, borderRadius: '6px', padding: '16px', fontSize: '13px' }}>
+      <div style={{ color: colors.fail, background: 'rgba(248,81,73,0.1)', border: `1px solid ${colors.fail}`, borderRadius: '6px', padding: '16px', fontSize: '16px' }}>
         Error: {error}
       </div>
     );
@@ -253,13 +253,13 @@ export function EvalRun() {
   const diffButtons: Difficulty[] = ['all', 'easy', 'medium', 'hard'];
 
   const thStyle: React.CSSProperties = {
-    padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 600,
+    padding: '8px 10px', textAlign: 'left', fontSize: '14px', fontWeight: 600,
     color: colors.textMuted, borderBottom: `1px solid ${colors.border}`,
     background: colors.headerBg, whiteSpace: 'nowrap',
   };
 
   const tdStyle: React.CSSProperties = {
-    padding: '8px 10px', fontSize: '12px', color: colors.text,
+    padding: '8px 10px', fontSize: '14px', color: colors.text,
     borderBottom: `1px solid ${colors.border}`, verticalAlign: 'middle',
   };
 
@@ -267,10 +267,10 @@ export function EvalRun() {
     <div style={{ color: colors.text }}>
       {/* Header with selectors */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
-        <h1 style={{ fontSize: '22px', fontWeight: 700, margin: 0 }}>Eval Run</h1>
+        <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Eval Run</h1>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
-          <span style={{ fontSize: '11px', color: colors.textMuted }}>Run:</span>
+          <span style={{ fontSize: '14px', color: colors.textMuted }}>Run:</span>
           <select value={runId} onChange={(e) => navigate(`/runs/${e.target.value}`)} style={selectStyle()}>
             {runs.map((r) => (
               <option key={r.id} value={r.id}>{formatRunOption(r)}</option>
@@ -279,7 +279,7 @@ export function EvalRun() {
 
           {targets.length > 0 && (
             <>
-              <span style={{ fontSize: '11px', color: colors.textMuted, marginLeft: '8px' }}>Target:</span>
+              <span style={{ fontSize: '14px', color: colors.textMuted, marginLeft: '8px' }}>Target:</span>
               <select value={activeTarget ?? ''} onChange={(e) => setActiveTarget(e.target.value)} style={selectStyle()}>
                 {targets.map((t) => (
                   <option key={t.target} value={t.target}>{t.target}</option>
@@ -293,8 +293,8 @@ export function EvalRun() {
       {/* Summary */}
       {activeResult && (
         <div style={{ marginBottom: '24px' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>Summary</h2>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: colors.textMuted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Scores</div>
+          <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '12px' }}>Summary</h2>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: colors.textMuted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Scores</div>
           <div style={{ overflowX: 'auto', borderRadius: '6px', border: `1px solid ${colors.border}` }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', background: colors.bg }}>
               <thead>
@@ -345,7 +345,7 @@ export function EvalRun() {
       )}
 
       {/* Filters */}
-      <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>Test Cases</h2>
+      <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Test Cases</h2>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '12px', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: '4px' }}>
@@ -354,7 +354,7 @@ export function EvalRun() {
               key={d}
               onClick={() => setDiffFilter(d)}
               style={{
-                padding: '5px 12px', fontSize: '12px',
+                padding: '5px 12px', fontSize: '14px',
                 fontWeight: diffFilter === d ? 600 : 400,
                 background: diffFilter === d ? colors.btnActive : 'transparent',
                 color: diffFilter === d ? colors.accent : colors.textMuted,
@@ -373,7 +373,7 @@ export function EvalRun() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{
-            padding: '5px 12px', fontSize: '12px', background: colors.sidebar,
+            padding: '5px 12px', fontSize: '14px', background: colors.sidebar,
             color: colors.text, border: `1px solid ${colors.border}`,
             borderRadius: '5px', outline: 'none', width: '240px',
           }}
@@ -381,7 +381,7 @@ export function EvalRun() {
 
         {allTags.length > 0 && <TagMultiSelect tags={allTags} selected={selectedTags} onToggle={toggleTag} onClear={() => setSelectedTags(new Set())} />}
 
-        <span style={{ fontSize: '12px', color: colors.textMuted }}>
+        <span style={{ fontSize: '14px', color: colors.textMuted }}>
           {filtered.length} / {suite.length} cases
         </span>
       </div>

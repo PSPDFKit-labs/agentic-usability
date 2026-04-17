@@ -103,16 +103,16 @@ export function ConfigEditor() {
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
         <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: '20px', fontWeight: 600, color: colors.text, margin: 0 }}>
+          <h1 style={{ fontSize: '22px', fontWeight: 600, color: colors.text, margin: 0 }}>
             Config Editor
           </h1>
-          <p style={{ fontSize: '13px', color: colors.textMuted, margin: '4px 0 0' }}>
+          <p style={{ fontSize: '16px', color: colors.textMuted, margin: '4px 0 0' }}>
             Edit the pipeline configuration JSON.
           </p>
         </div>
 
         {statusLabel && (
-          <span style={{ fontSize: '13px', color: statusColor, fontWeight: 500 }}>
+          <span style={{ fontSize: '16px', color: statusColor, fontWeight: 500 }}>
             {statusLabel}
           </span>
         )}
@@ -126,7 +126,7 @@ export function ConfigEditor() {
             border: `1px solid ${colors.border}`,
             borderRadius: '6px',
             color: colors.text,
-            fontSize: '13px',
+            fontSize: '16px',
             cursor: 'pointer',
             opacity: loading || saveStatus === 'saving' ? 0.5 : 1,
           }}
@@ -143,7 +143,7 @@ export function ConfigEditor() {
             border: 'none',
             borderRadius: '6px',
             color: '#0d1117',
-            fontSize: '13px',
+            fontSize: '16px',
             fontWeight: 600,
             cursor: 'pointer',
             opacity: loading || saveStatus === 'saving' ? 0.6 : 1,
@@ -162,7 +162,7 @@ export function ConfigEditor() {
             border: `1px solid ${colors.red}`,
             borderRadius: '6px',
             color: colors.red,
-            fontSize: '13px',
+            fontSize: '16px',
             flexShrink: 0,
           }}
         >
@@ -187,7 +187,7 @@ export function ConfigEditor() {
               alignItems: 'center',
               justifyContent: 'center',
               color: colors.textMuted,
-              fontSize: '14px',
+              fontSize: '16px',
             }}
           >
             Loading config...

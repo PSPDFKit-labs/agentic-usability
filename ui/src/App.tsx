@@ -20,7 +20,7 @@ const navLinkStyle = (isActive: boolean): React.CSSProperties => ({
   padding: '8px 12px',
   borderRadius: '6px',
   marginBottom: '2px',
-  fontSize: '13px',
+  fontSize: '16px',
   fontWeight: isActive ? 600 : 400,
   color: isActive ? colors.accent : colors.text,
   background: isActive ? 'rgba(88, 166, 255, 0.1)' : 'transparent',
@@ -89,10 +89,10 @@ function AppContent() {
             borderBottom: `1px solid ${colors.border}`,
           }}
         >
-          <div style={{ fontSize: '14px', fontWeight: 600, color: colors.accent, letterSpacing: '0.02em' }}>
+          <div style={{ fontSize: '16px', fontWeight: 600, color: colors.accent, letterSpacing: '0.02em' }}>
             Agentic Usability
           </div>
-          <div style={{ fontSize: '11px', color: colors.textMuted, marginTop: '2px' }}>
+          <div style={{ fontSize: '14px', color: colors.textMuted, marginTop: '2px' }}>
             Evaluation Platform
           </div>
         </div>
@@ -103,7 +103,7 @@ function AppContent() {
           style={{
             padding: '12px 16px',
             borderTop: `1px solid ${colors.border}`,
-            fontSize: '11px',
+            fontSize: '14px',
             color: colors.textMuted,
           }}
         >

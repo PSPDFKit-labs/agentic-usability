@@ -25,7 +25,7 @@ function Tag({ children, color = colors.accent }: { children: React.ReactNode; c
         display: 'inline-block',
         padding: '2px 8px',
         borderRadius: '4px',
-        fontSize: '11px',
+        fontSize: '14px',
         background: `${color}18`,
         color,
         border: `1px solid ${color}40`,
@@ -43,7 +43,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
-        fontSize: '11px',
+        fontSize: '14px',
         fontWeight: 600,
         color: colors.textMuted,
         textTransform: 'uppercase',
@@ -61,7 +61,7 @@ function TokenList({ items, label }: { items: TokenResult[]; label: string }) {
   if (!items.length) return null;
   return (
     <div style={{ marginBottom: '12px' }}>
-      <div style={{ fontSize: '12px', fontWeight: 600, color: colors.textMuted, marginBottom: '6px' }}>
+      <div style={{ fontSize: '14px', fontWeight: 600, color: colors.textMuted, marginBottom: '6px' }}>
         {label}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -74,7 +74,7 @@ function TokenList({ items, label }: { items: TokenResult[]; label: string }) {
               gap: '5px',
               padding: '3px 10px',
               borderRadius: '4px',
-              fontSize: '11px',
+              fontSize: '14px',
               fontFamily: 'monospace',
               background: item.found ? 'rgba(63,185,80,0.1)' : 'rgba(248,81,73,0.1)',
               color: item.found ? colors.pass : colors.fail,
@@ -84,7 +84,7 @@ function TokenList({ items, label }: { items: TokenResult[]; label: string }) {
             <span>{item.found ? '✓' : '✗'}</span>
             <span>{item.token}</span>
             {item.foundIn && (
-              <span style={{ color: colors.textMuted, fontSize: '10px' }}>({item.foundIn})</span>
+              <span style={{ color: colors.textMuted, fontSize: '12px' }}>({item.foundIn})</span>
             )}
           </span>
         ))}
@@ -107,7 +107,7 @@ function InfoPanel({ testCase }: { testCase: TestCase }) {
           borderRadius: '6px',
           padding: '16px',
           fontFamily: 'monospace',
-          fontSize: '13px',
+          fontSize: '16px',
           lineHeight: '1.7',
           color: colors.text,
           whiteSpace: 'pre-wrap',
@@ -126,7 +126,7 @@ function InfoPanel({ testCase }: { testCase: TestCase }) {
               borderRadius: '6px',
               padding: '16px',
               fontFamily: 'monospace',
-              fontSize: '13px',
+              fontSize: '16px',
               lineHeight: '1.7',
               color: colors.textMuted,
               whiteSpace: 'pre-wrap',
@@ -164,7 +164,7 @@ function TokenAnalysisPanel({ targetResult }: { targetResult: TargetResults; tes
 
   if (!ta) {
     return (
-      <div style={{ color: colors.textMuted, fontSize: '13px', padding: '16px 0' }}>
+      <div style={{ color: colors.textMuted, fontSize: '16px', padding: '16px 0' }}>
         No token analysis available.
       </div>
     );
@@ -195,7 +195,7 @@ function JudgeScoresPanel({ targetResult }: { targetResult: TargetResults }) {
 
   if (!js) {
     return (
-      <div style={{ color: colors.textMuted, fontSize: '13px', padding: '16px 0' }}>
+      <div style={{ color: colors.textMuted, fontSize: '16px', padding: '16px 0' }}>
         No judge scores available.
       </div>
     );
@@ -209,13 +209,13 @@ function JudgeScoresPanel({ targetResult }: { targetResult: TargetResults }) {
       <MetricBar label="Functional Correctness" value={js.functionalCorrectness} />
 
       <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <span style={{ fontSize: '13px', color: colors.textMuted }}>Verdict:</span>
+        <span style={{ fontSize: '16px', color: colors.textMuted }}>Verdict:</span>
         <span
           style={{
             display: 'inline-block',
             padding: '3px 12px',
             borderRadius: '4px',
-            fontSize: '12px',
+            fontSize: '14px',
             fontWeight: 700,
             letterSpacing: '0.05em',
             background: js.overallVerdict ? 'rgba(63,185,80,0.15)' : 'rgba(248,81,73,0.15)',
@@ -229,7 +229,7 @@ function JudgeScoresPanel({ targetResult }: { targetResult: TargetResults }) {
 
       {js.notes && (
         <div style={{ marginTop: '16px' }}>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: colors.textMuted, marginBottom: '6px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: colors.textMuted, marginBottom: '6px' }}>
             Notes
           </div>
           <div
@@ -238,7 +238,7 @@ function JudgeScoresPanel({ targetResult }: { targetResult: TargetResults }) {
               border: `1px solid ${colors.border}`,
               borderRadius: '6px',
               padding: '12px',
-              fontSize: '13px',
+              fontSize: '16px',
               color: colors.text,
               lineHeight: '1.6',
               whiteSpace: 'pre-wrap',
@@ -263,7 +263,7 @@ function SolutionPane({
 
   if (files.length === 0) {
     return (
-      <div style={{ color: colors.textMuted, fontSize: '13px', padding: '16px 0' }}>
+      <div style={{ color: colors.textMuted, fontSize: '16px', padding: '16px 0' }}>
         No {label.toLowerCase()} available.
       </div>
     );
@@ -276,7 +276,7 @@ function SolutionPane({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <div style={{ fontSize: '12px', fontWeight: 600, color: colors.textMuted }}>{label}</div>
+        <div style={{ fontSize: '14px', fontWeight: 600, color: colors.textMuted }}>{label}</div>
         {files.length > 1 ? (
           <select
             value={selectedIdx}
@@ -287,7 +287,7 @@ function SolutionPane({
               border: `1px solid ${colors.border}`,
               borderRadius: '4px',
               padding: '3px 8px',
-              fontSize: '11px',
+              fontSize: '14px',
               fontFamily: 'monospace',
               cursor: 'pointer',
             }}
@@ -299,7 +299,7 @@ function SolutionPane({
             ))}
           </select>
         ) : (
-          <div style={{ fontSize: '11px', fontFamily: 'monospace', color: colors.textMuted }}>
+          <div style={{ fontSize: '14px', fontFamily: 'monospace', color: colors.textMuted }}>
             {normalize(file.path)}
           </div>
         )}
@@ -321,7 +321,7 @@ function SolutionPanel({
 
   if (referenceSolution.length === 0 && generated.length === 0) {
     return (
-      <div style={{ color: colors.textMuted, fontSize: '13px', padding: '16px 0' }}>
+      <div style={{ color: colors.textMuted, fontSize: '16px', padding: '16px 0' }}>
         No solutions available.
       </div>
     );
@@ -371,7 +371,7 @@ function LogsPanel({ logs }: { logs: LogFiles | null }) {
 
   if (!logs) {
     return (
-      <div style={{ color: colors.textMuted, fontSize: '13px', padding: '16px 0' }}>
+      <div style={{ color: colors.textMuted, fontSize: '16px', padding: '16px 0' }}>
         Loading logs...
       </div>
     );
@@ -388,7 +388,7 @@ function LogsPanel({ logs }: { logs: LogFiles | null }) {
 
   if (available.length === 0) {
     return (
-      <div style={{ color: colors.textMuted, fontSize: '13px', padding: '16px 0' }}>
+      <div style={{ color: colors.textMuted, fontSize: '16px', padding: '16px 0' }}>
         No log files available.
       </div>
     );
@@ -399,7 +399,7 @@ function LogsPanel({ logs }: { logs: LogFiles | null }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <div style={{ fontSize: '12px', fontWeight: 600, color: colors.textMuted }}>Log File</div>
+        <div style={{ fontSize: '14px', fontWeight: 600, color: colors.textMuted }}>Log File</div>
         <select
           value={selectedIdx}
           onChange={(e) => setSelectedIdx(Number(e.target.value))}
@@ -409,7 +409,7 @@ function LogsPanel({ logs }: { logs: LogFiles | null }) {
             border: `1px solid ${colors.border}`,
             borderRadius: '4px',
             padding: '3px 8px',
-            fontSize: '11px',
+            fontSize: '14px',
             fontFamily: 'monospace',
             cursor: 'pointer',
           }}
@@ -448,7 +448,7 @@ function TargetPanel({
         style={{
           padding: '20px',
           color: colors.textMuted,
-          fontSize: '13px',
+          fontSize: '16px',
           background: colors.sidebar,
           border: `1px solid ${colors.border}`,
           borderRadius: '0 6px 6px 6px',
@@ -469,7 +469,7 @@ function TargetPanel({
             onClick={() => setActiveTab(tab)}
             style={{
               padding: '8px 16px',
-              fontSize: '12px',
+              fontSize: '14px',
               fontWeight: activeTab === tab ? 600 : 400,
               color: activeTab === tab ? colors.accent : colors.textMuted,
               background: activeTab === tab ? colors.sidebar : 'transparent',
@@ -564,7 +564,7 @@ export function TestCaseDetail() {
 
   if (loading) {
     return (
-      <div style={{ color: colors.textMuted, fontSize: '14px', paddingTop: '40px', textAlign: 'center' }}>
+      <div style={{ color: colors.textMuted, fontSize: '16px', paddingTop: '40px', textAlign: 'center' }}>
         Loading…
       </div>
     );
@@ -579,7 +579,7 @@ export function TestCaseDetail() {
           border: `1px solid ${colors.fail}`,
           borderRadius: '6px',
           padding: '16px',
-          fontSize: '13px',
+          fontSize: '16px',
         }}
       >
         Error: {error}
@@ -589,7 +589,7 @@ export function TestCaseDetail() {
 
   if (!testCase) {
     return (
-      <div style={{ color: colors.textMuted, fontSize: '14px' }}>Test case not found.</div>
+      <div style={{ color: colors.textMuted, fontSize: '16px' }}>Test case not found.</div>
     );
   }
 
@@ -600,13 +600,13 @@ export function TestCaseDetail() {
       {/* Header */}
       <div style={{ marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-          <h1 style={{ fontSize: '20px', fontWeight: 700, margin: 0, fontFamily: 'monospace', color: colors.accent }}>
+          <h1 style={{ fontSize: '22px', fontWeight: 700, margin: 0, fontFamily: 'monospace', color: colors.accent }}>
             {testCase.id}
           </h1>
           <span
             style={{
               textTransform: 'capitalize',
-              fontSize: '12px',
+              fontSize: '14px',
               padding: '2px 8px',
               borderRadius: '4px',
               fontWeight: 600,
@@ -636,7 +636,7 @@ export function TestCaseDetail() {
             style={{
               marginLeft: 'auto',
               padding: '5px 14px',
-              fontSize: '12px',
+              fontSize: '14px',
               fontWeight: 600,
               color: colors.accent,
               background: 'rgba(88,166,255,0.1)',
@@ -661,7 +661,7 @@ export function TestCaseDetail() {
                 onClick={() => setActiveTarget(t.target)}
                 style={{
                   padding: '6px 14px',
-                  fontSize: '12px',
+                  fontSize: '14px',
                   fontWeight: activeTarget === t.target ? 600 : 400,
                   color: activeTarget === t.target ? colors.accent : colors.textMuted,
                   background:

@@ -35,7 +35,7 @@ export function ScoreCard({ title, aggregates }: ScoreCardProps) {
     >
       <div
         style={{
-          fontSize: '14px',
+          fontSize: '16px',
           fontWeight: 700,
           marginBottom: '16px',
           letterSpacing: '0.01em',

@@ -22,7 +22,7 @@ export function MetricBar({ label, value, color = colors.accent }: MetricBarProp
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          fontSize: '12px',
+          fontSize: '14px',
           marginBottom: '5px',
         }}
       >

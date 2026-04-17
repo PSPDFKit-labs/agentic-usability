@@ -58,13 +58,13 @@ function EditableLabel({ run, onRename }: { run: RunInfo; onRename: (id: string,
       style={{
         background: colors.bg, color: colors.text,
         border: `1px solid ${colors.accent}`, borderRadius: '3px',
-        padding: '2px 6px', fontSize: '12px', fontFamily: 'monospace', width: '200px',
+        padding: '2px 6px', fontSize: '14px', fontFamily: 'monospace', width: '200px',
       }}
     />
   ) : (
     <span
       onClick={(e) => { e.stopPropagation(); setEditing(true); setValue(run.label || ''); }}
-      style={{ cursor: 'text', fontSize: '12px', fontFamily: 'monospace', color: run.label ? colors.text : colors.textMuted }}
+      style={{ cursor: 'text', fontSize: '14px', fontFamily: 'monospace', color: run.label ? colors.text : colors.textMuted }}
       title="Click to rename"
     >
       {run.label || run.id}
@@ -74,16 +74,16 @@ function EditableLabel({ run, onRename }: { run: RunInfo; onRename: (id: string,
 
 function ScoresTable({ results }: { results: TargetResults[] }) {
   if (results.length === 0) {
-    return <span style={{ color: colors.textMuted, fontSize: '11px' }}>No results yet</span>;
+    return <span style={{ color: colors.textMuted, fontSize: '14px' }}>No results yet</span>;
   }
 
   const thStyle: React.CSSProperties = {
-    padding: '6px 12px', textAlign: 'left', fontSize: '10px', fontWeight: 600,
+    padding: '6px 12px', textAlign: 'left', fontSize: '12px', fontWeight: 600,
     color: colors.textMuted, borderBottom: `1px solid ${colors.border}`,
     background: colors.headerBg, whiteSpace: 'nowrap',
   };
   const tdStyle: React.CSSProperties = {
-    padding: '6px 12px', fontSize: '11px', color: colors.text,
+    padding: '6px 12px', fontSize: '14px', color: colors.text,
     borderBottom: `1px solid ${colors.border}`, whiteSpace: 'nowrap',
   };
 
@@ -150,25 +150,25 @@ function RunCard({ run, results, onDelete, onRename }: {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <EditableLabel run={run} onRename={onRename} />
-          <span style={{ fontSize: '11px', color: colors.textMuted }}>{run.testCount} tests</span>
-          <span style={{ fontSize: '11px', color: colors.textMuted }}>{formatDate(run.createdAt)}</span>
+          <span style={{ fontSize: '14px', color: colors.textMuted }}>{run.testCount} tests</span>
+          <span style={{ fontSize: '14px', color: colors.textMuted }}>{formatDate(run.createdAt)}</span>
         </div>
         <div onClick={(e) => e.stopPropagation()}>
           {confirmDelete ? (
             <div style={{ display: 'flex', gap: '4px' }}>
               <button
                 onClick={async () => { await onDelete(run.id); setConfirmDelete(false); }}
-                style={{ padding: '2px 8px', fontSize: '10px', background: 'rgba(248,81,73,0.15)', color: colors.fail, border: `1px solid ${colors.fail}`, borderRadius: '3px', cursor: 'pointer' }}
+                style={{ padding: '2px 8px', fontSize: '12px', background: 'rgba(248,81,73,0.15)', color: colors.fail, border: `1px solid ${colors.fail}`, borderRadius: '3px', cursor: 'pointer' }}
               >Confirm</button>
               <button
                 onClick={() => setConfirmDelete(false)}
-                style={{ padding: '2px 8px', fontSize: '10px', background: 'transparent', color: colors.textMuted, border: `1px solid ${colors.border}`, borderRadius: '3px', cursor: 'pointer' }}
+                style={{ padding: '2px 8px', fontSize: '12px', background: 'transparent', color: colors.textMuted, border: `1px solid ${colors.border}`, borderRadius: '3px', cursor: 'pointer' }}
               >Cancel</button>
             </div>
           ) : (
             <button
               onClick={() => setConfirmDelete(true)}
-              style={{ padding: '2px 8px', fontSize: '10px', background: 'transparent', color: colors.textMuted, border: `1px solid ${colors.border}`, borderRadius: '3px', cursor: 'pointer' }}
+              style={{ padding: '2px 8px', fontSize: '12px', background: 'transparent', color: colors.textMuted, border: `1px solid ${colors.border}`, borderRadius: '3px', cursor: 'pointer' }}
             >Delete</button>
           )}
         </div>
@@ -177,7 +177,7 @@ function RunCard({ run, results, onDelete, onRename }: {
       {/* Scores */}
       <div style={{ padding: '8px 16px', overflowX: 'auto' }}>
         {results === null ? (
-          <div style={{ color: colors.textMuted, fontSize: '11px' }}>Loading scores…</div>
+          <div style={{ color: colors.textMuted, fontSize: '14px' }}>Loading scores…</div>
         ) : (
           <ScoresTable results={results} />
         )}
@@ -201,21 +201,21 @@ export function Dashboard() {
   }, [runs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
-    return <div style={{ color: colors.textMuted, fontSize: '14px', paddingTop: '40px', textAlign: 'center' }}>Loading…</div>;
+    return <div style={{ color: colors.textMuted, fontSize: '16px', paddingTop: '40px', textAlign: 'center' }}>Loading…</div>;
   }
 
   if (runs.length === 0) {
     return (
       <div style={{ color: colors.text }}>
-        <h1 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '8px' }}>Dashboard</h1>
-        <p style={{ color: colors.textMuted, fontSize: '14px' }}>No evaluation runs yet. Run the pipeline to generate results.</p>
+        <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '8px' }}>Dashboard</h1>
+        <p style={{ color: colors.textMuted, fontSize: '16px' }}>No evaluation runs yet. Run the pipeline to generate results.</p>
       </div>
     );
   }
 
   return (
     <div style={{ color: colors.text }}>
-      <h1 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '20px' }}>Dashboard</h1>
+      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '20px' }}>Dashboard</h1>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {runs.map((run) => (
           <RunCard key={run.id} run={run} results={runResults[run.id] ?? null} onDelete={removeRun} onRename={renameRun} />
