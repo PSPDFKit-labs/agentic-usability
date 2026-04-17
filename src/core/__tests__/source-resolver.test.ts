@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { access, mkdir, writeFile, rm } from 'node:fs/promises';
+import { describe, it, expect, vi } from 'vitest';
+import { access, rm } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
-import { resolveSource, resolveSources } from '../source-resolver.js';
+import { resolveSource, resolveSources, getUrlSources } from '../source-resolver.js';
 import { makeConfig } from '../../__tests__/helpers/fixtures.js';
 import type { SourceConfig } from '../../types.js';
 
@@ -16,27 +16,11 @@ vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
 }));
 
-vi.mock('turndown', () => {
-  return {
-    default: class MockTurndownService {
-      turndown(html: string) { return `md:${html}`; }
-    },
-  };
-});
-
 const mockAccess = vi.mocked(access);
-const mockMkdir = vi.mocked(mkdir);
 const mockExecFile = vi.mocked(execFile);
 const mockRm = vi.mocked(rm);
 
-const mockFetch = vi.fn();
-vi.stubGlobal('fetch', mockFetch);
-
 describe('resolveSource', () => {
-  beforeEach(() => {
-    mockFetch.mockReset();
-  });
-
   describe('local source', () => {
     it('returns resolved path when directory exists', async () => {
       mockAccess.mockResolvedValue(undefined);
@@ -132,65 +116,19 @@ describe('resolveSource', () => {
   });
 
   describe('url source', () => {
-    it('fetches URL and saves as file', async () => {
-      mockAccess.mockRejectedValue(new Error('ENOENT'));
-      mockFetch.mockResolvedValue({
-        ok: true,
-        headers: new Headers({ 'content-type': 'text/plain' }),
-        text: async () => 'content',
-      });
-      const result = await resolveSource({ type: 'url', url: 'https://example.com/api.md' });
-      expect(result).toBeTruthy();
-      expect(mockFetch).toHaveBeenCalledWith('https://example.com/api.md');
-    });
-
-    it('converts HTML to markdown', async () => {
-      mockAccess.mockRejectedValue(new Error('ENOENT'));
-      mockFetch.mockResolvedValue({
-        ok: true,
-        headers: new Headers({ 'content-type': 'text/html' }),
-        text: async () => '<h1>Hi</h1>',
-      });
-      const mockWriteFile = vi.mocked(writeFile);
-      mockWriteFile.mockClear();
-      await resolveSource({ type: 'url', url: 'https://example.com' });
-      const writeCalls = mockWriteFile.mock.calls;
-      const mdCall = writeCalls.find((c) => (c[0] as string).endsWith('.md'));
-      expect(mdCall).toBeTruthy();
-    });
-
-    it('uses cached directory when exists and not fresh', async () => {
-      mockAccess.mockResolvedValue(undefined);
-      await resolveSource({ type: 'url', url: 'https://example.com' });
-      expect(mockFetch).not.toHaveBeenCalled();
-    });
-
-    it('warns and continues when URL fails', async () => {
-      mockAccess.mockRejectedValue(new Error('ENOENT'));
-      vi.spyOn(console, 'warn').mockImplementation(() => {});
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 404,
-        headers: new Headers(),
-        text: async () => '',
-      });
-      await resolveSource({ type: 'url', url: 'https://fail.com' });
-      expect(console.warn).toHaveBeenCalled();
-    });
-
-    it('throws when url is missing', async () => {
-      mockAccess.mockRejectedValue(new Error('ENOENT'));
-      await expect(resolveSource({ type: 'url' })).rejects.toThrow(/url/);
+    it('throws because URL sources are not resolved to filesystem paths', async () => {
+      await expect(resolveSource({ type: 'url', url: 'https://example.com' })).rejects.toThrow(/URL sources are not resolved/);
     });
   });
 });
 
 describe('resolveSources', () => {
-  it('resolves all sources in config', async () => {
+  it('resolves local and git sources, skipping url sources', async () => {
     mockAccess.mockResolvedValue(undefined);
     const config = makeConfig({
       sources: [
         { type: 'local', path: '/tmp/sdk1' },
+        { type: 'url', url: 'https://example.com/docs' },
         { type: 'local', path: '/tmp/sdk2' },
       ],
     });
@@ -198,5 +136,29 @@ describe('resolveSources', () => {
     expect(result).toHaveLength(2);
     expect(result[0]).toContain('/tmp/sdk1');
     expect(result[1]).toContain('/tmp/sdk2');
+  });
+});
+
+describe('getUrlSources', () => {
+  it('extracts url sources from config', () => {
+    const config = makeConfig({
+      sources: [
+        { type: 'local', path: '/tmp/sdk' },
+        { type: 'url', url: 'https://docs.example.com' },
+        { type: 'url', url: 'https://api.example.com', additionalContext: 'API reference' },
+      ],
+    });
+    const urls = getUrlSources(config);
+    expect(urls).toEqual([
+      { url: 'https://docs.example.com', additionalContext: undefined },
+      { url: 'https://api.example.com', additionalContext: 'API reference' },
+    ]);
+  });
+
+  it('returns empty array when no url sources exist', () => {
+    const config = makeConfig({
+      sources: [{ type: 'local', path: '/tmp/sdk' }],
+    });
+    expect(getUrlSources(config)).toEqual([]);
   });
 });

@@ -2,11 +2,11 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { readFile, writeFile } from 'node:fs/promises';
 import { loadConfig } from '../core/config.js';
-import { resolveSources } from '../core/source-resolver.js';
+import { resolveSources, getUrlSources } from '../core/source-resolver.js';
 import { createAdapter, type AgentAdapter } from '../agents/adapter.js';
 import type { TestCase, Config, ProjectPaths } from '../types.js';
 import { printSuiteTable, validateTestCase } from './suite-utils.js';
-import { buildSourceList, DIFFICULTY_RUBRIC, extractJson } from './prompt-helpers.js';
+import { buildSourceList, buildUrlSourceList, DIFFICULTY_RUBRIC, extractJson } from './prompt-helpers.js';
 
 const TEST_SUITE_SCHEMA = {
   type: 'array',
@@ -62,7 +62,11 @@ function summarizeExistingTests(testCases: TestCase[]): string {
 }
 
 function buildSourceSection(sourcePaths: string[], config: Config): string {
-  return `Your task: Explore the following source(s):\n${buildSourceList(sourcePaths, config).replace(/^- /gm, '  - ')}\n\nUse all of them`;
+  const fileSources = sourcePaths.length > 0
+    ? `Your task: Explore the following source(s):\n${buildSourceList(sourcePaths, config).replace(/^- /gm, '  - ')}`
+    : '';
+  const urlSection = buildUrlSourceList(getUrlSources(config));
+  return `${fileSources}${urlSection}\n\nUse all of them`;
 }
 
 function buildPrompt(sourcePaths: string[], config: Config, existingTests: TestCase[] = []): string {

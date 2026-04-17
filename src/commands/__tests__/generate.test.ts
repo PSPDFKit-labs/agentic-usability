@@ -11,6 +11,7 @@ vi.mock('../../core/paths.js', () => ({
 
 vi.mock('../../core/source-resolver.js', () => ({
   resolveSources: vi.fn(),
+  getUrlSources: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock('../../agents/adapter.js', () => ({

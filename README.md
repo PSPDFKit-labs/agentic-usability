@@ -214,7 +214,7 @@ Clone from a remote repository:
 
 #### URL source
 
-Fetch a documentation page or file directly:
+Point the agent to documentation URLs to browse:
 
 ```json
 {
@@ -224,8 +224,6 @@ Fetch a documentation page or file directly:
   ]
 }
 ```
-
-> **Note:** URL fetching retrieves the HTTP response as-is. Direct file links (`.md`, `.yaml`, `.json`, etc.) work fine. However, HTML pages that rely on client-side JavaScript rendering (SPAs, React-based docs, etc.) will return empty or incomplete content. For JS-rendered docs, use the `local` or `git` source type instead.
 
 ### Public information
 

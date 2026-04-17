@@ -1,14 +1,27 @@
 import type { Config } from '../types.js';
 
 /**
- * Build a bullet list of source paths with inline additionalContext.
- * Returns raw lines — callers wrap with their own framing text.
+ * Build a bullet list of filesystem source paths with inline additionalContext.
+ * Only includes local and git sources (not URL sources).
  */
 export function buildSourceList(sourcePaths: string[], config: Config): string {
+  // sourcePaths only contains local/git sources, so match them to non-url config entries
+  const nonUrlSources = config.sources.filter((s) => s.type !== 'url');
   return sourcePaths.map((p, i) => {
-    const ctx = config.sources[i]?.additionalContext;
+    const ctx = nonUrlSources[i]?.additionalContext;
     return ctx ? `- ${p} — ${ctx}` : `- ${p}`;
   }).join('\n');
+}
+
+/**
+ * Build a bullet list of URL sources for the agent to browse.
+ */
+export function buildUrlSourceList(urlSources: { url: string; additionalContext?: string }[]): string {
+  if (!urlSources || urlSources.length === 0) return '';
+  const lines = urlSources.map((s) =>
+    s.additionalContext ? `- ${s.url} — ${s.additionalContext}` : `- ${s.url}`
+  ).join('\n');
+  return `\nAlso browse the following URLs for reference:\n${lines}`;
 }
 
 /** Difficulty rubric — single source of truth for generate + insights prompts. */

@@ -1,6 +1,8 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import ora from 'ora';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { loadConfig } from '../core/config.js';
 import { loadTestSuite } from '../core/suite-io.js';
 import type { AggregateResults, ProjectPaths } from '../types.js';
@@ -162,5 +164,12 @@ export async function reportCommand(paths: ProjectPaths, options: { json?: boole
     const output = buildJsonOutput(allAggregates);
     console.log(JSON.stringify(output, null, 2));
   }
+
+  // Always write a report file to the reports directory
+  const output = buildJsonOutput(allAggregates);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const reportPath = join(paths.reports, `report-${timestamp}.json`);
+  await writeFile(reportPath, JSON.stringify(output, null, 2), 'utf-8');
+  console.log(chalk.dim(`\nReport saved to ${reportPath}`));
 }
 

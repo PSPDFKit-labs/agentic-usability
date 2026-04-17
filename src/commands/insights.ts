@@ -2,12 +2,12 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { join } from 'node:path';
 import { loadConfig } from '../core/config.js';
-import { resolveSources } from '../core/source-resolver.js';
+import { resolveSources, getUrlSources } from '../core/source-resolver.js';
 import { loadTestSuite } from '../core/suite-io.js';
 import { createAdapter } from '../agents/adapter.js';
 import type { AggregateResults, ProjectPaths, Config } from '../types.js';
 import { loadAllResults, computeAggregates } from '../core/results.js';
-import { buildSourceList, DIFFICULTY_RUBRIC, JUDGE_SCORING_CRITERIA } from './prompt-helpers.js';
+import { buildSourceList, buildUrlSourceList, DIFFICULTY_RUBRIC, JUDGE_SCORING_CRITERIA } from './prompt-helpers.js';
 
 function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
@@ -125,7 +125,8 @@ export function buildInsightsPrompt(
   sections.push(`You are an SDK usability analyst. You have access to the full results of an automated benchmark that tested how well AI coding agents can use ${packageName}. Your job is to help the developer understand where the SDK is lacking and what improvements would have the biggest impact on agent usability.`);
 
   // 2. Source locations
-  sections.push(`## SDK Source Locations\n\nThe SDK source code that was used to generate test cases:\n${buildSourceList(sourcePaths, config)}`);
+  const urlSection = buildUrlSourceList(getUrlSources(config));
+  sections.push(`## SDK Source Locations\n\nThe SDK source code that was used to generate test cases:\n${buildSourceList(sourcePaths, config)}${urlSection}`);
 
   // 3. How the benchmark works
   sections.push(`## How the Benchmark Works

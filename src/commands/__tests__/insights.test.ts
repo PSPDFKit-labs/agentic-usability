@@ -8,6 +8,7 @@ vi.mock('../../core/config.js', () => ({
 
 vi.mock('../../core/source-resolver.js', () => ({
   resolveSources: vi.fn(),
+  getUrlSources: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock('../../core/suite-io.js', () => ({
