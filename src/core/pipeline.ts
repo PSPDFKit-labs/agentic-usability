@@ -18,9 +18,9 @@ export class PipelineStateManager {
       startedAt: new Date().toISOString(),
       testCases: 0,
       completed: {
-        execute: [],
-        analyze: [],
-        judge: [],
+        execute: {},
+        analyze: {},
+        judge: {},
       },
     };
   }
@@ -29,12 +29,20 @@ export class PipelineStateManager {
     try {
       const raw = await readFile(this.statePath, 'utf-8');
       const parsed = JSON.parse(raw) as PipelineState;
-      // Ensure all completed arrays exist (guards against older state files)
+      // Ensure all completed stages exist (guards against older state files)
       const fresh = PipelineStateManager.freshState();
       parsed.completed = {
         ...fresh.completed,
         ...parsed.completed,
       };
+      // Migrate old format: if a stage value is a flat string[] (pre-target tracking),
+      // convert it to a Record with a single '_legacy' key so existing completions are preserved.
+      for (const stage of ['execute', 'analyze', 'judge'] as const) {
+        const val = parsed.completed[stage];
+        if (Array.isArray(val)) {
+          parsed.completed[stage] = (val as string[]).length > 0 ? { _legacy: val as string[] } : {};
+        }
+      }
       this.state = parsed;
     } catch {
       this.state = PipelineStateManager.freshState();
@@ -50,9 +58,10 @@ export class PipelineStateManager {
     return this.state;
   }
 
-  markTestComplete(stage: PipelineStage, testId: string): void {
-    if (!this.state.completed[stage].includes(testId)) {
-      this.state.completed[stage].push(testId);
+  markTestComplete(stage: PipelineStage, testId: string, target: string): void {
+    const targetArr = this.state.completed[stage][target] ??= [];
+    if (!targetArr.includes(testId)) {
+      targetArr.push(testId);
     }
   }
 
@@ -60,12 +69,12 @@ export class PipelineStateManager {
     this.state.stage = stage;
   }
 
-  isTestComplete(stage: PipelineStage, testId: string): boolean {
-    return this.state.completed[stage].includes(testId);
+  isTestComplete(stage: PipelineStage, testId: string, target: string): boolean {
+    return this.state.completed[stage][target]?.includes(testId) ?? false;
   }
 
-  getIncompleteTests(stage: PipelineStage, allTestIds: string[]): string[] {
-    const completed = new Set(this.state.completed[stage]);
+  getIncompleteTests(stage: PipelineStage, allTestIds: string[], target: string): string[] {
+    const completed = new Set(this.state.completed[stage][target] ?? []);
     return allTestIds.filter((id) => !completed.has(id));
   }
 

@@ -60,7 +60,7 @@ export const JUDGE_SCORING_CRITERIA = `\
    - 61-80: Works correctly for common cases, fails on edge cases.
    - 81-100: Runs correctly and produces expected output for all cases.
 
-5. **overallVerdict** (boolean): Does the generated solution meet the core requirements? Set to true if it would pass acceptance tests, even if the implementation differs. Set to false if it fails to meet the core requirements.
+5. **overallVerdict** (boolean): Does the generated solution actually work? Set to true if the solution correctly solves the problem — even if it uses different APIs than the reference (apiDiscovery can be low while overallVerdict is true). Set to false only if the solution fails to meet the core requirements or does not run correctly.
 
 6. **notes** (string): Brief explanation of your scoring. Mention which APIs were found/missed, any parameter issues, missing requirements, and functional problems.`;
 

@@ -45,7 +45,18 @@ export abstract class BaseAdapter implements AgentAdapter {
     return spawnInteractive(this.config.command, args, { cwd: workDir });
   }
 
-  abstract sandboxCommand(prompt: string, workDir?: string): string;
+  abstract sandboxCommand(prompt: string, workDir?: string, schema?: object): string;
+
+  /**
+   * Unwrap agent-specific envelope from raw stdout.
+   * Uses the same parseEnvelope logic as run(), but operates on a plain string.
+   * Returns the inner content, or the original string if no envelope is recognized.
+   */
+  extractResult(stdout: string): string {
+    const fakeResult: AgentResult = { stdout, stderr: '', exitCode: 0, durationMs: 0 };
+    const cleaned = this.parseEnvelope(fakeResult);
+    return cleaned ? cleaned.stdout : stdout;
+  }
 
   /** Subclass: spawn the agent with schema-specific args, return raw result. */
   protected abstract spawnWithSchema(

@@ -94,6 +94,36 @@ describe('ClaudeAdapter', () => {
       const cmd = custom.sandboxCommand('prompt');
       expect(cmd).toBe("cd /workspace && IS_SANDBOX=1 claude --print --dangerously-skip-permissions --verbose 'prompt'");
     });
+
+    it('includes --json-schema flag when schema is provided', () => {
+      const schema = { type: 'object', properties: { score: { type: 'number' } } };
+      const cmd = adapter.sandboxCommand('prompt', '/workspace', schema);
+      expect(cmd).toContain('--output-format json');
+      expect(cmd).toContain('--json-schema');
+      expect(cmd).toContain('"type":"object"');
+    });
+
+    it('omits schema flags when no schema is provided', () => {
+      const cmd = adapter.sandboxCommand('prompt');
+      expect(cmd).not.toContain('--json-schema');
+      expect(cmd).not.toContain('--output-format json');
+    });
+  });
+
+  describe('extractResult', () => {
+    it('unwraps structured_output from Claude envelope', () => {
+      const envelope = JSON.stringify({ structured_output: { score: 95 } });
+      expect(adapter.extractResult(envelope)).toBe(JSON.stringify({ score: 95 }));
+    });
+
+    it('unwraps result field from Claude envelope', () => {
+      const envelope = JSON.stringify({ result: 'text output' });
+      expect(adapter.extractResult(envelope)).toBe('text output');
+    });
+
+    it('returns raw string when not valid JSON', () => {
+      expect(adapter.extractResult('not json')).toBe('not json');
+    });
   });
 
   describe('installCommand', () => {

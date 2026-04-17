@@ -1,7 +1,8 @@
 import chalk from 'chalk';
 import ora from 'ora';
+import { loadDotenv } from '../core/env.js';
 import { loadConfig } from '../core/config.js';
-import { loadTestSuite, saveResult, formatElapsed } from '../core/suite-io.js';
+import { loadTestSuite, saveResult, saveBinaryResult, formatElapsed } from '../core/suite-io.js';
 import { SandboxClient, getSandboxHostAddress } from '../sandbox/opensandbox.js';
 import { rewriteEnv, applyProxyUrls, stampProxyTag } from '../proxy/env-rewriter.js';
 import { startAuthProxy, type AuthProxyHandle } from '../proxy/auth-proxy.js';
@@ -35,6 +36,16 @@ export async function startProxy(config: Config): Promise<ProxySetupResult> {
   }
 
   return { proxy, proxyEnv };
+}
+
+/**
+ * Full sandbox bootstrap: load .env secrets, verify connectivity, start auth proxy.
+ * Shared by eval, execute, and judge commands.
+ */
+export async function prepareSandboxEnv(config: Config): Promise<ProxySetupResult> {
+  await loadDotenv();
+  await SandboxClient.checkConnectivity(config.sandbox);
+  return startProxy(config);
 }
 
 function resolveEnv(
@@ -252,17 +263,97 @@ export async function executeTestCase(
     if (notes) {
       await saveResult(paths, testCase.id, 'agent-notes.md', notes, target.name);
     }
+
+    // Capture workspace snapshot for judge sandbox reconstruction
+    try {
+      const tarResult = await client.runCommand(
+        'tar czf /tmp/workspace-snapshot.tar.gz -C / workspace',
+      );
+      if (tarResult.exitCode === 0) {
+        const tarData = await client.readBinaryFile('/tmp/workspace-snapshot.tar.gz');
+        await saveBinaryResult(paths, testCase.id, 'workspace-snapshot.tar.gz', tarData, target.name);
+      }
+    } catch {
+      // Non-critical — judge can fall back to re-scaffolding
+    }
   } finally {
     // Save proxy logs for this test case (even on failure, for debugging)
     if (proxyHandle) {
       const tcLogs = proxyHandle.getLogsForTestCase(testCase.id);
       if (tcLogs.length > 0) {
-        await saveResult(paths, testCase.id, 'proxy.log.json', JSON.stringify(tcLogs, null, 2), target.name);
+        await saveResult(paths, testCase.id, 'agent-proxy.log.json', JSON.stringify(tcLogs, null, 2), target.name);
       }
     }
     unregisterAbort?.();
     await client.destroy();
   }
+}
+
+export interface StageOptions {
+  config: Config;
+  paths: ProjectPaths;
+  testCases: TestCase[];
+  proxyEnv?: Record<string, string>;
+  proxyHandle?: AuthProxyHandle;
+  onTestComplete?: (testId: string, target: string) => void;
+  /** Filter test cases per target (e.g. to skip already-completed tests on resume). */
+  filterForTarget?: (testCases: TestCase[], targetName: string) => TestCase[];
+}
+
+/**
+ * Core execute stage: run test cases across all targets with WorkerPool.
+ * Used by both `executeCommand` (standalone) and `evalCommand` (pipeline).
+ */
+export async function runExecuteStage(opts: StageOptions): Promise<{ aborted: boolean }> {
+  const { config, paths, testCases, proxyEnv, proxyHandle, onTestComplete, filterForTarget } = opts;
+  const concurrency = config.sandbox.concurrency ?? 3;
+
+  for (const target of config.targets) {
+    const targetTests = filterForTarget ? filterForTarget(testCases, target.name) : testCases;
+    if (targetTests.length === 0) {
+      console.log(chalk.dim(`\nTarget: ${target.name} — all tests already complete`));
+      continue;
+    }
+
+    console.log(chalk.bold(`\nTarget: ${target.name} (${target.image})`));
+    console.log(chalk.dim(`Concurrency: ${concurrency}\n`));
+
+    const startTime = Date.now();
+    const pool = new WorkerPool(concurrency);
+
+    const poolResult = await pool.run(targetTests, async (tc) => {
+      try {
+        await executeTestCase(tc, target, config, paths, pool, proxyEnv, proxyHandle);
+        onTestComplete?.(tc.id, target.name);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await saveResult(paths, tc.id, 'agent-error.log', message, target.name);
+        throw err;
+      }
+    }, (info, tc, event) => {
+      const elapsed = formatElapsed(Date.now() - startTime);
+      if (event === 'start') {
+        console.log(chalk.dim(`  [${info.completed + info.running}/${info.total}] ${tc.id} (${tc.difficulty}) — running... [${elapsed}]`));
+      } else if (event === 'done') {
+        console.log(chalk.green(`  [${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — done [${elapsed}]`));
+      } else {
+        console.log(chalk.red(`  [${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — failed [${elapsed}]`));
+      }
+    });
+
+    if (poolResult.aborted) return { aborted: true };
+
+    console.log('');
+    console.log(chalk.bold(`Execution Summary (${target.name})`));
+    console.log(`  Total:  ${targetTests.length}`);
+    console.log(chalk.green(`  Passed: ${poolResult.passed}`));
+    if (poolResult.failed > 0) {
+      console.log(chalk.red(`  Failed: ${poolResult.failed}`));
+    }
+    console.log(chalk.dim(`  Elapsed: ${formatElapsed(Date.now() - startTime)}`));
+  }
+
+  return { aborted: false };
 }
 
 export async function executeCommand(paths: ProjectPaths, options: { testIds?: string[] } = {}): Promise<void> {
@@ -275,69 +366,14 @@ export async function executeCommand(paths: ProjectPaths, options: { testIds?: s
     : allTestCases;
   spinner.succeed(`Loaded ${testCases.length} test case(s)${options.testIds ? ` (filtered from ${allTestCases.length})` : ''}`);
 
-  // Validate connectivity
-  spinner.start('Checking OpenSandbox connectivity...');
-  await SandboxClient.checkConnectivity(config.sandbox);
-  spinner.succeed('OpenSandbox server is reachable');
-
-  // Start auth proxy: secrets stay on the host, sandboxes only get BASE_URL vars
-  const sandboxEnv = resolveEnv(config.sandbox?.env);
-  const hostAddr = getSandboxHostAddress();
-  let proxy: AuthProxyHandle | undefined;
-  let proxyEnv: Record<string, string> | undefined;
-
-  const { proxyTargets, baseUrlVarMap, cleanEnv } = rewriteEnv(sandboxEnv);
-  if (proxyTargets.length > 0) {
-    spinner.start('Starting auth proxy...');
-    proxy = await startAuthProxy(proxyTargets, baseUrlVarMap);
-    proxyEnv = applyProxyUrls(cleanEnv, proxy.listeners, hostAddr);
+  const { proxy, proxyEnv } = await prepareSandboxEnv(config);
+  if (proxy) {
     const ports = proxy.listeners.map((l) => `${l.baseUrlVar}→:${l.port}`).join(', ');
-    spinner.succeed(`Auth proxy listening (${ports})`);
-  } else if (sandboxEnv && Object.keys(sandboxEnv).length > 0) {
-    // No known secrets found, pass through as-is
-    proxyEnv = sandboxEnv;
+    console.log(chalk.dim(`Auth proxy listening (${ports})`));
   }
 
-  const concurrency = config.sandbox.concurrency ?? 3;
-
   try {
-    for (const target of config.targets) {
-      console.log(chalk.bold(`\nTarget: ${target.name} (${target.image})`));
-      console.log(chalk.dim(`Concurrency: ${concurrency}\n`));
-
-      const startTime = Date.now();
-      const pool = new WorkerPool(concurrency);
-
-      const executeFn = async (tc: TestCase): Promise<void> => {
-        try {
-          await executeTestCase(tc, target, config, paths, pool, proxyEnv, proxy);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          await saveResult(paths, tc.id, 'error.log', message, target.name);
-          throw err;
-        }
-      };
-
-      const { passed, failed } = await pool.run(testCases, executeFn, (info, tc, event) => {
-        const elapsed = formatElapsed(Date.now() - startTime);
-        if (event === 'start') {
-          console.log(chalk.dim(`[${info.completed + info.running}/${info.total}] ${tc.id} (${tc.difficulty}) — running... [${elapsed}]`));
-        } else if (event === 'done') {
-          console.log(chalk.green(`[${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — done [${elapsed}]`));
-        } else {
-          console.log(chalk.red(`[${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — failed [${elapsed}]`));
-        }
-      });
-
-      console.log('');
-      console.log(chalk.bold(`Execution Summary (${target.name})`));
-      console.log(`  Total:  ${testCases.length}`);
-      console.log(chalk.green(`  Passed: ${passed}`));
-      if (failed > 0) {
-        console.log(chalk.red(`  Failed: ${failed}`));
-      }
-      console.log(chalk.dim(`  Elapsed: ${formatElapsed(Date.now() - startTime)}`));
-    }
+    await runExecuteStage({ config, paths, testCases, proxyEnv, proxyHandle: proxy });
   } finally {
     await proxy?.stop();
   }

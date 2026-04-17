@@ -48,6 +48,36 @@ export async function saveResult(
   await writeFile(join(dir, filename), content, 'utf-8');
 }
 
+export async function saveBinaryResult(
+  paths: ProjectPaths,
+  testId: string,
+  filename: string,
+  data: Buffer,
+  target?: string,
+): Promise<void> {
+  const dir = target
+    ? join(paths.results, target, testId)
+    : join(paths.results, testId);
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, filename), data);
+}
+
+export async function loadBinaryResult(
+  paths: ProjectPaths,
+  testId: string,
+  filename: string,
+  target?: string,
+): Promise<Buffer | null> {
+  const dir = target
+    ? join(paths.results, target, testId)
+    : join(paths.results, testId);
+  try {
+    return await readFile(join(dir, filename));
+  } catch {
+    return null;
+  }
+}
+
 export function formatElapsed(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);

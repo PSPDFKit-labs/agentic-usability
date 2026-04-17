@@ -81,7 +81,7 @@ ${docsUrl ? `Documentation: ${docsUrl}` : ''}
 ${summarizeExistingTests(existingTests)}
 Each test case must be a JSON object with these fields:
 - "id" (string, optional): A unique ID like "TC-001". If omitted, one will be auto-assigned.
-- "problemStatement" (string, required): A clear description of the programming task. This is what an AI agent will receive as instructions.
+- "problemStatement" (string, required): A goal-oriented description of the task in domain terms. Do NOT include API endpoint paths, function names, parameter names, or request/response structures — the agent must discover those itself. This is what an AI agent will receive as its only instructions.
 - "referenceSolution" (array of objects, required): Each object has "path" (string, file path) and "content" (string, file contents). This is the correct implementation.
 - "difficulty" (string, required): One of "easy", "medium", or "hard":
 ${DIFFICULTY_RUBRIC}
@@ -96,10 +96,13 @@ Guidelines:
 - Reference solutions should be correct, idiomatic usage of the SDK.
 - Target APIs should be the specific SDK functions/classes the solution needs.
 - Expected tokens should match patterns that indicate correct SDK usage. Prefer API endpoint paths over library-specific patterns when possible (e.g. prefer "/v1/messages" over "requests\\.post").
-- IMPORTANT: When multiple valid API approaches exist for a problem (e.g. different library versions, simpler vs advanced API, two functions doing the same thing), handle this by either:
-  (a) Being explicit in the problemStatement about which specific API, method, or library to use (e.g. "Use endpoint POST /processor/convert" not just "Convert a file using the API"), OR
-  (b) Creating separate test cases for each valid approach, each with its own targetApis and expectedTokens.
-  Do NOT create a test case with an ambiguous problem statement where the agent could reasonably use a different valid approach and be penalized for it.
+- IMPORTANT: Problem statements must describe the GOAL in domain/product terms, not prescribe the implementation. Write them as if from a developer who knows what the product does but has not read the API reference. For example:
+  BAD:  "Use POST /processor/convert_to_pdf with multipart/form-data containing a field named 'file'"
+  GOOD: "Convert a .docx file to PDF using the document processing API and save the result locally"
+  BAD:  "Call client.messages.create with model='claude-sonnet-4-6' and max_tokens=1024"
+  GOOD: "Send a text prompt to the Claude API and print the response"
+  The problem statement should mention WHAT to accomplish, not HOW (no endpoint paths, parameter names, JSON field names, or request body structures). The agent's job is to discover the right API calls from the SDK sources and documentation — if the problem statement spells them out, you're testing copy-paste, not API discovery.
+- When multiple valid API approaches exist (e.g. different library versions, REST vs SDK wrapper), create separate test cases for each approach. Disambiguate by describing the goal differently (e.g. "using the REST API directly" vs "using the Python SDK client"), NOT by naming specific functions or endpoints.
 ${config.publicInfo?.language ? `\nIMPORTANT: All test cases and reference solutions MUST use ${config.publicInfo.language}.\n` : ''}${buildTargetContext(config)}${SCHEMA_DESCRIPTION}`;
 }
 

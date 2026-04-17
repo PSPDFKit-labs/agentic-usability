@@ -9,10 +9,11 @@ export class GeminiAdapter extends BaseAdapter {
     super(config);
   }
 
-  sandboxCommand(prompt: string, workDir = '/workspace'): string {
+  sandboxCommand(prompt: string, workDir = '/workspace', schema?: object): string {
     const escaped = this.escapeForShell(prompt);
     const args = this.config.args ?? [];
-    const cmd = `cd ${workDir} && GEMINI_SANDBOX=false gemini --yolo -p '${escaped}' ${args.join(' ')}`.trimEnd();
+    const jsonFlag = schema ? ' -o json' : '';
+    const cmd = `cd ${workDir} && GEMINI_SANDBOX=false gemini --yolo -p '${escaped}' ${args.join(' ')}${jsonFlag}`.trimEnd();
     return cmd;
   }
 

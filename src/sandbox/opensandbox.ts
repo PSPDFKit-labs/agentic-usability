@@ -118,6 +118,28 @@ export class SandboxClient {
     }
   }
 
+  async readBinaryFile(path: string): Promise<Buffer> {
+    const result = await this.runCommand(`base64 '${path.replace(/'/g, "'\\''")}'`);
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to read binary file '${path}': ${result.stderr}`);
+    }
+    return Buffer.from(result.stdout.replace(/\s/g, ''), 'base64');
+  }
+
+  async uploadBinaryFile(sandboxPath: string, data: Buffer): Promise<void> {
+    const b64 = data.toString('base64');
+    const tmpPath = '/tmp/_upload_b64.txt';
+    // Upload base64 text via the normal file API, then decode to target path
+    await this.uploadFiles([{ path: tmpPath, data: b64 }]);
+    const escaped = sandboxPath.replace(/'/g, "'\\''");
+    const result = await this.runCommand(
+      `mkdir -p "$(dirname '${escaped}')" && base64 -d '${tmpPath}' > '${escaped}' && rm -f '${tmpPath}'`,
+    );
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to upload binary file '${sandboxPath}': ${result.stderr}`);
+    }
+  }
+
   async destroy(): Promise<void> {
     if (!this.sandbox) return;
     try {

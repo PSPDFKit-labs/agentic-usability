@@ -11,6 +11,10 @@ const mockSandboxInstance = {
   destroy: vi.fn(),
 };
 
+vi.mock('../../core/env.js', () => ({
+  loadDotenv: vi.fn(),
+}));
+
 vi.mock('../../core/config.js', () => ({
   loadConfig: vi.fn(),
 }));

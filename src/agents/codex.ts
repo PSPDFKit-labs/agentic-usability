@@ -12,10 +12,14 @@ export class CodexAdapter extends BaseAdapter {
     super(config);
   }
 
-  sandboxCommand(prompt: string, workDir = '/workspace'): string {
+  sandboxCommand(prompt: string, workDir = '/workspace', schema?: object): string {
     const escaped = this.escapeForShell(prompt);
     const args = this.config.args ?? [];
-    const cmd = `codex exec --dangerously-bypass-approvals-and-sandbox -C ${workDir} '${escaped}' ${args.join(' ')}`.trimEnd();
+    const schemaPrefix = schema
+      ? `printf '%s' '${this.escapeForShell(JSON.stringify(schema))}' > /tmp/_schema.json && `
+      : '';
+    const schemaFlags = schema ? ' --output-schema /tmp/_schema.json' : '';
+    const cmd = `${schemaPrefix}codex exec --dangerously-bypass-approvals-and-sandbox -C ${workDir} '${escaped}' ${args.join(' ')}${schemaFlags}`.trimEnd();
     return cmd;
   }
 

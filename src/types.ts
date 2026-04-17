@@ -130,9 +130,9 @@ export interface PipelineState {
   startedAt: string;
   testCases: number;
   completed: {
-    execute: string[];
-    analyze: string[];
-    judge: string[];
+    execute: Record<string, string[]>;
+    analyze: Record<string, string[]>;
+    judge: Record<string, string[]>;
   };
 }
 

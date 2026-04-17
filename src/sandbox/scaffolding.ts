@@ -1,14 +1,25 @@
-import { readFile, readdir, stat } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { readFile, readdir, stat as fsStat } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { basename, join, relative } from 'node:path';
+import { tmpdir } from 'node:os';
 import type { SandboxClient } from './opensandbox.js';
 import type { Config, TestCase } from '../types.js';
+import { resolveSources } from '../core/source-resolver.js';
+
+/** Directories excluded from source uploads — these are large and not useful for evaluation. */
+const EXCLUDED_DIRS = ['.git', 'node_modules', '__pycache__', '.venv', 'venv', '.tox', 'dist', 'build', '.next', '.nuxt'];
+
+/** Process-scoped cache: source path → tarball path on disk. */
+const sourceArchiveCache = new Map<string, string>();
 
 /**
- * Recursively reads all files from a local directory, returning relative paths and content.
+ * Recursively reads all files from a local directory, returning paths and content.
+ * @param targetPrefix - sandbox path prefix (e.g. '/workspace/' or '/workspace/sources/foo/')
  */
 async function readDirRecursive(
   dirPath: string,
   basePath: string = dirPath,
+  targetPrefix: string = '/workspace/',
 ): Promise<Array<{ path: string; data: string }>> {
   const entries = await readdir(dirPath, { withFileTypes: true });
   const files: Array<{ path: string; data: string }> = [];
@@ -16,16 +27,54 @@ async function readDirRecursive(
   for (const entry of entries) {
     const fullPath = join(dirPath, entry.name);
     if (entry.isDirectory()) {
-      const nested = await readDirRecursive(fullPath, basePath);
+      const nested = await readDirRecursive(fullPath, basePath, targetPrefix);
       files.push(...nested);
     } else if (entry.isFile()) {
       const relPath = relative(basePath, fullPath);
-      const data = await readFile(fullPath, 'utf-8');
-      files.push({ path: `/workspace/${relPath}`, data });
+      try {
+        const data = await readFile(fullPath, 'utf-8');
+        files.push({ path: `${targetPrefix}${relPath}`, data });
+      } catch {
+        // Skip binary files that can't be read as UTF-8
+      }
     }
   }
 
   return files;
+}
+
+/**
+ * Create a tar.gz archive of a directory, excluding common bloat dirs.
+ * Archives are cached on disk so concurrent sandboxes reuse the same tarball.
+ */
+async function getSourceArchive(srcPath: string): Promise<string> {
+  const cached = sourceArchiveCache.get(srcPath);
+  if (cached) {
+    try {
+      await fsStat(cached);
+      return cached;
+    } catch {
+      sourceArchiveCache.delete(srcPath);
+    }
+  }
+
+  const dirName = basename(srcPath);
+  const tarPath = join(tmpdir(), `agentic-sources-${dirName}-${Date.now()}.tar.gz`);
+
+  const excludeArgs = EXCLUDED_DIRS.flatMap((d) => ['--exclude', d]);
+
+  await new Promise<void>((resolve, reject) => {
+    execFile('tar', ['czf', tarPath, ...excludeArgs, '-C', srcPath, '.'], {
+      timeout: 120_000,
+      maxBuffer: 10 * 1024 * 1024,
+    }, (error) => {
+      if (error) reject(new Error(`Failed to create source archive for ${srcPath}: ${error.message}`));
+      else resolve();
+    });
+  });
+
+  sourceArchiveCache.set(srcPath, tarPath);
+  return tarPath;
 }
 
 /**
@@ -49,7 +98,7 @@ export async function scaffoldWorkspace(
     logs.push(`[Layer 2] Uploading template from ${templatePath}`);
 
     try {
-      await stat(templatePath);
+      await fsStat(templatePath);
     } catch {
       throw new Error(
         `Template directory not found: ${templatePath}`,
@@ -106,4 +155,57 @@ export async function scaffoldWorkspace(
   }
 
   return logs.join('\n');
+}
+
+/**
+ * Resolves project sources (local + git) and uploads them into the sandbox
+ * at /workspace/sources/<dirname>/.
+ * Returns the list of sandbox source directory paths for prompt construction.
+ *
+ * Directory sources are tarred on the host and uploaded as archives to avoid
+ * reading thousands of files into Node.js memory (which causes OOM on large repos).
+ * Archives are cached on disk so concurrent sandboxes share one tarball.
+ */
+export async function uploadSources(
+  client: SandboxClient,
+  config: Config,
+  cacheRepos: string,
+): Promise<string[]> {
+  const sourcePaths = await resolveSources(config, { reposDir: cacheRepos });
+  if (sourcePaths.length === 0) return [];
+
+  const sandboxDirs: string[] = [];
+
+  for (const srcPath of sourcePaths) {
+    const srcStat = await fsStat(srcPath);
+
+    if (srcStat.isFile()) {
+      // Single file source — upload directly into /workspace/sources/
+      const fileName = basename(srcPath);
+      const targetPath = `/workspace/sources/${fileName}`;
+      sandboxDirs.push(targetPath);
+      try {
+        const data = await readFile(srcPath, 'utf-8');
+        await client.uploadFiles([{ path: targetPath, data }]);
+      } catch {
+        // Skip binary files that can't be read as UTF-8
+      }
+    } else {
+      // Directory source — tar on host, upload tarball, extract in sandbox.
+      // This avoids loading thousands of files into JS heap.
+      const dirName = basename(srcPath);
+      const targetPrefix = `/workspace/sources/${dirName}/`;
+      sandboxDirs.push(targetPrefix);
+
+      const tarPath = await getSourceArchive(srcPath);
+      const tarData = await readFile(tarPath);
+      const sandboxTarPath = `/tmp/_sources_${dirName}.tar.gz`;
+      await client.uploadBinaryFile(sandboxTarPath, tarData);
+      await client.runCommand(
+        `mkdir -p '${targetPrefix}' && tar xzf '${sandboxTarPath}' -C '${targetPrefix}' && rm -f '${sandboxTarPath}'`,
+      );
+    }
+  }
+
+  return sandboxDirs;
 }

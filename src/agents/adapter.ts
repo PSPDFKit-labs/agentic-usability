@@ -18,7 +18,10 @@ export interface AgentAdapter {
   interactive(prompt: string, workDir: string): Promise<{ exitCode: number; durationMs: number }>;
 
   /** Build a complete shell command string for sandbox execution. */
-  sandboxCommand(prompt: string, workDir?: string): string;
+  sandboxCommand(prompt: string, workDir?: string, schema?: object): string;
+
+  /** Unwrap agent-specific envelope from raw stdout, returning the inner content string. */
+  extractResult(stdout: string): string;
 }
 
 const KNOWN_ADAPTERS: Record<string, new (config: AgentConfig) => AgentAdapter> = {

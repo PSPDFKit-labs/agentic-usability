@@ -7,12 +7,12 @@ A CLI tool that measures how well AI coding agents (Claude Code, Codex, Gemini C
                                                      ↓
         [OpenSandbox] ← [Execution Agent (public info only)]
                                                      ↓
-                                     [Extract Solution Files JSON]
+                              [Extract Solution + Workspace Snapshot]
                                                      ↓
                               ┌──────────────┴──────────────┐
                               ↓                              ↓
-                   [Code Token Analysis]          [LLM Judge Comparison]
-                   (regex: API coverage)     (holistic: similarity scoring)
+                   [Code Token Analysis]        [OpenSandbox] ← [LLM Judge]
+                   (regex: API coverage)     (runs solution, inspects source)
                               └──────────────┬──────────────┘
                                              ↓
                                         [Scorecard]
@@ -135,9 +135,15 @@ pipelines/my-sdk-eval/           # project root (= CWD or -p target)
       node-20/                   # per-target results
         TC-001/
           generated-solution.json
+          workspace-snapshot.tar.gz  # sandbox state for judge reconstruction
+          agent-cmd.log
           agent-output.log
+          agent-proxy.log.json       # executor proxy request logs
           token-analysis.json
           judge.json
+          judge-cmd.log
+          judge-output.log
+          judge-proxy.log.json       # judge proxy request logs
   cache/                         # git repo clones
     repos/
 ```
@@ -289,6 +295,8 @@ Docker environments where agents solve problems. Each target runs independently 
   ]
 }
 ```
+
+> **Note:** Target images must include `tar` and `base64` utilities. After the executor finishes, the CLI captures a workspace snapshot (`tar czf`) so the judge can restore the exact environment. Most standard images (node, python, ubuntu, alpine) include these by default. If `tar` is missing, the snapshot is silently skipped and the judge falls back to re-scaffolding the workspace from scratch.
 
 ### Workspace
 
@@ -473,9 +481,9 @@ Deterministic regex matching against the generated solution files:
 - **API Coverage**: Word-boundary match for each entry in `targetApis`. REST-style APIs (e.g. `POST /build`) are automatically decomposed into separate HTTP method + URL path checks.
 - **Token Coverage**: Full regex match (with dotAll/multiline support) for each entry in `expectedTokens` (invalid regex falls back to escaped literal)
 
-### LLM Judge
+### LLM Judge (Sandboxed)
 
-An AI agent compares the reference solution to the generated solution across four orthogonal dimensions, focusing on SDK/API usage (not general code style):
+The judge runs inside a sandbox with the same target image as the executor. It restores the executor's workspace (via snapshot or re-scaffolding), has access to the SDK source code at `/workspace/sources/`, and can run the generated solution to verify it works. It scores across four orthogonal dimensions, focusing on SDK/API usage (not general code style):
 
 | Metric | Description |
 |--------|-------------|

@@ -105,16 +105,20 @@ function ScoresTable({ results }: { results: TargetResults[] }) {
       <tbody>
         {results.map((t) => {
           const a = t.aggregates;
+          const scoreColor = (v: number | null | undefined): React.CSSProperties => ({
+            ...tdStyle,
+            color: v == null ? colors.textMuted : v >= 80 ? colors.pass : v >= 50 ? '#e3b341' : colors.fail,
+          });
           return (
             <tr key={t.target}>
               <td style={{ ...tdStyle, fontFamily: 'monospace', color: colors.accent }}>{t.target}</td>
-              <td style={{ ...tdStyle, color: a.passRate >= 80 ? colors.pass : a.passRate >= 50 ? '#e3b341' : colors.fail }}>{pct(a.passRate)}</td>
-              <td style={tdStyle}>{pct(a.avgApiCoverage)}</td>
-              <td style={tdStyle}>{pct(a.avgTokenCoverage)}</td>
-              <td style={tdStyle}>{pct(a.avgApiDiscovery)}</td>
-              <td style={tdStyle}>{pct(a.avgCallCorrectness)}</td>
-              <td style={tdStyle}>{pct(a.avgCompleteness)}</td>
-              <td style={tdStyle}>{pct(a.avgFunctionalCorrectness)}</td>
+              <td style={scoreColor(a.passRate)}>{pct(a.passRate)}</td>
+              <td style={scoreColor(a.avgApiCoverage)}>{pct(a.avgApiCoverage)}</td>
+              <td style={scoreColor(a.avgTokenCoverage)}>{pct(a.avgTokenCoverage)}</td>
+              <td style={scoreColor(a.avgApiDiscovery)}>{pct(a.avgApiDiscovery)}</td>
+              <td style={scoreColor(a.avgCallCorrectness)}>{pct(a.avgCallCorrectness)}</td>
+              <td style={scoreColor(a.avgCompleteness)}>{pct(a.avgCompleteness)}</td>
+              <td style={scoreColor(a.avgFunctionalCorrectness)}>{pct(a.avgFunctionalCorrectness)}</td>
             </tr>
           );
         })}

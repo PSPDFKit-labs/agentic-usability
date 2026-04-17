@@ -75,6 +75,28 @@ describe('GeminiAdapter', () => {
       const cmd = adapter.sandboxCommand('task');
       expect(cmd).toBe("cd /workspace && GEMINI_SANDBOX=false gemini --yolo -p 'task'");
     });
+
+    it('includes -o json when schema is provided', () => {
+      const schema = { type: 'object' };
+      const cmd = adapter.sandboxCommand('task', '/workspace', schema);
+      expect(cmd).toContain('-o json');
+    });
+
+    it('omits -o json when no schema is provided', () => {
+      const cmd = adapter.sandboxCommand('task');
+      expect(cmd).not.toContain('-o json');
+    });
+  });
+
+  describe('extractResult', () => {
+    it('unwraps response field from Gemini envelope', () => {
+      const envelope = JSON.stringify({ response: 'extracted content' });
+      expect(adapter.extractResult(envelope)).toBe('extracted content');
+    });
+
+    it('returns raw string when not valid JSON', () => {
+      expect(adapter.extractResult('not json')).toBe('not json');
+    });
   });
 
   describe('installCommand', () => {

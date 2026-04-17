@@ -89,6 +89,30 @@ describe('CodexAdapter', () => {
       const cmd = adapter.sandboxCommand('task');
       expect(cmd).toBe("codex exec --dangerously-bypass-approvals-and-sandbox -C /workspace 'task'");
     });
+
+    it('includes --output-schema flag when schema is provided', () => {
+      const schema = { type: 'object', properties: { score: { type: 'number' } } };
+      const cmd = adapter.sandboxCommand('task', '/workspace', schema);
+      expect(cmd).toContain('--output-schema /tmp/_schema.json');
+      expect(cmd).toContain("printf '%s'");
+      expect(cmd).toContain('"type":"object"');
+    });
+
+    it('omits schema flags when no schema is provided', () => {
+      const cmd = adapter.sandboxCommand('task');
+      expect(cmd).not.toContain('--output-schema');
+      expect(cmd).not.toContain('_schema.json');
+    });
+  });
+
+  describe('extractResult', () => {
+    it('returns parsed JSON as-is when valid', () => {
+      expect(adapter.extractResult('{"score": 95}')).toBe('{"score": 95}');
+    });
+
+    it('returns raw string when not valid JSON', () => {
+      expect(adapter.extractResult('not json')).toBe('not json');
+    });
   });
 
   describe('installCommand', () => {

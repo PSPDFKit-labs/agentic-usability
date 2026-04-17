@@ -23,7 +23,7 @@ describe('PipelineStateManager', () => {
     it('initializes with fresh state', () => {
       const state = manager.getState();
       expect(state.stage).toBe('execute');
-      expect(state.completed.execute).toEqual([]);
+      expect(state.completed.execute).toEqual({});
     });
   });
 
@@ -33,12 +33,25 @@ describe('PipelineStateManager', () => {
         stage: 'analyze',
         startedAt: '2024-01-01T00:00:00.000Z',
         testCases: 5,
-        completed: { execute: ['TC-001'], analyze: [], judge: [] },
+        completed: { execute: { claude: ['TC-001'] }, analyze: {}, judge: {} },
       };
       mockReadFile.mockResolvedValue(JSON.stringify(savedState));
       const state = await manager.load();
       expect(state.stage).toBe('analyze');
-      expect(state.completed.execute).toEqual(['TC-001']);
+      expect(state.completed.execute).toEqual({ claude: ['TC-001'] });
+    });
+
+    it('migrates old flat-array format to per-target format', async () => {
+      const savedState = {
+        stage: 'analyze',
+        startedAt: '2024-01-01T00:00:00.000Z',
+        testCases: 5,
+        completed: { execute: ['TC-001', 'TC-002'], analyze: [], judge: [] },
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(savedState));
+      const state = await manager.load();
+      expect(state.completed.execute).toEqual({ _legacy: ['TC-001', 'TC-002'] });
+      expect(state.completed.analyze).toEqual({});
     });
 
     it('returns fresh state when file does not exist', async () => {
@@ -66,45 +79,64 @@ describe('PipelineStateManager', () => {
   });
 
   describe('markTestComplete', () => {
-    it('adds testId to the specified stage', () => {
-      manager.markTestComplete('execute', 'TC-001');
-      expect(manager.getState().completed.execute).toContain('TC-001');
+    it('adds testId to the specified stage and target', () => {
+      manager.markTestComplete('execute', 'TC-001', 'claude');
+      expect(manager.getState().completed.execute.claude).toContain('TC-001');
     });
 
     it('does not duplicate testId if already marked', () => {
-      manager.markTestComplete('execute', 'TC-001');
-      manager.markTestComplete('execute', 'TC-001');
-      expect(manager.getState().completed.execute).toEqual(['TC-001']);
+      manager.markTestComplete('execute', 'TC-001', 'claude');
+      manager.markTestComplete('execute', 'TC-001', 'claude');
+      expect(manager.getState().completed.execute.claude).toEqual(['TC-001']);
+    });
+
+    it('tracks targets independently', () => {
+      manager.markTestComplete('execute', 'TC-001', 'claude');
+      manager.markTestComplete('execute', 'TC-001', 'codex');
+      expect(manager.getState().completed.execute.claude).toEqual(['TC-001']);
+      expect(manager.getState().completed.execute.codex).toEqual(['TC-001']);
     });
   });
 
   describe('isTestComplete', () => {
-    it('returns true for completed tests', () => {
-      manager.markTestComplete('execute', 'TC-001');
-      expect(manager.isTestComplete('execute', 'TC-001')).toBe(true);
+    it('returns true for completed tests on a specific target', () => {
+      manager.markTestComplete('execute', 'TC-001', 'claude');
+      expect(manager.isTestComplete('execute', 'TC-001', 'claude')).toBe(true);
     });
 
     it('returns false for incomplete tests', () => {
-      expect(manager.isTestComplete('execute', 'TC-001')).toBe(false);
+      expect(manager.isTestComplete('execute', 'TC-001', 'claude')).toBe(false);
+    });
+
+    it('returns false for a different target', () => {
+      manager.markTestComplete('execute', 'TC-001', 'claude');
+      expect(manager.isTestComplete('execute', 'TC-001', 'codex')).toBe(false);
     });
   });
 
   describe('getIncompleteTests', () => {
-    it('returns only tests not in the completed set', () => {
-      manager.markTestComplete('execute', 'TC-001');
-      const incomplete = manager.getIncompleteTests('execute', ['TC-001', 'TC-002', 'TC-003']);
+    it('returns only tests not in the completed set for a target', () => {
+      manager.markTestComplete('execute', 'TC-001', 'claude');
+      const incomplete = manager.getIncompleteTests('execute', ['TC-001', 'TC-002', 'TC-003'], 'claude');
       expect(incomplete).toEqual(['TC-002', 'TC-003']);
     });
 
-    it('returns all tests when none are complete', () => {
-      const incomplete = manager.getIncompleteTests('execute', ['TC-001', 'TC-002']);
+    it('returns all tests when none are complete for the target', () => {
+      const incomplete = manager.getIncompleteTests('execute', ['TC-001', 'TC-002'], 'claude');
       expect(incomplete).toEqual(['TC-001', 'TC-002']);
     });
 
-    it('returns empty array when all are complete', () => {
-      manager.markTestComplete('execute', 'TC-001');
-      manager.markTestComplete('execute', 'TC-002');
-      const incomplete = manager.getIncompleteTests('execute', ['TC-001', 'TC-002']);
+    it('returns all tests for a different target even if one target is done', () => {
+      manager.markTestComplete('execute', 'TC-001', 'claude');
+      manager.markTestComplete('execute', 'TC-002', 'claude');
+      const incomplete = manager.getIncompleteTests('execute', ['TC-001', 'TC-002'], 'codex');
+      expect(incomplete).toEqual(['TC-001', 'TC-002']);
+    });
+
+    it('returns empty array when all are complete for the target', () => {
+      manager.markTestComplete('execute', 'TC-001', 'claude');
+      manager.markTestComplete('execute', 'TC-002', 'claude');
+      const incomplete = manager.getIncompleteTests('execute', ['TC-001', 'TC-002'], 'claude');
       expect(incomplete).toEqual([]);
     });
   });
@@ -118,11 +150,11 @@ describe('PipelineStateManager', () => {
 
   describe('reset', () => {
     it('resets state to fresh and deletes the state file', async () => {
-      manager.markTestComplete('execute', 'TC-001');
+      manager.markTestComplete('execute', 'TC-001', 'claude');
       manager.advanceStage('analyze');
       await manager.reset();
       expect(manager.getState().stage).toBe('execute');
-      expect(manager.getState().completed.execute).toEqual([]);
+      expect(manager.getState().completed.execute).toEqual({});
       expect(mockUnlink).toHaveBeenCalled();
     });
 

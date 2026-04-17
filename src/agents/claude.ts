@@ -9,10 +9,13 @@ export class ClaudeAdapter extends BaseAdapter {
     super(config);
   }
 
-  sandboxCommand(prompt: string, workDir = '/workspace'): string {
+  sandboxCommand(prompt: string, workDir = '/workspace', schema?: object): string {
     const escaped = this.escapeForShell(prompt);
     const args = this.config.args ?? [];
-    const cmd = `cd ${workDir} && IS_SANDBOX=1 claude --print --dangerously-skip-permissions ${args.join(' ')} '${escaped}'`.trimEnd();
+    const schemaFlags = schema
+      ? ` --output-format json --json-schema '${this.escapeForShell(JSON.stringify(schema))}'`
+      : '';
+    const cmd = `cd ${workDir} && IS_SANDBOX=1 claude --print --dangerously-skip-permissions ${args.join(' ')} '${escaped}'${schemaFlags}`.trimEnd();
     return cmd;
   }
 

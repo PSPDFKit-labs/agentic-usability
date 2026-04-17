@@ -6,20 +6,16 @@ const mockStateManager = {
   save: vi.fn(),
   getState: vi.fn().mockReturnValue({
     stage: 'execute',
-    completed: { execute: [], analyze: [], judge: [] },
+    completed: { execute: {}, analyze: {}, judge: {} },
     testCases: 0,
     startedAt: '',
   }),
   markTestComplete: vi.fn(),
   advanceStage: vi.fn(),
   isTestComplete: vi.fn().mockReturnValue(false),
-  getIncompleteTests: vi.fn().mockImplementation((_stage: string, allIds: string[]) => allIds),
+  getIncompleteTests: vi.fn().mockImplementation((_stage: string, allIds: string[], _target: string) => allIds),
   reset: vi.fn(),
 };
-
-vi.mock('../../core/env.js', () => ({
-  loadDotenv: vi.fn(),
-}));
 
 vi.mock('../../core/config.js', () => ({
   loadConfig: vi.fn(),
@@ -38,9 +34,6 @@ vi.mock('../../core/pipeline.js', () => ({
 
 vi.mock('../../core/suite-io.js', () => ({
   loadTestSuite: vi.fn(),
-  loadSolution: vi.fn().mockResolvedValue([{ path: 'a.ts', content: 'code' }]),
-  saveResult: vi.fn(),
-  formatElapsed: vi.fn().mockReturnValue('1s'),
 }));
 
 vi.mock('../../core/runs.js', () => ({
@@ -56,49 +49,16 @@ vi.mock('../report.js', () => ({
 }));
 
 vi.mock('../execute.js', () => ({
-  executeTestCase: vi.fn(),
-  startProxy: vi.fn().mockResolvedValue({ proxy: undefined, proxyEnv: undefined }),
+  prepareSandboxEnv: vi.fn().mockResolvedValue({ proxy: undefined, proxyEnv: undefined }),
+  runExecuteStage: vi.fn().mockResolvedValue({ aborted: false }),
 }));
 
-vi.mock('../../sandbox/opensandbox.js', () => {
-  const MockSandboxClient = vi.fn(function (this: any) {}) as any;
-  MockSandboxClient.checkConnectivity = vi.fn();
-  return { SandboxClient: MockSandboxClient };
-});
-
-vi.mock('../../sandbox/worker-pool.js', () => ({
-  WorkerPool: vi.fn(function (this: any) {
-    this.run = vi.fn().mockImplementation(async (items: any[], executeFn: any, _onProgress: any) => {
-      for (const item of items) {
-        await executeFn(item);
-      }
-      return { passed: items.length, failed: 0 };
-    });
-  }),
+vi.mock('../analyze.js', () => ({
+  runAnalyzeStage: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../scoring/tokens.js', () => ({
-  analyzeTokens: vi.fn().mockReturnValue({
-    testId: 'TC-001',
-    target: 'claude',
-    apis: [{ token: 'add', found: true }],
-    tokens: [{ token: 'export', found: true }],
-    apiCoverage: 100,
-    tokenCoverage: 100,
-  }),
-}));
-
-vi.mock('../../scoring/judge.js', () => ({
-  runJudge: vi.fn().mockResolvedValue({
-    testId: 'TC-001',
-    target: 'claude',
-    apiDiscovery: 90,
-    callCorrectness: 85,
-    completeness: 80,
-    functionalCorrectness: 88,
-    overallVerdict: true,
-    notes: 'good',
-  }),
+vi.mock('../judge.js', () => ({
+  runJudgeStage: vi.fn().mockResolvedValue({ aborted: false }),
 }));
 
 vi.mock('node:readline/promises', () => ({
@@ -123,13 +83,11 @@ vi.mock('ora', () => ({
 }));
 
 import { loadConfig } from '../../core/config.js';
-import { loadTestSuite, loadSolution, saveResult } from '../../core/suite-io.js';
+import { loadTestSuite } from '../../core/suite-io.js';
 import { reportCommand } from '../report.js';
-import { executeTestCase } from '../execute.js';
-import { SandboxClient } from '../../sandbox/opensandbox.js';
-import { analyzeTokens } from '../../scoring/tokens.js';
-import { runJudge } from '../../scoring/judge.js';
-import { PipelineStateManager } from '../../core/pipeline.js';
+import { runExecuteStage } from '../execute.js';
+import { runAnalyzeStage } from '../analyze.js';
+import { runJudgeStage } from '../judge.js';
 import { evalCommand } from '../eval.js';
 
 const paths = makeProjectPaths();
@@ -148,17 +106,15 @@ describe('evalCommand', () => {
     vi.mocked(loadConfig).mockResolvedValue(defaultConfig);
     vi.mocked(loadTestSuite).mockResolvedValue([defaultTestCase]);
     vi.mocked(reportCommand).mockResolvedValue(undefined);
-    vi.mocked(executeTestCase).mockResolvedValue(undefined);
-    (SandboxClient.checkConnectivity as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
-    vi.mocked(loadSolution).mockResolvedValue([{ path: 'a.ts', content: 'code' }]);
-    vi.mocked(saveResult).mockResolvedValue(undefined);
+    vi.mocked(runExecuteStage).mockResolvedValue({ aborted: false });
+    vi.mocked(runAnalyzeStage).mockResolvedValue(undefined);
+    vi.mocked(runJudgeStage).mockResolvedValue({ aborted: false });
 
-    // Reset state manager mocks
     mockStateManager.load.mockResolvedValue(undefined);
     mockStateManager.save.mockResolvedValue(undefined);
     mockStateManager.getState.mockReturnValue({
       stage: 'execute',
-      completed: { execute: [], analyze: [], judge: [] },
+      completed: { execute: {}, analyze: {}, judge: {} },
       testCases: 0,
       startedAt: '',
     });
@@ -171,18 +127,18 @@ describe('evalCommand', () => {
   it('runs all eval stages in order', async () => {
     await evalCommand(paths);
 
-    expect(executeTestCase).toHaveBeenCalled();
-    expect(analyzeTokens).toHaveBeenCalled();
-    expect(runJudge).toHaveBeenCalled();
+    expect(runExecuteStage).toHaveBeenCalled();
+    expect(runAnalyzeStage).toHaveBeenCalled();
+    expect(runJudgeStage).toHaveBeenCalled();
     expect(reportCommand).toHaveBeenCalled();
   });
 
   it('skips judge stage when skipJudge is true', async () => {
     await evalCommand(paths, { skipJudge: true });
 
-    expect(executeTestCase).toHaveBeenCalled();
-    expect(analyzeTokens).toHaveBeenCalled();
-    expect(runJudge).not.toHaveBeenCalled();
+    expect(runExecuteStage).toHaveBeenCalled();
+    expect(runAnalyzeStage).toHaveBeenCalled();
+    expect(runJudgeStage).not.toHaveBeenCalled();
     expect(reportCommand).toHaveBeenCalled();
   });
 
@@ -198,7 +154,7 @@ describe('evalCommand', () => {
 
     mockStateManager.getState.mockReturnValue({
       stage: 'analyze',
-      completed: { execute: ['TC-001'], analyze: [], judge: [] },
+      completed: { execute: { claude: ['TC-001'] }, analyze: {}, judge: {} },
       testCases: 1,
       startedAt: '',
     });
@@ -206,8 +162,8 @@ describe('evalCommand', () => {
     await evalCommand(paths, { resume: true });
 
     expect(mockStateManager.load).toHaveBeenCalled();
-    expect(executeTestCase).not.toHaveBeenCalled();
-    expect(analyzeTokens).toHaveBeenCalled();
+    expect(runExecuteStage).not.toHaveBeenCalled();
+    expect(runAnalyzeStage).toHaveBeenCalled();
   });
 
   it('calls advanceStage after each completed stage', async () => {
@@ -221,7 +177,6 @@ describe('evalCommand', () => {
   it('saves pipeline state after stage transitions', async () => {
     await evalCommand(paths);
 
-    // save is called multiple times for state persistence
     expect(mockStateManager.save).toHaveBeenCalled();
     expect(mockStateManager.save.mock.calls.length).toBeGreaterThanOrEqual(3);
   });

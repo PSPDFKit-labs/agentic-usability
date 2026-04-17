@@ -387,7 +387,12 @@ export function EvalRun() {
       </div>
 
       {/* Test cases table with scores */}
-      <div style={{ overflowX: 'auto', borderRadius: '6px', border: `1px solid ${colors.border}` }}>
+      {(() => {
+        const tcScoreStyle = (v: number | null | undefined): React.CSSProperties => ({
+          ...tdStyle,
+          color: v == null ? colors.textMuted : v >= 80 ? colors.pass : v >= 50 ? '#e3b341' : colors.fail,
+        });
+        return (<div style={{ overflowX: 'auto', borderRadius: '6px', border: `1px solid ${colors.border}` }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: colors.bg }}>
           <thead>
             <tr>
@@ -431,12 +436,12 @@ export function EvalRun() {
                     <td style={{ ...tdStyle, fontFamily: 'monospace', color: colors.accent, whiteSpace: 'nowrap' }}>{tc.id}</td>
                     <td style={tdStyle}><span style={{ color: diffColor, textTransform: 'capitalize' }}>{tc.difficulty}</span></td>
                     <td style={{ ...tdStyle, color: colors.textMuted, maxWidth: '280px' }}>{truncated}</td>
-                    <td style={tdStyle}>{ta ? pct(ta.apiCoverage) : '—'}</td>
-                    <td style={tdStyle}>{ta ? pct(ta.tokenCoverage) : '—'}</td>
-                    <td style={tdStyle}>{js ? pct(js.apiDiscovery) : '—'}</td>
-                    <td style={tdStyle}>{js ? pct(js.callCorrectness) : '—'}</td>
-                    <td style={tdStyle}>{js ? pct(js.completeness) : '—'}</td>
-                    <td style={tdStyle}>{js ? pct(js.functionalCorrectness) : '—'}</td>
+                    <td style={tcScoreStyle(ta?.apiCoverage)}>{ta ? pct(ta.apiCoverage) : '—'}</td>
+                    <td style={tcScoreStyle(ta?.tokenCoverage)}>{ta ? pct(ta.tokenCoverage) : '—'}</td>
+                    <td style={tcScoreStyle(js?.apiDiscovery)}>{js ? pct(js.apiDiscovery) : '—'}</td>
+                    <td style={tcScoreStyle(js?.callCorrectness)}>{js ? pct(js.callCorrectness) : '—'}</td>
+                    <td style={tcScoreStyle(js?.completeness)}>{js ? pct(js.completeness) : '—'}</td>
+                    <td style={tcScoreStyle(js?.functionalCorrectness)}>{js ? pct(js.functionalCorrectness) : '—'}</td>
                     <td style={tdStyle}>
                       {verdict !== null ? <VerdictBadge pass={verdict} /> : <span style={{ color: colors.textMuted }}>—</span>}
                     </td>
@@ -446,7 +451,8 @@ export function EvalRun() {
             )}
           </tbody>
         </table>
-      </div>
+      </div>);
+      })()}
     </div>
   );
 }

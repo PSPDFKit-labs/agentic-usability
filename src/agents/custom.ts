@@ -13,7 +13,7 @@ export class CustomAdapter extends BaseAdapter {
     this.name = `custom:${config.command}`;
   }
 
-  sandboxCommand(prompt: string, workDir = '/workspace'): string {
+  sandboxCommand(prompt: string, workDir = '/workspace', _schema?: object): string {
     const escaped = this.escapeForShell(prompt);
     const baseArgs = this.resolveArgs(this.config.args ?? [], `'${escaped}'`, workDir);
     const sandboxArgs = this.config.sandboxArgs ?? [];
