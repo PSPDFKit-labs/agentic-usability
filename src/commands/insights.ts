@@ -185,7 +185,7 @@ export async function insightsCommand(paths: ProjectPaths, options: { fresh?: bo
 
   const prompt = buildInsightsPrompt(sourcePaths, config, allAggregates, paths);
 
-  const adapterConfig = config.agents?.generator ?? { command: 'claude' };
+  const adapterConfig = config.agents?.insights ?? { command: 'claude' };
   const adapter = createAdapter(adapterConfig);
 
   console.log(chalk.bold(`\nLaunching interactive ${adapter.name} session for SDK insights...`));

@@ -60,7 +60,7 @@ export class SandboxClient {
   }
 
   async uploadFiles(
-    files: Array<{ path: string; data: string }>,
+    files: Array<{ path: string; data: string | Uint8Array }>,
   ): Promise<void> {
     const sbx = this.requireSandbox();
     try {
@@ -127,16 +127,13 @@ export class SandboxClient {
   }
 
   async uploadBinaryFile(sandboxPath: string, data: Buffer): Promise<void> {
-    const b64 = data.toString('base64');
-    const tmpPath = '/tmp/_upload_b64.txt';
-    // Upload base64 text via the normal file API, then decode to target path
-    await this.uploadFiles([{ path: tmpPath, data: b64 }]);
-    const escaped = sandboxPath.replace(/'/g, "'\\''");
-    const result = await this.runCommand(
-      `mkdir -p "$(dirname '${escaped}')" && base64 -d '${tmpPath}' > '${escaped}' && rm -f '${tmpPath}'`,
-    );
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to upload binary file '${sandboxPath}': ${result.stderr}`);
+    const sbx = this.requireSandbox();
+    try {
+      await sbx.files.writeFiles([{ path: sandboxPath, data }]);
+    } catch (err) {
+      throw new Error(
+        `Failed to upload binary file '${sandboxPath}': ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 

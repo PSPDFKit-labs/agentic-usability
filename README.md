@@ -253,7 +253,8 @@ Each pipeline stage can use a different agent CLI. Supported built-in adapters: 
   "agents": {
     "generator": { "command": "claude" },
     "executor":  { "command": "claude" },
-    "judge":     { "command": "claude" }
+    "judge":     { "command": "claude" },
+    "insights":  { "command": "claude" }
   }
 }
 ```
@@ -265,7 +266,8 @@ To select a specific model, use `args` with the CLI's model flag. If omitted, ea
   "agents": {
     "generator": { "command": "claude", "args": ["--model", "claude-sonnet-4-20250514"] },
     "executor":  { "command": "codex",  "args": ["-m", "o3"] },
-    "judge":     { "command": "gemini", "args": ["-m", "gemini-2.5-pro"] }
+    "judge":     { "command": "gemini", "args": ["-m", "gemini-2.5-pro"] },
+    "insights":  { "command": "claude", "args": ["--model", "claude-opus-4-6"] }
   }
 }
 ```

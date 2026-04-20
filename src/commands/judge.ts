@@ -40,7 +40,7 @@ export async function runJudgeStage(opts: StageOptions): Promise<{ aborted: bool
         let reason = 'no solution files produced';
         try {
           const errorLog = await readFile(join(paths.results, target.name, tc.id, 'agent-error.log'), 'utf-8');
-          if (errorLog.includes('terminated')) reason = 'agent timed out';
+          if (errorLog.includes('terminated')) reason = 'agent terminated';
         } catch { /* no error log */ }
 
         const dnfScore = {

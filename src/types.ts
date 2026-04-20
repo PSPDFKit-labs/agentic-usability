@@ -102,6 +102,7 @@ export interface Config {
     generator?: AgentConfig;
     executor?: AgentConfig;
     judge?: AgentConfig;
+    insights?: AgentConfig;
   };
   targets: TargetConfig[];
   workspace?: WorkspaceConfig;
