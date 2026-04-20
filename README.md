@@ -131,13 +131,18 @@ pipelines/my-sdk-eval/           # project root (= CWD or -p target)
         TC-001/
           generated-solution.json
           workspace-snapshot.tar.gz  # sandbox state for judge reconstruction
+          setup.log                  # workspace scaffolding log
+          install-error.log          # agent CLI install failure (only on error)
           agent-cmd.log
           agent-output.log
+          agent-notes.md             # agent's self-reported working notes
           agent-proxy.log.json       # executor proxy request logs
+          agent-error.log            # execution error (only on error)
           judge.json
           judge-cmd.log
           judge-output.log
           judge-proxy.log.json       # judge proxy request logs
+          judge-error.log            # judge error (only on error)
   cache/                         # git repo clones
     repos/
 ```

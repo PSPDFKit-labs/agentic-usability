@@ -7,7 +7,42 @@ import type { Config, TestCase } from '../types.js';
 import { resolveSources } from '../core/source-resolver.js';
 
 /** Directories excluded from source uploads — these are large and not useful for evaluation. */
-const EXCLUDED_DIRS = ['.git', 'node_modules', '__pycache__', '.venv', 'venv', '.tox', 'dist', 'build', '.next', '.nuxt'];
+const EXCLUDED_DIRS = [
+  // VCS
+  '.git', '.svn', '.hg',
+  // JavaScript / Node
+  'node_modules', '.next', '.nuxt', '.output', '.cache', '.parcel-cache',
+  // Python
+  '__pycache__', '.venv', 'venv', '.tox', '.mypy_cache', '.pytest_cache', '.ruff_cache',
+  // .NET / C#
+  'bin', 'obj', 'packages', '.vs', 'TestResults',
+  // Java / Kotlin
+  '.gradle', '.m2', 'target',
+  // C / C++
+  'CMakeFiles',
+  // Go
+  'vendor',
+  // Rust
+  // ('target' already listed above)
+  // General build outputs
+  'dist', 'build', 'out', 'output', '.build',
+  // IDE / editor
+  '.idea', '.vscode',
+];
+
+/** File extensions excluded from source archives — large binaries not useful for code review. */
+const EXCLUDED_EXTENSIONS = [
+  '*.dll', '*.exe', '*.pdb', '*.nupkg', '*.snupkg',
+  '*.so', '*.dylib', '*.a', '*.lib', '*.o', '*.obj',
+  '*.jar', '*.war', '*.ear', '*.class',
+  '*.wasm',
+  '*.pyc', '*.pyo',
+  '*.zip', '*.tar', '*.tar.gz', '*.tgz', '*.tar.bz2', '*.rar', '*.7z',
+  '*.pdf', '*.doc', '*.docx', '*.xls', '*.xlsx', '*.ppt', '*.pptx',
+  '*.png', '*.jpg', '*.jpeg', '*.gif', '*.bmp', '*.ico', '*.svg', '*.webp',
+  '*.mp3', '*.mp4', '*.avi', '*.mov', '*.wav', '*.flac',
+  '*.ttf', '*.otf', '*.woff', '*.woff2', '*.eot',
+];
 
 /** Process-scoped cache: source path → tarball path on disk. */
 const sourceArchiveCache = new Map<string, string>();
@@ -61,12 +96,15 @@ async function getSourceArchive(srcPath: string): Promise<string> {
   const dirName = basename(srcPath);
   const tarPath = join(tmpdir(), `agentic-sources-${dirName}-${Date.now()}.tar.gz`);
 
-  const excludeArgs = EXCLUDED_DIRS.flatMap((d) => ['--exclude', d]);
+  const excludeArgs = [
+    ...EXCLUDED_DIRS.flatMap((d) => ['--exclude', d]),
+    ...EXCLUDED_EXTENSIONS.flatMap((ext) => ['--exclude', ext]),
+  ];
 
   await new Promise<void>((resolve, reject) => {
     execFile('tar', ['czf', tarPath, ...excludeArgs, '-C', srcPath, '.'], {
-      timeout: 120_000,
-      maxBuffer: 10 * 1024 * 1024,
+      timeout: 300_000,
+      maxBuffer: 50 * 1024 * 1024,
     }, (error) => {
       if (error) reject(new Error(`Failed to create source archive for ${srcPath}: ${error.message}`));
       else resolve();

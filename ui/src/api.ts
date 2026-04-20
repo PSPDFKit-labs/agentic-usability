@@ -76,4 +76,11 @@ export const getRunTestResult = (runId: string, target: string, testId: string) 
   agentCmd: string | null;
   setupLog: string | null;
   agentNotes: string | null;
+  installErrorLog: string | null;
+  agentProxyLog: string | null;
+  agentErrorLog: string | null;
+  judgeCmdLog: string | null;
+  judgeOutputLog: string | null;
+  judgeProxyLog: string | null;
+  judgeErrorLog: string | null;
 }>(`/api/runs/${runId}/results/${target}/${testId}`);

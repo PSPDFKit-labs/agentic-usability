@@ -75,18 +75,40 @@ router.get('/:target/:testId', async (req, res) => {
   if (!target || !testId) { res.status(400).json({ error: 'Invalid target or testId' }); return; }
   try {
     const runPaths = await resolveLatestRunPaths(paths);
-    if (!runPaths) { res.json({ judgeScore: null, generatedSolution: null, agentOutput: null, agentCmd: null, setupLog: null, agentNotes: null }); return; }
+    if (!runPaths) {
+      res.json({
+        judgeScore: null, generatedSolution: null, agentOutput: null, agentCmd: null,
+        setupLog: null, agentNotes: null, installErrorLog: null, agentProxyLog: null,
+        agentErrorLog: null, judgeCmdLog: null, judgeOutputLog: null, judgeProxyLog: null, judgeErrorLog: null,
+      });
+      return;
+    }
 
     const dir = join(runPaths.results, target, testId);
-    const [judgeScore, generatedSolution, agentOutput, agentCmd, setupLog, agentNotes] = await Promise.all([
+    const [
+      judgeScore, generatedSolution, agentOutput, agentCmd, setupLog, agentNotes,
+      installErrorLog, agentProxyLog, agentErrorLog,
+      judgeCmdLog, judgeOutputLog, judgeProxyLog, judgeErrorLog,
+    ] = await Promise.all([
       loadJsonFile<JudgeScore>(join(dir, 'judge.json')),
       loadJsonFile<SolutionFile[]>(join(dir, 'generated-solution.json')),
       loadTextFile(join(dir, 'agent-output.log')),
       loadTextFile(join(dir, 'agent-cmd.log')),
       loadTextFile(join(dir, 'setup.log')),
       loadTextFile(join(dir, 'agent-notes.md')),
+      loadTextFile(join(dir, 'install-error.log')),
+      loadTextFile(join(dir, 'agent-proxy.log.json')),
+      loadTextFile(join(dir, 'agent-error.log')),
+      loadTextFile(join(dir, 'judge-cmd.log')),
+      loadTextFile(join(dir, 'judge-output.log')),
+      loadTextFile(join(dir, 'judge-proxy.log.json')),
+      loadTextFile(join(dir, 'judge-error.log')),
     ]);
-    res.json({ judgeScore, generatedSolution, agentOutput, agentCmd, setupLog, agentNotes });
+    res.json({
+      judgeScore, generatedSolution, agentOutput, agentCmd, setupLog, agentNotes,
+      installErrorLog, agentProxyLog, agentErrorLog,
+      judgeCmdLog, judgeOutputLog, judgeProxyLog, judgeErrorLog,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: `Could not load result files for ${target}/${testId}: ${message}` });

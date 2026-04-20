@@ -278,6 +278,13 @@ interface LogFiles {
   agentCmd: string | null;
   setupLog: string | null;
   agentNotes: string | null;
+  installErrorLog: string | null;
+  agentProxyLog: string | null;
+  agentErrorLog: string | null;
+  judgeCmdLog: string | null;
+  judgeOutputLog: string | null;
+  judgeProxyLog: string | null;
+  judgeErrorLog: string | null;
 }
 
 function LogsPanel({ logs }: { logs: LogFiles | null }) {
@@ -292,10 +299,17 @@ function LogsPanel({ logs }: { logs: LogFiles | null }) {
   }
 
   const entries: { label: string; content: string | null; filename: string }[] = [
+    { label: 'Install Error', content: logs.installErrorLog, filename: 'install-error.log' },
+    { label: 'Setup Log', content: logs.setupLog, filename: 'setup.log' },
     { label: 'Agent Output', content: logs.agentOutput, filename: 'agent-output.log' },
     { label: 'Agent Command', content: logs.agentCmd, filename: 'agent-cmd.log' },
-    { label: 'Setup Log', content: logs.setupLog, filename: 'setup.log' },
     { label: 'Agent Notes', content: logs.agentNotes, filename: 'agent-notes.md' },
+    { label: 'Agent Proxy Log', content: logs.agentProxyLog, filename: 'agent-proxy.log.json' },
+    { label: 'Agent Error', content: logs.agentErrorLog, filename: 'agent-error.log' },
+    { label: 'Judge Command', content: logs.judgeCmdLog, filename: 'judge-cmd.log' },
+    { label: 'Judge Output', content: logs.judgeOutputLog, filename: 'judge-output.log' },
+    { label: 'Judge Proxy Log', content: logs.judgeProxyLog, filename: 'judge-proxy.log.json' },
+    { label: 'Judge Error', content: logs.judgeErrorLog, filename: 'judge-error.log' },
   ];
 
   const available = entries.filter((e) => e.content);
@@ -443,6 +457,13 @@ export function TestCaseDetail() {
           agentCmd: result.agentCmd,
           setupLog: result.setupLog,
           agentNotes: result.agentNotes,
+          installErrorLog: result.installErrorLog,
+          agentProxyLog: result.agentProxyLog,
+          agentErrorLog: result.agentErrorLog,
+          judgeCmdLog: result.judgeCmdLog,
+          judgeOutputLog: result.judgeOutputLog,
+          judgeProxyLog: result.judgeProxyLog,
+          judgeErrorLog: result.judgeErrorLog,
         });
       })
       .catch(() => setLogs(null));
