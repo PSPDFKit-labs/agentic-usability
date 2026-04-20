@@ -86,13 +86,6 @@ describe('judgeCommand', () => {
     vi.mocked(prepareSandboxEnv).mockResolvedValue({ proxy: undefined, proxyEnv: undefined });
   });
 
-  it('skips when skipJudge option is true', async () => {
-    await judgeCommand(paths, { skipJudge: true });
-
-    expect(loadConfig).not.toHaveBeenCalled();
-    expect(loadTestSuite).not.toHaveBeenCalled();
-  });
-
   it('runs judge for each target and test case', async () => {
     await judgeCommand(paths);
 

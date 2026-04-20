@@ -6,8 +6,6 @@ export function makeTestCase(overrides: Partial<TestCase> = {}): TestCase {
     problemStatement: 'Write a function that adds two numbers',
     referenceSolution: [{ path: 'solution.ts', content: 'export const add = (a: number, b: number) => a + b;' }],
     difficulty: 'easy',
-    targetApis: ['add'],
-    expectedTokens: ['export', 'function|const'],
     tags: ['math'],
     ...overrides,
   };

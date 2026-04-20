@@ -19,7 +19,6 @@ export class PipelineStateManager {
       testCases: 0,
       completed: {
         execute: {},
-        analyze: {},
         judge: {},
       },
     };
@@ -37,7 +36,7 @@ export class PipelineStateManager {
       };
       // Migrate old format: if a stage value is a flat string[] (pre-target tracking),
       // convert it to a Record with a single '_legacy' key so existing completions are preserved.
-      for (const stage of ['execute', 'analyze', 'judge'] as const) {
+      for (const stage of ['execute', 'judge'] as const) {
         const val = parsed.completed[stage];
         if (Array.isArray(val)) {
           parsed.completed[stage] = (val as string[]).length > 0 ? { _legacy: val as string[] } : {};

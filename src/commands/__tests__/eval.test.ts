@@ -6,7 +6,7 @@ const mockStateManager = {
   save: vi.fn(),
   getState: vi.fn().mockReturnValue({
     stage: 'execute',
-    completed: { execute: {}, analyze: {}, judge: {} },
+    completed: { execute: {}, judge: {} },
     testCases: 0,
     startedAt: '',
   }),
@@ -53,10 +53,6 @@ vi.mock('../execute.js', () => ({
   runExecuteStage: vi.fn().mockResolvedValue({ aborted: false }),
 }));
 
-vi.mock('../analyze.js', () => ({
-  runAnalyzeStage: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock('../judge.js', () => ({
   runJudgeStage: vi.fn().mockResolvedValue({ aborted: false }),
 }));
@@ -86,7 +82,6 @@ import { loadConfig } from '../../core/config.js';
 import { loadTestSuite } from '../../core/suite-io.js';
 import { reportCommand } from '../report.js';
 import { runExecuteStage } from '../execute.js';
-import { runAnalyzeStage } from '../analyze.js';
 import { runJudgeStage } from '../judge.js';
 import { evalCommand } from '../eval.js';
 
@@ -107,14 +102,13 @@ describe('evalCommand', () => {
     vi.mocked(loadTestSuite).mockResolvedValue([defaultTestCase]);
     vi.mocked(reportCommand).mockResolvedValue(undefined);
     vi.mocked(runExecuteStage).mockResolvedValue({ aborted: false });
-    vi.mocked(runAnalyzeStage).mockResolvedValue(undefined);
     vi.mocked(runJudgeStage).mockResolvedValue({ aborted: false });
 
     mockStateManager.load.mockResolvedValue(undefined);
     mockStateManager.save.mockResolvedValue(undefined);
     mockStateManager.getState.mockReturnValue({
       stage: 'execute',
-      completed: { execute: {}, analyze: {}, judge: {} },
+      completed: { execute: {}, judge: {} },
       testCases: 0,
       startedAt: '',
     });
@@ -128,17 +122,7 @@ describe('evalCommand', () => {
     await evalCommand(paths);
 
     expect(runExecuteStage).toHaveBeenCalled();
-    expect(runAnalyzeStage).toHaveBeenCalled();
     expect(runJudgeStage).toHaveBeenCalled();
-    expect(reportCommand).toHaveBeenCalled();
-  });
-
-  it('skips judge stage when skipJudge is true', async () => {
-    await evalCommand(paths, { skipJudge: true });
-
-    expect(runExecuteStage).toHaveBeenCalled();
-    expect(runAnalyzeStage).toHaveBeenCalled();
-    expect(runJudgeStage).not.toHaveBeenCalled();
     expect(reportCommand).toHaveBeenCalled();
   });
 
@@ -153,8 +137,8 @@ describe('evalCommand', () => {
     }]);
 
     mockStateManager.getState.mockReturnValue({
-      stage: 'analyze',
-      completed: { execute: { claude: ['TC-001'] }, analyze: {}, judge: {} },
+      stage: 'judge',
+      completed: { execute: { claude: ['TC-001'] }, judge: {} },
       testCases: 1,
       startedAt: '',
     });
@@ -163,13 +147,12 @@ describe('evalCommand', () => {
 
     expect(mockStateManager.load).toHaveBeenCalled();
     expect(runExecuteStage).not.toHaveBeenCalled();
-    expect(runAnalyzeStage).toHaveBeenCalled();
+    expect(runJudgeStage).toHaveBeenCalled();
   });
 
   it('calls advanceStage after each completed stage', async () => {
     await evalCommand(paths);
 
-    expect(mockStateManager.advanceStage).toHaveBeenCalledWith('analyze');
     expect(mockStateManager.advanceStage).toHaveBeenCalledWith('judge');
     expect(mockStateManager.advanceStage).toHaveBeenCalledWith('report');
   });

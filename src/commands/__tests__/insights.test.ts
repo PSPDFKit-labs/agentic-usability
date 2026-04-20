@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeConfig, makeTestCase, makeProjectPaths } from '../../__tests__/helpers/fixtures.js';
-import type { AggregateResults, TestResult, TokenAnalysis, JudgeScore } from '../../types.js';
+import type { AggregateResults, TestResult, JudgeScore } from '../../types.js';
 
 vi.mock('../../core/config.js', () => ({
   loadConfig: vi.fn(),
@@ -42,18 +42,6 @@ import { insightsCommand, buildInsightsPrompt } from '../insights.js';
 
 const paths = makeProjectPaths();
 
-function makeTokenAnalysis(overrides: Partial<TokenAnalysis> = {}): TokenAnalysis {
-  return {
-    testId: 'TC-001',
-    target: 'claude',
-    apis: [{ token: 'add', found: true, foundIn: 'solution.ts' }],
-    tokens: [{ token: 'export', found: true, foundIn: 'solution.ts' }],
-    apiCoverage: 100,
-    tokenCoverage: 100,
-    ...overrides,
-  };
-}
-
 function makeJudgeScore(overrides: Partial<JudgeScore> = {}): JudgeScore {
   return {
     testId: 'TC-001',
@@ -73,9 +61,6 @@ function makeTestResult(overrides: Partial<TestResult> = {}): TestResult {
     testId: 'TC-001',
     difficulty: 'easy',
     problemStatement: 'Write a function that adds two numbers',
-    targetApis: ['add'],
-    expectedTokens: ['export'],
-    tokenAnalysis: makeTokenAnalysis(),
     judgeScore: makeJudgeScore(),
     generatedSolution: [{ path: 'solution.ts', content: 'code' }],
     agentNotes: null,
@@ -87,8 +72,6 @@ function makeAggregates(overrides: Partial<AggregateResults> = {}): AggregateRes
   return {
     target: 'claude',
     testResults: [makeTestResult()],
-    avgApiCoverage: 100,
-    avgTokenCoverage: 100,
     avgApiDiscovery: 90,
     avgCallCorrectness: 85,
     avgCompleteness: 80,
@@ -97,8 +80,6 @@ function makeAggregates(overrides: Partial<AggregateResults> = {}): AggregateRes
     byDifficulty: {
       easy: {
         count: 1,
-        avgApiCoverage: 100,
-        avgTokenCoverage: 100,
         avgApiDiscovery: 90,
         avgCallCorrectness: 85,
         avgCompleteness: 80,
@@ -106,8 +87,6 @@ function makeAggregates(overrides: Partial<AggregateResults> = {}): AggregateRes
         passRate: 100,
       },
     },
-    worstApis: [{ api: 'subtract', missRate: 100, missCount: 1, totalCount: 1 }],
-    missedTokens: [{ token: 'import.*sdk', missRate: 50, missCount: 1, totalCount: 2 }],
     ...overrides,
   };
 }
@@ -147,15 +126,12 @@ describe('insightsCommand', () => {
     expect(loadTestSuite).toHaveBeenCalledWith(paths);
     expect(loadAllResults).toHaveBeenCalled();
     expect(computeAggregates).toHaveBeenCalled();
-    expect(adapter.interactive).toHaveBeenCalledWith(
-      expect.any(String),
-      paths.root,
-    );
+    expect(adapter.interactive).toHaveBeenCalledWith(expect.any(String), paths.root);
   });
 
   it('exits early when no results are available', async () => {
     vi.mocked(computeAggregates).mockReturnValue(makeAggregates({
-      testResults: [makeTestResult({ tokenAnalysis: null, judgeScore: null })],
+      testResults: [makeTestResult({ judgeScore: null })],
     }));
 
     const adapter = makeAdapter();
@@ -173,10 +149,7 @@ describe('insightsCommand', () => {
 
     await insightsCommand(paths);
 
-    expect(adapter.interactive).toHaveBeenCalledWith(
-      expect.any(String),
-      paths.root,
-    );
+    expect(adapter.interactive).toHaveBeenCalledWith(expect.any(String), paths.root);
   });
 });
 
@@ -196,8 +169,6 @@ describe('buildInsightsPrompt', () => {
 
   it('contains scoring methodology explanation', () => {
     const prompt = buildInsightsPrompt(['/tmp/sdk'], config, allAggregates, paths);
-    expect(prompt).toContain('API Coverage');
-    expect(prompt).toContain('Token Coverage');
     expect(prompt).toContain('API Discovery');
     expect(prompt).toContain('Call Correctness');
     expect(prompt).toContain('Completeness');
@@ -205,31 +176,10 @@ describe('buildInsightsPrompt', () => {
     expect(prompt).toContain('overallVerdict');
   });
 
-  it('contains difficulty rubric from generator', () => {
-    const prompt = buildInsightsPrompt(['/tmp/sdk'], config, allAggregates, paths);
-    expect(prompt).toContain('directly demonstrated in public documentation');
-    expect(prompt).toContain('single-function level');
-    expect(prompt).toContain('multi-function level');
-  });
-
-  it('contains judge scoring bands', () => {
-    const prompt = buildInsightsPrompt(['/tmp/sdk'], config, allAggregates, paths);
-    expect(prompt).toContain('0-20');
-    expect(prompt).toContain('81-100');
-    expect(prompt).toContain('Used completely wrong or unrelated APIs');
-    expect(prompt).toContain('Runs correctly and produces expected output');
-  });
-
   it('contains aggregate stats', () => {
     const prompt = buildInsightsPrompt(['/tmp/sdk'], config, allAggregates, paths);
-    expect(prompt).toContain('100%'); // API Coverage
+    expect(prompt).toContain('90%');
     expect(prompt).toContain('Pass Rate');
-  });
-
-  it('contains worst APIs and missed tokens', () => {
-    const prompt = buildInsightsPrompt(['/tmp/sdk'], config, allAggregates, paths);
-    expect(prompt).toContain('subtract');
-    expect(prompt).toContain('import.*sdk');
   });
 
   it('contains per-test-case results with judge notes', () => {
@@ -242,7 +192,6 @@ describe('buildInsightsPrompt', () => {
   it('contains file path hints for deep dives', () => {
     const prompt = buildInsightsPrompt(['/tmp/sdk'], config, allAggregates, paths);
     expect(prompt).toContain('generated-solution.json');
-    expect(prompt).toContain('token-analysis.json');
     expect(prompt).toContain('judge.json');
     expect(prompt).toContain(paths.suite);
   });

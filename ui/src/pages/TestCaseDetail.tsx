@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getTestCase, getRunResults, getRunTestResult, TestCase, TargetResults, TokenResult, SolutionFile } from '../api';
+import { getTestCase, getRunResults, getRunTestResult, TestCase, TargetResults, SolutionFile } from '../api';
 import { MetricBar } from '../components/MetricBar';
 import { CodeViewer } from '../components/CodeViewer';
 
@@ -57,43 +57,6 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function TokenList({ items, label }: { items: TokenResult[]; label: string }) {
-  if (!items.length) return null;
-  return (
-    <div style={{ marginBottom: '12px' }}>
-      <div style={{ fontSize: '14px', fontWeight: 600, color: colors.textMuted, marginBottom: '6px' }}>
-        {label}
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-        {items.map((item) => (
-          <span
-            key={item.token}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '3px 10px',
-              borderRadius: '4px',
-              fontSize: '14px',
-              fontFamily: 'monospace',
-              background: item.found ? 'rgba(63,185,80,0.1)' : 'rgba(248,81,73,0.1)',
-              color: item.found ? colors.pass : colors.fail,
-              border: `1px solid ${item.found ? colors.pass : colors.fail}40`,
-            }}
-          >
-            <span>{item.found ? '✓' : '✗'}</span>
-            <span>{item.token}</span>
-            {item.foundIn && (
-              <span style={{ color: colors.textMuted, fontSize: '12px' }}>({item.foundIn})</span>
-            )}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-
 // ─── Tab panels ───────────────────────────────────────────────────────────────
 
 function InfoPanel({ testCase }: { testCase: TestCase }) {
@@ -137,54 +100,6 @@ function InfoPanel({ testCase }: { testCase: TestCase }) {
         </>
       )}
 
-      <SectionLabel>Target APIs</SectionLabel>
-      <div style={{ marginBottom: '4px' }}>
-        {testCase.targetApis.map((api) => (
-          <Tag key={api} color={colors.accent}>
-            {api}
-          </Tag>
-        ))}
-      </div>
-
-      <SectionLabel>Expected Tokens</SectionLabel>
-      <div style={{ marginBottom: '4px' }}>
-        {testCase.expectedTokens.map((tok) => (
-          <Tag key={tok} color="#d2a8ff">
-            {tok}
-          </Tag>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TokenAnalysisPanel({ targetResult }: { targetResult: TargetResults; testId: string }) {
-  const result = targetResult.testResults[0];
-  const ta = result?.tokenAnalysis;
-
-  if (!ta) {
-    return (
-      <div style={{ color: colors.textMuted, fontSize: '16px', padding: '16px 0' }}>
-        No token analysis available.
-      </div>
-    );
-  }
-
-  const foundApis = ta.apis.filter((a) => a.found);
-  const missedApis = ta.apis.filter((a) => !a.found);
-  const foundTokens = ta.tokens.filter((t) => t.found);
-  const missedTokens = ta.tokens.filter((t) => !t.found);
-
-  return (
-    <div>
-      <MetricBar label="API Coverage" value={ta.apiCoverage} />
-      <MetricBar label="Token Coverage" value={ta.tokenCoverage} />
-      <div style={{ marginTop: '16px' }}>
-        <TokenList items={foundApis} label="APIs Found" />
-        <TokenList items={missedApis} label="APIs Not Found" />
-        <TokenList items={foundTokens} label="Tokens Found" />
-        <TokenList items={missedTokens} label="Tokens Not Found" />
-      </div>
     </div>
   );
 }
@@ -349,11 +264,10 @@ function detectLang(path: string): string {
 
 // ─── Target tabs ─────────────────────────────────────────────────────────────
 
-type TabKey = 'info' | 'token' | 'judge' | 'solution' | 'logs';
+type TabKey = 'info' | 'judge' | 'solution' | 'logs';
 
 const TAB_LABELS: Record<TabKey, string> = {
   info: 'Info',
-  token: 'Token Analysis',
   judge: 'Judge Scores',
   solution: 'Solutions',
   logs: 'Logs',
@@ -438,7 +352,7 @@ function TargetPanel({
   testCase: TestCase;
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>('info');
-  const tabs: TabKey[] = ['info', 'token', 'judge', 'solution', 'logs'];
+  const tabs: TabKey[] = ['info', 'judge', 'solution', 'logs'];
 
   const hasResult = targetResult.testResults.length > 0;
 
@@ -496,12 +410,6 @@ function TargetPanel({
         }}
       >
         {activeTab === 'info' && <InfoPanel testCase={testCase} />}
-        {activeTab === 'token' && (
-          <TokenAnalysisPanel
-            targetResult={targetResult}
-            testId={targetResult.testResults[0]?.testId ?? ''}
-          />
-        )}
         {activeTab === 'judge' && <JudgeScoresPanel targetResult={targetResult} />}
         {activeTab === 'solution' && (
           <SolutionPanel targetResult={targetResult} referenceSolution={referenceSolution} />

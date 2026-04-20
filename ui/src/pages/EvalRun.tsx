@@ -39,34 +39,6 @@ function VerdictBadge({ pass }: { pass: boolean }) {
   );
 }
 
-function MissedList({
-  title,
-  items,
-}: {
-  title: string;
-  items: Array<{ api?: string; token?: string; missRate: number; missCount: number; totalCount: number }>;
-}) {
-  if (!items.length) return null;
-  return (
-    <div style={{ marginTop: '16px' }}>
-      <div style={{ fontSize: '14px', fontWeight: 600, color: colors.textMuted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-        {title}
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-        {items.map((item, i) => {
-          const label = item.api ?? item.token ?? '';
-          return (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(248,81,73,0.1)', border: `1px solid ${colors.fail}`, borderRadius: '4px', padding: '4px 10px', fontSize: '14px' }}>
-              <span style={{ fontFamily: 'monospace', color: colors.text }}>{label}</span>
-              <span style={{ color: colors.fail, fontSize: '14px' }}>{Math.round(item.missRate)}% miss ({item.missCount}/{item.totalCount})</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function selectStyle(): React.CSSProperties {
   return {
     background: colors.bg, color: colors.accent, border: `1px solid ${colors.border}`,
@@ -300,8 +272,6 @@ export function EvalRun() {
               <thead>
                 <tr>
                   <th style={thStyle}>Pass Rate</th>
-                  <th style={thStyle}>API Coverage</th>
-                  <th style={thStyle}>Token Coverage</th>
                   <th style={thStyle}>API Discovery</th>
                   <th style={thStyle}>Call Correctness</th>
                   <th style={thStyle}>Completeness</th>
@@ -319,8 +289,6 @@ export function EvalRun() {
                     return (
                       <>
                         <td style={scoreStyle(a.passRate)}>{pct(a.passRate)}</td>
-                        <td style={scoreStyle(a.avgApiCoverage)}>{pct(a.avgApiCoverage)}</td>
-                        <td style={scoreStyle(a.avgTokenCoverage)}>{pct(a.avgTokenCoverage)}</td>
                         <td style={scoreStyle(a.avgApiDiscovery)}>{pct(a.avgApiDiscovery)}</td>
                         <td style={scoreStyle(a.avgCallCorrectness)}>{pct(a.avgCallCorrectness)}</td>
                         <td style={scoreStyle(a.avgCompleteness)}>{pct(a.avgCompleteness)}</td>
@@ -333,14 +301,6 @@ export function EvalRun() {
             </table>
           </div>
 
-          <MissedList
-            title="Worst APIs"
-            items={activeResult.aggregates.worstApis.map((a) => ({ api: a.api, missRate: a.missRate, missCount: a.missCount, totalCount: a.totalCount }))}
-          />
-          <MissedList
-            title="Missed Tokens"
-            items={activeResult.aggregates.missedTokens.map((t) => ({ token: t.token, missRate: t.missRate, missCount: t.missCount, totalCount: t.totalCount }))}
-          />
         </div>
       )}
 
@@ -399,8 +359,6 @@ export function EvalRun() {
               <th style={thStyle}>ID</th>
               <th style={thStyle}>Difficulty</th>
               <th style={thStyle}>Problem</th>
-              <th style={thStyle}>API Cov</th>
-              <th style={thStyle}>Token Cov</th>
               <th style={thStyle}>Discovery</th>
               <th style={thStyle}>Correctness</th>
               <th style={thStyle}>Completeness</th>
@@ -411,14 +369,13 @@ export function EvalRun() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ ...tdStyle, textAlign: 'center', color: colors.textMuted, padding: '32px' }}>
+                <td colSpan={8} style={{ ...tdStyle, textAlign: 'center', color: colors.textMuted, padding: '32px' }}>
                   No test cases match the current filters.
                 </td>
               </tr>
             ) : (
               filtered.map((tc, i) => {
                 const result = activeResult?.testResults.find((r) => r.testId === tc.id);
-                const ta = result?.tokenAnalysis;
                 const js = result?.judgeScore;
                 const verdict = js?.overallVerdict ?? null;
                 const truncated = tc.problemStatement.length > 60
@@ -436,8 +393,6 @@ export function EvalRun() {
                     <td style={{ ...tdStyle, fontFamily: 'monospace', color: colors.accent, whiteSpace: 'nowrap' }}>{tc.id}</td>
                     <td style={tdStyle}><span style={{ color: diffColor, textTransform: 'capitalize' }}>{tc.difficulty}</span></td>
                     <td style={{ ...tdStyle, color: colors.textMuted, maxWidth: '280px' }}>{truncated}</td>
-                    <td style={tcScoreStyle(ta?.apiCoverage)}>{ta ? pct(ta.apiCoverage) : '—'}</td>
-                    <td style={tcScoreStyle(ta?.tokenCoverage)}>{ta ? pct(ta.tokenCoverage) : '—'}</td>
                     <td style={tcScoreStyle(js?.apiDiscovery)}>{js ? pct(js.apiDiscovery) : '—'}</td>
                     <td style={tcScoreStyle(js?.callCorrectness)}>{js ? pct(js.callCorrectness) : '—'}</td>
                     <td style={tcScoreStyle(js?.completeness)}>{js ? pct(js.completeness) : '—'}</td>

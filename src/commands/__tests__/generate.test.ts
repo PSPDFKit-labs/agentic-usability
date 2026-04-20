@@ -45,8 +45,6 @@ const VALID_TC = [
     problemStatement: 'task',
     referenceSolution: [{ path: 'a.ts', content: 'code' }],
     difficulty: 'easy',
-    targetApis: ['fn'],
-    expectedTokens: ['import'],
     tags: ['test'],
   },
 ];

@@ -1,6 +1,6 @@
 // Domain types shared with the server (pure interfaces, no runtime code)
-import type { SolutionFile, TestCase, TokenResult, TokenAnalysis, JudgeScore, TestResult, AggregateResults, RunInfo } from '../../src/types.js';
-export type { SolutionFile, TestCase, TokenResult, TokenAnalysis, JudgeScore, TestResult, AggregateResults, RunInfo };
+import type { SolutionFile, TestCase, JudgeScore, TestResult, AggregateResults, RunInfo } from '../../src/types.js';
+export type { SolutionFile, TestCase, JudgeScore, TestResult, AggregateResults, RunInfo };
 
 // UI-specific types
 export interface Config { [key: string]: unknown; }
@@ -60,18 +60,6 @@ export const putTestCase = (id: string, tc: TestCase) => putJson<{ ok: boolean }
 export const createTestCase = (tc: Partial<TestCase>) => postJson<TestCase>('/api/suite', tc);
 export const deleteTestCase = (id: string) => deleteJson<{ ok: boolean }>(`/api/suite/${id}`);
 
-// Results (legacy — uses latest run)
-export const getAllResults = () => fetchJson<{ targets: TargetResults[] }>('/api/results');
-export const getTestResult = (target: string, testId: string) => fetchJson<{
-  tokenAnalysis: TokenAnalysis | null;
-  judgeScore: JudgeScore | null;
-  generatedSolution: SolutionFile[] | null;
-  agentOutput: string | null;
-  agentCmd: string | null;
-  setupLog: string | null;
-  agentNotes: string | null;
-}>(`/api/results/${target}/${testId}`);
-
 // Runs
 export const getRuns = () => fetchJson<RunInfo[]>('/api/runs');
 export const deleteRun = (runId: string) => deleteJson<{ ok: boolean }>(`/api/runs/${runId}`);
@@ -82,7 +70,6 @@ export const updateRunLabel = (runId: string, label: string) =>
 export const getRunResults = (runId: string) =>
   fetchJson<{ targets: TargetResults[] }>(`/api/runs/${runId}/results`);
 export const getRunTestResult = (runId: string, target: string, testId: string) => fetchJson<{
-  tokenAnalysis: TokenAnalysis | null;
   judgeScore: JudgeScore | null;
   generatedSolution: SolutionFile[] | null;
   agentOutput: string | null;

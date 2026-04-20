@@ -19,33 +19,17 @@ function buildAggregateSection(agg: AggregateResults): string {
     '',
     `| Metric | Value |`,
     `|--------|-------|`,
-    `| API Coverage | ${formatPercent(agg.avgApiCoverage)} |`,
-    `| Token Coverage | ${formatPercent(agg.avgTokenCoverage)} |`,
-    `| API Discovery (judge) | ${formatPercent(agg.avgApiDiscovery)} |`,
-    `| Call Correctness (judge) | ${formatPercent(agg.avgCallCorrectness)} |`,
-    `| Completeness (judge) | ${formatPercent(agg.avgCompleteness)} |`,
-    `| Functional Correctness (judge) | ${formatPercent(agg.avgFunctionalCorrectness)} |`,
+    `| API Discovery | ${formatPercent(agg.avgApiDiscovery)} |`,
+    `| Call Correctness | ${formatPercent(agg.avgCallCorrectness)} |`,
+    `| Completeness | ${formatPercent(agg.avgCompleteness)} |`,
+    `| Functional Correctness | ${formatPercent(agg.avgFunctionalCorrectness)} |`,
     `| Pass Rate | ${formatPercent(agg.passRate)} |`,
   ];
 
   if (Object.keys(agg.byDifficulty).length > 0) {
     lines.push('', '**By Difficulty:**');
     for (const [difficulty, stats] of Object.entries(agg.byDifficulty)) {
-      lines.push(`- ${difficulty} (${stats.count} tests): API Cov ${formatPercent(stats.avgApiCoverage)}, Token Cov ${formatPercent(stats.avgTokenCoverage)}, Pass Rate ${formatPercent(stats.passRate)}`);
-    }
-  }
-
-  if (agg.worstApis.length > 0) {
-    lines.push('', '**Worst Performing APIs (agents failed to use these):**');
-    for (const api of agg.worstApis) {
-      lines.push(`- ${api.api}: missed ${api.missCount}/${api.totalCount} times (${formatPercent(api.missRate)} miss rate)`);
-    }
-  }
-
-  if (agg.missedTokens.length > 0) {
-    lines.push('', '**Missed Expected Tokens:**');
-    for (const t of agg.missedTokens) {
-      lines.push(`- \`${t.token}\`: missed ${t.missCount}/${t.totalCount} times (${formatPercent(t.missRate)} miss rate)`);
+      lines.push(`- ${difficulty} (${stats.count} tests): Discovery ${formatPercent(stats.avgApiDiscovery)}, Correctness ${formatPercent(stats.avgCallCorrectness)}, Pass Rate ${formatPercent(stats.passRate)}`);
     }
   }
 
@@ -63,10 +47,6 @@ function buildTestResultsSection(agg: AggregateResults): string {
     const parts = [`#### ${r.testId} (${r.difficulty})`];
     parts.push(`**Problem:** ${stmt}`);
 
-    if (r.tokenAnalysis) {
-      parts.push(`**Token Analysis:** API Coverage ${formatPercent(r.tokenAnalysis.apiCoverage)}, Token Coverage ${formatPercent(r.tokenAnalysis.tokenCoverage)}`);
-    }
-
     if (r.judgeScore) {
       parts.push(`**Judge Scores:** Discovery ${r.judgeScore.apiDiscovery}, Correctness ${r.judgeScore.callCorrectness}, Completeness ${r.judgeScore.completeness}, Functional ${r.judgeScore.functionalCorrectness} → ${r.judgeScore.overallVerdict ? 'PASS' : 'FAIL'}`);
       if (r.judgeScore.notes) {
@@ -81,7 +61,7 @@ function buildTestResultsSection(agg: AggregateResults): string {
       parts.push(`**Agent Notes:** ${notes}`);
     }
 
-    if (!r.tokenAnalysis && !r.judgeScore) {
+    if (!r.judgeScore) {
       parts.push('**Status:** No results available');
     }
 
@@ -103,7 +83,6 @@ function buildFilePathsSection(paths: ProjectPaths, allAggregates: AggregateResu
       const dir = join(paths.results, agg.target, r.testId);
       lines.push(`- ${dir}/generated-solution.json — agent's generated solution`);
       lines.push(`- ${dir}/agent-notes.md — agent's self-reported progress and gotchas`);
-      lines.push(`- ${dir}/token-analysis.json — detailed token match results`);
       lines.push(`- ${dir}/judge.json — full judge assessment`);
     }
   }
@@ -133,8 +112,7 @@ export function buildInsightsPrompt(
 
 1. **Generate**: An AI agent explores the SDK source code and generates programming test cases.
 2. **Execute**: For each test case, a separate AI agent is placed in a sandboxed Docker container with only the problem statement and public SDK documentation. It must write a solution using the SDK.
-3. **Analyze**: The generated solution is checked against expected patterns using deterministic regex-based token analysis.
-4. **Judge**: An LLM compares the reference solution to the generated solution and scores it on multiple dimensions.
+3. **Judge**: An LLM compares the reference solution to the generated solution and scores it on multiple dimensions.
 
 ### Test Case Structure
 
@@ -143,14 +121,7 @@ Each test case has these fields:
 - **referenceSolution**: Array of files (path + content) representing the correct implementation.
 - **difficulty**: One of "easy", "medium", or "hard":
 ${DIFFICULTY_RUBRIC}
-- **targetApis**: The SDK APIs that the solution should use (e.g., function names, class names, methods).
-- **expectedTokens**: Regex patterns or literal strings expected in the solution code.
 - **tags**: Categorization tags (e.g., "auth", "database", "http").
-
-### Token Analysis Scoring
-
-- **API Coverage**: Word-boundary match for each entry in targetApis against the generated solution files. REST-style APIs (e.g., "POST /build") are automatically decomposed into separate HTTP method + URL path checks.
-- **Token Coverage**: Full regex match (with dotAll/multiline support) for each entry in expectedTokens. Invalid regex falls back to escaped literal match.
 
 ### Judge Scoring Criteria
 
@@ -206,9 +177,9 @@ export async function insightsCommand(paths: ProjectPaths, options: { fresh?: bo
   }
   loadSpinner.succeed(`Loaded ${testCases.length} test case(s) across ${config.targets.length} target(s)`);
 
-  const totalResults = allAggregates.reduce((sum, agg) => sum + agg.testResults.filter(r => r.tokenAnalysis || r.judgeScore).length, 0);
+  const totalResults = allAggregates.reduce((sum, agg) => sum + agg.testResults.filter(r => r.judgeScore).length, 0);
   if (totalResults === 0) {
-    console.log(chalk.yellow('\nNo results found. Run the pipeline first: agentic-usability run'));
+    console.log(chalk.yellow('\nNo results found. Run the pipeline first: agentic-usability eval'));
     return;
   }
 

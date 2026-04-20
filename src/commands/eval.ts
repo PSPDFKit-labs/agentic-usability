@@ -8,11 +8,10 @@ import { PipelineStateManager } from '../core/pipeline.js';
 import { loadTestSuite } from '../core/suite-io.js';
 import { reportCommand } from './report.js';
 import { prepareSandboxEnv, runExecuteStage } from './execute.js';
-import { runAnalyzeStage } from './analyze.js';
 import { runJudgeStage } from './judge.js';
 import { generateRunId, saveRunInfo, loadRunInfo, listRuns } from '../core/runs.js';
 
-const STAGE_ORDER = ['execute', 'analyze', 'judge', 'report'];
+const STAGE_ORDER = ['execute', 'judge', 'report'];
 
 /** Find the latest run whose pipeline state is not yet complete. */
 async function findIncompleteRun(paths: ProjectPaths, runs: RunInfo[]): Promise<string | null> {
@@ -35,7 +34,6 @@ function stageIndex(stage: string): number {
 export async function evalCommand(paths: ProjectPaths, options: {
   resume?: boolean;
   fresh?: boolean;
-  skipJudge?: boolean;
   label?: string;
   run?: string;
 } = {}): Promise<void> {
@@ -89,7 +87,7 @@ export async function evalCommand(paths: ProjectPaths, options: {
     console.log(chalk.dim(`Starting run ${runId}${labelStr}`));
   }
 
-  const totalStages = options.skipJudge ? 3 : 4;
+  const totalStages = 3;
 
   const testCases = await loadTestSuite(paths);
   const allTestIds = testCases.map((tc) => tc.id);
@@ -142,73 +140,48 @@ export async function evalCommand(paths: ProjectPaths, options: {
       return;
     }
 
-    stateManager.advanceStage('analyze');
+    stateManager.advanceStage('judge');
     await stateManager.save();
   } else {
     console.log(chalk.dim(`[Stage 1/${totalStages}] Execute — skipped (already complete)`));
   }
 
-  // --- Stage 2: Analyze ---
-  if (stageIndex(stateManager.getState().stage) <= stageIndex('analyze')) {
-    console.log(chalk.bold.blue(`\n[Stage 2/${totalStages}] Analyzing solutions...`));
+  // --- Stage 2: Judge ---
+  if (stageIndex(stateManager.getState().stage) <= stageIndex('judge')) {
+    console.log(chalk.bold.blue(`\n[Stage 2/${totalStages}] Judging solutions (sandboxed)...`));
 
-    await runAnalyzeStage({
+    const { proxy: judgeProxy, proxyEnv: judgeProxyEnv } = await prepareSandboxEnv(config);
+    if (judgeProxy) {
+      const ports = judgeProxy.listeners.map((l) => `${l.baseUrlVar}→:${l.port}`).join(', ');
+      console.log(chalk.dim(`  Judge auth proxy listening (${ports})`));
+    }
+
+    const judgeResult = await runJudgeStage({
       config, paths: runPaths, testCases,
+      proxyEnv: judgeProxyEnv, proxyHandle: judgeProxy,
+      onTestComplete: (id, target) => { stateManager.markTestComplete('judge', id, target); stateManager.save(); },
       filterForTarget: (tcs, targetName) => {
-        const incomplete = stateManager.getIncompleteTests('analyze', allTestIds, targetName);
+        const incomplete = stateManager.getIncompleteTests('judge', allTestIds, targetName);
         return tcs.filter((tc) => incomplete.includes(tc.id));
       },
-      onTestComplete: (id, target) => { stateManager.markTestComplete('analyze', id, target); },
     });
 
-    stateManager.advanceStage('judge');
-    await stateManager.save();
-  } else {
-    console.log(chalk.dim(`[Stage 2/${totalStages}] Analyze — skipped (already complete)`));
-  }
+    await judgeProxy?.stop();
 
-  // --- Stage 3: Judge ---
-  if (!options.skipJudge) {
-    if (stageIndex(stateManager.getState().stage) <= stageIndex('judge')) {
-      console.log(chalk.bold.blue(`\n[Stage 3/${totalStages}] Judging solutions (sandboxed)...`));
-
-      const { proxy: judgeProxy, proxyEnv: judgeProxyEnv } = await prepareSandboxEnv(config);
-      if (judgeProxy) {
-        const ports = judgeProxy.listeners.map((l) => `${l.baseUrlVar}→:${l.port}`).join(', ');
-        console.log(chalk.dim(`  Judge auth proxy listening (${ports})`));
-      }
-
-      const judgeResult = await runJudgeStage({
-        config, paths: runPaths, testCases,
-        proxyEnv: judgeProxyEnv, proxyHandle: judgeProxy,
-        onTestComplete: (id, target) => { stateManager.markTestComplete('judge', id, target); stateManager.save(); },
-        filterForTarget: (tcs, targetName) => {
-          const incomplete = stateManager.getIncompleteTests('judge', allTestIds, targetName);
-          return tcs.filter((tc) => incomplete.includes(tc.id));
-        },
-      });
-
-      await judgeProxy?.stop();
-
-      if (judgeResult.aborted || pipelineAborted) {
-        console.log(chalk.yellow('\nPipeline aborted. State saved — use --resume to continue.'));
-        await stateManager.save();
-        process.removeListener('SIGINT', onSigint);
-        return;
-      }
-
-      stateManager.advanceStage('report');
+    if (judgeResult.aborted || pipelineAborted) {
+      console.log(chalk.yellow('\nPipeline aborted. State saved — use --resume to continue.'));
       await stateManager.save();
-    } else {
-      console.log(chalk.dim(`[Stage 3/${totalStages}] Judge — skipped (already complete)`));
+      process.removeListener('SIGINT', onSigint);
+      return;
     }
-  } else {
-    console.log(chalk.yellow('\n[Stage] Judge — skipped (--skip-judge)'));
+
     stateManager.advanceStage('report');
     await stateManager.save();
+  } else {
+    console.log(chalk.dim(`[Stage 2/${totalStages}] Judge — skipped (already complete)`));
   }
 
-  // --- Stage 4: Report ---
+  // --- Stage 3: Report ---
   console.log(chalk.bold.blue(`\n[Stage ${totalStages}/${totalStages}] Generating report...`));
   await reportCommand(runPaths);
 

@@ -11,7 +11,6 @@ import { getLatestRunId } from './core/runs.js';
 import { initCommand } from './commands/init.js';
 import { generateCommand } from './commands/generate.js';
 import { executeCommand } from './commands/execute.js';
-import { analyzeCommand } from './commands/analyze.js';
 import { judgeCommand } from './commands/judge.js';
 import { reportCommand } from './commands/report.js';
 import { evalCommand } from './commands/eval.js';
@@ -69,8 +68,8 @@ program
   });
 
 program
-  .command('analyze')
-  .description('Analyze generated solutions for expected SDK API calls and patterns')
+  .command('judge')
+  .description('Have an LLM compare reference and generated solutions')
   .option('--tests <ids>', 'Comma-separated list of test case IDs to run')
   .option('--run <runId>', 'Target run (default: latest)')
   .action(async (opts: { tests?: string; run?: string }) => {
@@ -79,22 +78,7 @@ program
     const runId = opts.run ?? await getLatestRunId(paths.results);
     if (!runId) { console.error(chalk.red('No runs found. Run "eval" first.')); process.exit(1); }
     const testIds = opts.tests?.split(',').map(s => s.trim());
-    await analyzeCommand(resolveRunPaths(paths, runId), { testIds });
-  });
-
-program
-  .command('judge')
-  .description('Have an LLM compare reference and generated solutions')
-  .option('--skip-judge', 'Skip the judge stage')
-  .option('--tests <ids>', 'Comma-separated list of test case IDs to run')
-  .option('--run <runId>', 'Target run (default: latest)')
-  .action(async (opts: { skipJudge?: boolean; tests?: string; run?: string }) => {
-    const paths = getPaths();
-    await ensureProjectDirs(paths);
-    const runId = opts.run ?? await getLatestRunId(paths.results);
-    if (!runId) { console.error(chalk.red('No runs found. Run "eval" first.')); process.exit(1); }
-    const testIds = opts.tests?.split(',').map(s => s.trim());
-    await judgeCommand(resolveRunPaths(paths, runId), { skipJudge: opts.skipJudge, testIds });
+    await judgeCommand(resolveRunPaths(paths, runId), { testIds });
   });
 
 program
@@ -111,14 +95,13 @@ program
 
 program
   .command('eval')
-  .description('Run the evaluation pipeline: execute → analyze → judge → report')
+  .description('Run the evaluation pipeline: execute → judge → report')
   .option('--resume', 'Resume from last checkpoint')
   .option('--fresh', 'Clear existing pipeline state before starting')
-  .option('--skip-judge', 'Skip the LLM judge stage')
   .option('--label <name>', 'Label for this eval run')
   .option('--run <runId>', 'Resume a specific run (with --resume)')
-  .action(async (opts: { resume?: boolean; fresh?: boolean; skipJudge?: boolean; label?: string; run?: string }) => {
-    await evalCommand(getPaths(), { resume: opts.resume, fresh: opts.fresh, skipJudge: opts.skipJudge, label: opts.label, run: opts.run });
+  .action(async (opts: { resume?: boolean; fresh?: boolean; label?: string; run?: string }) => {
+    await evalCommand(getPaths(), { resume: opts.resume, fresh: opts.fresh, label: opts.label, run: opts.run });
   });
 
 program
@@ -133,10 +116,13 @@ program
   .command('insights')
   .description('Interactive AI session to analyze pipeline results and identify SDK improvement areas')
   .option('--fresh', 'Re-resolve sources (skip cache)')
-  .action(async (opts: { fresh?: boolean }) => {
+  .option('--run <runId>', 'Target run (default: latest)')
+  .action(async (opts: { fresh?: boolean; run?: string }) => {
     const paths = getPaths();
     await ensureProjectDirs(paths);
-    await insightsCommand(paths, { fresh: opts.fresh });
+    const runId = opts.run ?? await getLatestRunId(paths.results);
+    if (!runId) { console.error(chalk.red('No runs found. Run "eval" first.')); process.exit(1); }
+    await insightsCommand(resolveRunPaths(paths, runId), { fresh: opts.fresh });
   });
 
 program.parseAsync().catch((err: unknown) => {

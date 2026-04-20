@@ -15,13 +15,10 @@ function formatPercent(value: number): string {
 function printScorecard(aggregates: AggregateResults): void {
   console.log(chalk.bold(`\nScorecard — ${aggregates.target}\n`));
 
-  // Main results table
   const table = new Table({
     head: [
       chalk.cyan('Test ID'),
       chalk.cyan('Diff.'),
-      chalk.cyan('API Cov.'),
-      chalk.cyan('Token Cov.'),
       chalk.cyan('Discovery'),
       chalk.cyan('Correct.'),
       chalk.cyan('Complete.'),
@@ -31,8 +28,6 @@ function printScorecard(aggregates: AggregateResults): void {
   });
 
   for (const r of aggregates.testResults) {
-    const apiCov = r.tokenAnalysis ? formatPercent(r.tokenAnalysis.apiCoverage) : chalk.dim('N/A');
-    const tokenCov = r.tokenAnalysis ? formatPercent(r.tokenAnalysis.tokenCoverage) : chalk.dim('N/A');
     const discovery = r.judgeScore ? formatPercent(r.judgeScore.apiDiscovery) : chalk.dim('N/A');
     const correctness = r.judgeScore ? formatPercent(r.judgeScore.callCorrectness) : chalk.dim('N/A');
     const completeness = r.judgeScore ? formatPercent(r.judgeScore.completeness) : chalk.dim('N/A');
@@ -41,30 +36,24 @@ function printScorecard(aggregates: AggregateResults): void {
       ? (r.judgeScore.overallVerdict ? chalk.green('PASS') : chalk.red('FAIL'))
       : chalk.dim('N/A');
 
-    table.push([r.testId, r.difficulty, apiCov, tokenCov, discovery, correctness, completeness, functional, verdict]);
+    table.push([r.testId, r.difficulty, discovery, correctness, completeness, functional, verdict]);
   }
 
   console.log(table.toString());
 
-  // Aggregates
   console.log(chalk.bold('\nAggregates'));
-  console.log(`  API Coverage:          ${formatPercent(aggregates.avgApiCoverage)}`);
-  console.log(`  Token Coverage:        ${formatPercent(aggregates.avgTokenCoverage)}`);
   console.log(`  API Discovery:         ${formatPercent(aggregates.avgApiDiscovery)}`);
   console.log(`  Call Correctness:      ${formatPercent(aggregates.avgCallCorrectness)}`);
   console.log(`  Completeness:          ${formatPercent(aggregates.avgCompleteness)}`);
   console.log(`  Functional Correct.:   ${formatPercent(aggregates.avgFunctionalCorrectness)}`);
   console.log(`  Pass Rate:             ${formatPercent(aggregates.passRate)}`);
 
-  // Breakdown by difficulty
   if (Object.keys(aggregates.byDifficulty).length > 0) {
     console.log(chalk.bold('\nBy Difficulty'));
     const diffTable = new Table({
       head: [
         chalk.cyan('Difficulty'),
         chalk.cyan('Count'),
-        chalk.cyan('API Cov.'),
-        chalk.cyan('Token Cov.'),
         chalk.cyan('Discovery'),
         chalk.cyan('Correct.'),
         chalk.cyan('Complete.'),
@@ -76,8 +65,6 @@ function printScorecard(aggregates: AggregateResults): void {
       diffTable.push([
         difficulty,
         stats.count.toString(),
-        formatPercent(stats.avgApiCoverage),
-        formatPercent(stats.avgTokenCoverage),
         formatPercent(stats.avgApiDiscovery),
         formatPercent(stats.avgCallCorrectness),
         formatPercent(stats.avgCompleteness),
@@ -86,30 +73,6 @@ function printScorecard(aggregates: AggregateResults): void {
       ]);
     }
     console.log(diffTable.toString());
-  }
-
-  // Worst performing APIs
-  if (aggregates.worstApis.length > 0) {
-    console.log(chalk.bold('\nWorst Performing APIs'));
-    const apiTable = new Table({
-      head: [chalk.cyan('API'), chalk.cyan('Miss Rate'), chalk.cyan('Missed/Total')],
-    });
-    for (const api of aggregates.worstApis) {
-      apiTable.push([api.api, formatPercent(api.missRate), `${api.missCount}/${api.totalCount}`]);
-    }
-    console.log(apiTable.toString());
-  }
-
-  // Missed tokens
-  if (aggregates.missedTokens.length > 0) {
-    console.log(chalk.bold('\nMissed Tokens'));
-    const tokenTable = new Table({
-      head: [chalk.cyan('Token'), chalk.cyan('Miss Rate'), chalk.cyan('Missed/Total')],
-    });
-    for (const t of aggregates.missedTokens) {
-      tokenTable.push([t.token, formatPercent(t.missRate), `${t.missCount}/${t.totalCount}`]);
-    }
-    console.log(tokenTable.toString());
   }
 }
 
@@ -121,13 +84,10 @@ function buildJsonOutput(allAggregates: AggregateResults[]): object {
         testId: r.testId,
         difficulty: r.difficulty,
         problemStatement: r.problemStatement,
-        tokenAnalysis: r.tokenAnalysis,
         judgeScore: r.judgeScore,
         generatedSolution: r.generatedSolution,
       })),
       aggregates: {
-        avgApiCoverage: agg.avgApiCoverage,
-        avgTokenCoverage: agg.avgTokenCoverage,
         avgApiDiscovery: agg.avgApiDiscovery,
         avgCallCorrectness: agg.avgCallCorrectness,
         avgCompleteness: agg.avgCompleteness,
@@ -135,8 +95,6 @@ function buildJsonOutput(allAggregates: AggregateResults[]): object {
         passRate: agg.passRate,
         byDifficulty: agg.byDifficulty,
       },
-      worstApis: agg.worstApis,
-      missedTokens: agg.missedTokens,
     })),
   };
 }
@@ -165,10 +123,8 @@ export async function reportCommand(paths: ProjectPaths, options: { json?: boole
     console.log(JSON.stringify(output, null, 2));
   }
 
-  // Write report file inside the run's results directory
   const output = buildJsonOutput(allAggregates);
   const reportPath = join(paths.results, 'report.json');
   await writeFile(reportPath, JSON.stringify(output, null, 2), 'utf-8');
   console.log(chalk.dim(`\nReport saved to ${reportPath}`));
 }
-

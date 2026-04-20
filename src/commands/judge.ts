@@ -37,7 +37,25 @@ export async function runJudgeStage(opts: StageOptions): Promise<{ aborted: bool
 
       if (!solution) {
         skipped++;
-        console.log(chalk.yellow(`  ${tc.id}: No generated solution found — skipping`));
+        let reason = 'no solution files produced';
+        try {
+          const errorLog = await readFile(join(paths.results, target.name, tc.id, 'agent-error.log'), 'utf-8');
+          if (errorLog.includes('terminated')) reason = 'agent timed out';
+        } catch { /* no error log */ }
+
+        const dnfScore = {
+          testId: tc.id,
+          target: target.name,
+          apiDiscovery: 0,
+          callCorrectness: 0,
+          completeness: 0,
+          functionalCorrectness: 0,
+          overallVerdict: false,
+          notes: `DNF — ${reason}. Check agent-error.log and agent-proxy.log.json for details.`,
+        };
+        await saveResult(paths, tc.id, 'judge.json', JSON.stringify(dnfScore, null, 2), target.name);
+        console.log(chalk.yellow(`  ${tc.id}: DNF — ${reason}`));
+        onTestComplete?.(tc.id, target.name);
         return;
       }
 
@@ -102,11 +120,7 @@ export async function runJudgeStage(opts: StageOptions): Promise<{ aborted: bool
   return { aborted: false };
 }
 
-export async function judgeCommand(paths: ProjectPaths, options: { skipJudge?: boolean; testIds?: string[] } = {}): Promise<void> {
-  if (options.skipJudge) {
-    console.log(chalk.yellow('Judge stage skipped (--skip-judge flag)'));
-    return;
-  }
+export async function judgeCommand(paths: ProjectPaths, options: { testIds?: string[] } = {}): Promise<void> {
 
   const config = await loadConfig(paths.config);
 

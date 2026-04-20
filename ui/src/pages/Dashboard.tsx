@@ -94,8 +94,6 @@ function ScoresTable({ results }: { results: TargetResults[] }) {
         <tr>
           <th style={thStyle}>Target</th>
           <th style={thStyle}>Pass Rate</th>
-          <th style={thStyle}>API Cov</th>
-          <th style={thStyle}>Token Cov</th>
           <th style={thStyle}>Discovery</th>
           <th style={thStyle}>Correctness</th>
           <th style={thStyle}>Completeness</th>
@@ -113,8 +111,6 @@ function ScoresTable({ results }: { results: TargetResults[] }) {
             <tr key={t.target}>
               <td style={{ ...tdStyle, fontFamily: 'monospace', color: colors.accent }}>{t.target}</td>
               <td style={scoreColor(a.passRate)}>{pct(a.passRate)}</td>
-              <td style={scoreColor(a.avgApiCoverage)}>{pct(a.avgApiCoverage)}</td>
-              <td style={scoreColor(a.avgTokenCoverage)}>{pct(a.avgTokenCoverage)}</td>
               <td style={scoreColor(a.avgApiDiscovery)}>{pct(a.avgApiDiscovery)}</td>
               <td style={scoreColor(a.avgCallCorrectness)}>{pct(a.avgCallCorrectness)}</td>
               <td style={scoreColor(a.avgCompleteness)}>{pct(a.avgCompleteness)}</td>

@@ -34,17 +34,6 @@ import { reportCommand } from '../report.js';
 
 const paths = makeProjectPaths();
 
-function makeTokenAnalysisJson() {
-  return JSON.stringify({
-    testId: 'TC-001',
-    target: 'claude',
-    apis: [{ token: 'createClient', found: true }],
-    tokens: [{ token: 'import', found: true }],
-    apiCoverage: 100,
-    tokenCoverage: 100,
-  });
-}
-
 function makeJudgeJson() {
   return JSON.stringify({
     testId: 'TC-001',
@@ -65,7 +54,6 @@ function makeSolutionJson() {
 function setupReadFileMock() {
   vi.mocked(readFile).mockImplementation(async (filePath: any) => {
     const p = String(filePath);
-    if (p.endsWith('token-analysis.json')) return makeTokenAnalysisJson();
     if (p.endsWith('judge.json')) return makeJudgeJson();
     if (p.endsWith('generated-solution.json')) return makeSolutionJson();
     throw new Error(`File not found: ${p}`);
@@ -81,12 +69,7 @@ describe('reportCommand', () => {
       makeConfig({ targets: [{ name: 'claude', image: 'node:20' }] }),
     );
     vi.mocked(loadTestSuite).mockResolvedValue([
-      makeTestCase({
-        id: 'TC-001',
-        difficulty: 'easy',
-        targetApis: ['createClient'],
-        expectedTokens: ['import'],
-      }),
+      makeTestCase({ id: 'TC-001', difficulty: 'easy' }),
     ]);
     setupReadFileMock();
   });
@@ -118,7 +101,7 @@ describe('reportCommand', () => {
     expect(parsed.targets[0].target).toBe('claude');
   });
 
-  it('computes correct aggregate values from analysis and judge data', async () => {
+  it('computes correct aggregate values from judge data', async () => {
     await reportCommand(paths, { json: true });
 
     const calls = vi.mocked(console.log).mock.calls;
@@ -132,8 +115,6 @@ describe('reportCommand', () => {
 
     const parsed = JSON.parse(jsonCall![0]);
     const agg = parsed.targets[0].aggregates;
-    expect(agg.avgApiCoverage).toBe(100);
-    expect(agg.avgTokenCoverage).toBe(100);
     expect(agg.avgApiDiscovery).toBe(90);
     expect(agg.avgCallCorrectness).toBe(85);
     expect(agg.avgCompleteness).toBe(80);
@@ -157,10 +138,10 @@ describe('reportCommand', () => {
     const byDiff = parsed.targets[0].aggregates.byDifficulty;
     expect(byDiff.easy).toBeDefined();
     expect(byDiff.easy.count).toBe(1);
-    expect(byDiff.easy.avgApiCoverage).toBe(100);
+    expect(byDiff.easy.avgApiDiscovery).toBe(90);
   });
 
-  it('handles missing analysis files gracefully', async () => {
+  it('handles missing result files gracefully', async () => {
     vi.mocked(readFile).mockRejectedValue(new Error('File not found'));
 
     await reportCommand(paths, { json: true });
@@ -176,51 +157,10 @@ describe('reportCommand', () => {
 
     const parsed = JSON.parse(jsonCall![0]);
     const agg = parsed.targets[0].aggregates;
-    expect(agg.avgApiCoverage).toBe(0);
-    expect(agg.avgTokenCoverage).toBe(0);
     expect(agg.avgApiDiscovery).toBe(0);
     expect(agg.avgCallCorrectness).toBe(0);
     expect(agg.avgCompleteness).toBe(0);
     expect(agg.avgFunctionalCorrectness).toBe(0);
     expect(agg.passRate).toBe(0);
   });
-
-  it('reports worstApis when some APIs are missed', async () => {
-    vi.mocked(readFile).mockImplementation(async (filePath: any) => {
-      const p = String(filePath);
-      if (p.endsWith('token-analysis.json')) {
-        return JSON.stringify({
-          testId: 'TC-001',
-          target: 'claude',
-          apis: [
-            { token: 'createClient', found: true },
-            { token: 'destroyClient', found: false },
-          ],
-          tokens: [{ token: 'import', found: true }],
-          apiCoverage: 50,
-          tokenCoverage: 100,
-        });
-      }
-      if (p.endsWith('judge.json')) return makeJudgeJson();
-      if (p.endsWith('generated-solution.json')) return makeSolutionJson();
-      throw new Error(`File not found: ${p}`);
-    });
-
-    await reportCommand(paths, { json: true });
-
-    const calls = vi.mocked(console.log).mock.calls;
-    const jsonCall = calls.find(([arg]) => {
-      try {
-        return JSON.parse(arg).targets !== undefined;
-      } catch {
-        return false;
-      }
-    });
-
-    const parsed = JSON.parse(jsonCall![0]);
-    expect(parsed.targets[0].worstApis).toHaveLength(1);
-    expect(parsed.targets[0].worstApis[0].api).toBe('destroyClient');
-    expect(parsed.targets[0].worstApis[0].missRate).toBe(100);
-  });
 });
-

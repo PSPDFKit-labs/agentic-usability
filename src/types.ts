@@ -8,8 +8,6 @@ export interface TestCase {
   problemStatement: string;
   referenceSolution: SolutionFile[];
   difficulty: 'easy' | 'medium' | 'hard';
-  targetApis: string[];
-  expectedTokens: string[];
   tags: string[];
   setupInstructions?: string;
 }
@@ -19,21 +17,6 @@ export interface AgentResult {
   stderr: string;
   exitCode: number;
   durationMs: number;
-}
-
-export interface TokenResult {
-  token: string;
-  found: boolean;
-  foundIn?: string;
-}
-
-export interface TokenAnalysis {
-  testId: string;
-  target: string;
-  apis: TokenResult[];
-  tokens: TokenResult[];
-  apiCoverage: number;
-  tokenCoverage: number;
 }
 
 export interface JudgeScore {
@@ -131,7 +114,6 @@ export interface PipelineState {
   testCases: number;
   completed: {
     execute: Record<string, string[]>;
-    analyze: Record<string, string[]>;
     judge: Record<string, string[]>;
   };
 }
@@ -140,9 +122,6 @@ export interface TestResult {
   testId: string;
   difficulty: 'easy' | 'medium' | 'hard';
   problemStatement: string;
-  targetApis: string[];
-  expectedTokens: string[];
-  tokenAnalysis: TokenAnalysis | null;
   judgeScore: JudgeScore | null;
   generatedSolution: SolutionFile[] | null;
   agentNotes: string | null;
@@ -151,16 +130,12 @@ export interface TestResult {
 export interface AggregateResults {
   target: string;
   testResults: TestResult[];
-  avgApiCoverage: number;
-  avgTokenCoverage: number;
   avgApiDiscovery: number;
   avgCallCorrectness: number;
   avgCompleteness: number;
   avgFunctionalCorrectness: number;
   passRate: number;
-  byDifficulty: Record<string, { avgApiCoverage: number; avgTokenCoverage: number; avgApiDiscovery: number; avgCallCorrectness: number; avgCompleteness: number; avgFunctionalCorrectness: number; passRate: number; count: number }>;
-  worstApis: Array<{ api: string; missRate: number; missCount: number; totalCount: number }>;
-  missedTokens: Array<{ token: string; missRate: number; missCount: number; totalCount: number }>;
+  byDifficulty: Record<string, { avgApiDiscovery: number; avgCallCorrectness: number; avgCompleteness: number; avgFunctionalCorrectness: number; passRate: number; count: number }>;
 }
 
 export interface RunInfo {

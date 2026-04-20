@@ -30,28 +30,28 @@ describe('PipelineStateManager', () => {
   describe('load', () => {
     it('reads and parses state from disk', async () => {
       const savedState = {
-        stage: 'analyze',
+        stage: 'judge',
         startedAt: '2024-01-01T00:00:00.000Z',
         testCases: 5,
-        completed: { execute: { claude: ['TC-001'] }, analyze: {}, judge: {} },
+        completed: { execute: { claude: ['TC-001'] }, judge: {} },
       };
       mockReadFile.mockResolvedValue(JSON.stringify(savedState));
       const state = await manager.load();
-      expect(state.stage).toBe('analyze');
+      expect(state.stage).toBe('judge');
       expect(state.completed.execute).toEqual({ claude: ['TC-001'] });
     });
 
     it('migrates old flat-array format to per-target format', async () => {
       const savedState = {
-        stage: 'analyze',
+        stage: 'judge',
         startedAt: '2024-01-01T00:00:00.000Z',
         testCases: 5,
-        completed: { execute: ['TC-001', 'TC-002'], analyze: [], judge: [] },
+        completed: { execute: ['TC-001', 'TC-002'], judge: [] },
       };
       mockReadFile.mockResolvedValue(JSON.stringify(savedState));
       const state = await manager.load();
       expect(state.completed.execute).toEqual({ _legacy: ['TC-001', 'TC-002'] });
-      expect(state.completed.analyze).toEqual({});
+      expect(state.completed.judge).toEqual({});
     });
 
     it('returns fresh state when file does not exist', async () => {
@@ -143,15 +143,15 @@ describe('PipelineStateManager', () => {
 
   describe('advanceStage', () => {
     it('updates the current stage', () => {
-      manager.advanceStage('analyze');
-      expect(manager.getState().stage).toBe('analyze');
+      manager.advanceStage('judge');
+      expect(manager.getState().stage).toBe('judge');
     });
   });
 
   describe('reset', () => {
     it('resets state to fresh and deletes the state file', async () => {
       manager.markTestComplete('execute', 'TC-001', 'claude');
-      manager.advanceStage('analyze');
+      manager.advanceStage('judge');
       await manager.reset();
       expect(manager.getState().stage).toBe('execute');
       expect(manager.getState().completed.execute).toEqual({});

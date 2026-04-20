@@ -42,16 +42,6 @@ describe('validateTestSuite', () => {
     expect(() => validateTestSuite([tc])).toThrow(/difficulty must be one of/);
   });
 
-  it('throws when targetApis is not an array', () => {
-    const tc = { ...makeTestCase(), targetApis: 'not array' };
-    expect(() => validateTestSuite([tc])).toThrow(/targetApis must be an array/);
-  });
-
-  it('throws when expectedTokens is not an array', () => {
-    const tc = { ...makeTestCase(), expectedTokens: 'not array' };
-    expect(() => validateTestSuite([tc])).toThrow(/expectedTokens must be an array/);
-  });
-
   it('throws when tags is not an array', () => {
     const tc = { ...makeTestCase(), tags: 'not array' };
     expect(() => validateTestSuite([tc])).toThrow(/tags must be an array/);

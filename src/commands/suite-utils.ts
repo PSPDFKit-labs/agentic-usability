@@ -34,14 +34,6 @@ export function validateTestCase(tc: unknown, index: number, options: { requireI
     errors.push(`Test case ${index}: difficulty must be one of ${validDifficulties.join(', ')}`);
   }
 
-  if (!Array.isArray(obj.targetApis)) {
-    errors.push(`Test case ${index}: targetApis must be an array`);
-  }
-
-  if (!Array.isArray(obj.expectedTokens)) {
-    errors.push(`Test case ${index}: expectedTokens must be an array`);
-  }
-
   if (!Array.isArray(obj.tags)) {
     errors.push(`Test case ${index}: tags must be an array`);
   }
@@ -73,7 +65,6 @@ export function printSuiteTable(testCases: TestCase[]): void {
       chalk.cyan('ID'),
       chalk.cyan('Difficulty'),
       chalk.cyan('Problem Statement'),
-      chalk.cyan('APIs'),
     ],
   });
 
@@ -82,7 +73,7 @@ export function printSuiteTable(testCases: TestCase[]): void {
       tc.problemStatement.length > 60
         ? tc.problemStatement.slice(0, 57) + '...'
         : tc.problemStatement;
-    table.push([tc.id, tc.difficulty, truncated, tc.targetApis.length.toString()]);
+    table.push([tc.id, tc.difficulty, truncated]);
   }
 
   console.log(table.toString());

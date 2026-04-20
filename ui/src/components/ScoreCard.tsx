@@ -13,8 +13,6 @@ interface ScoreCardProps {
 }
 
 const metrics: Array<{ label: string; key: keyof AggregateResults }> = [
-  { label: 'API Coverage', key: 'avgApiCoverage' },
-  { label: 'Token Coverage', key: 'avgTokenCoverage' },
   { label: 'API Discovery', key: 'avgApiDiscovery' },
   { label: 'Call Correctness', key: 'avgCallCorrectness' },
   { label: 'Completeness', key: 'avgCompleteness' },

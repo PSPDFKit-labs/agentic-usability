@@ -7,16 +7,12 @@ function makeAggregates(overrides: Partial<AggregateResults> = {}): AggregateRes
   return {
     target: 'claude',
     testResults: [],
-    avgApiCoverage: 80,
-    avgTokenCoverage: 75,
     avgApiDiscovery: 70,
     avgCallCorrectness: 65,
     avgCompleteness: 60,
     avgFunctionalCorrectness: 55,
     passRate: 50,
     byDifficulty: {},
-    worstApis: [],
-    missedTokens: [],
     ...overrides,
   };
 }
@@ -27,11 +23,9 @@ describe('ScoreCard', () => {
     expect(screen.getByText('Aggregate Scores')).toBeInTheDocument();
   });
 
-  it('renders all 7 metric labels', () => {
+  it('renders all 5 metric labels', () => {
     render(<ScoreCard title="Scores" aggregates={makeAggregates()} />);
 
-    expect(screen.getByText('API Coverage')).toBeInTheDocument();
-    expect(screen.getByText('Token Coverage')).toBeInTheDocument();
     expect(screen.getByText('API Discovery')).toBeInTheDocument();
     expect(screen.getByText('Call Correctness')).toBeInTheDocument();
     expect(screen.getByText('Completeness')).toBeInTheDocument();
@@ -41,8 +35,6 @@ describe('ScoreCard', () => {
 
   it('handles zero aggregates without crashing', () => {
     const zeroAgg = makeAggregates({
-      avgApiCoverage: 0,
-      avgTokenCoverage: 0,
       avgApiDiscovery: 0,
       avgCallCorrectness: 0,
       avgCompleteness: 0,
@@ -52,13 +44,12 @@ describe('ScoreCard', () => {
 
     render(<ScoreCard title="Zero Scores" aggregates={zeroAgg} />);
 
-    // All percentage bars should show 0%
     const zeroPcts = screen.getAllByText('0%');
-    expect(zeroPcts.length).toBe(7);
+    expect(zeroPcts.length).toBe(5);
   });
 
   it('renders percentage values derived from aggregates', () => {
-    const agg = makeAggregates({ avgApiCoverage: 93 });
+    const agg = makeAggregates({ avgApiDiscovery: 93 });
     render(<ScoreCard title="Scores" aggregates={agg} />);
 
     expect(screen.getByText('93%')).toBeInTheDocument();

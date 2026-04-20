@@ -1,6 +1,6 @@
 # Agentic Usability
 
-A CLI tool that measures how well AI coding agents (Claude Code, Codex, Gemini CLI, etc.) can use your SDK. It generates programming problems from your SDK source, runs agents in sandboxed environments to solve them, then scores the results using regex-based token analysis and LLM judge comparison.
+A CLI tool that measures how well AI coding agents (Claude Code, Codex, Gemini CLI, etc.) can use your SDK. It generates programming problems from your SDK source, runs agents in sandboxed environments to solve them, then scores the results using an LLM judge that compares generated solutions against reference implementations.
 
 ```
 [Source Repo/URL] → [Test Generation Agent] → [Test Suite JSON]
@@ -9,13 +9,10 @@ A CLI tool that measures how well AI coding agents (Claude Code, Codex, Gemini C
                                                      ↓
                               [Extract Solution + Workspace Snapshot]
                                                      ↓
-                              ┌──────────────┴──────────────┐
-                              ↓                              ↓
-                   [Code Token Analysis]        [OpenSandbox] ← [LLM Judge]
-                   (regex: API coverage)     (runs solution, inspects source)
-                              └──────────────┬──────────────┘
-                                             ↓
-                                        [Scorecard]
+                              [OpenSandbox] ← [LLM Judge]
+                           (runs solution, inspects source)
+                                                     ↓
+                                                [Scorecard]
 ```
 
 ## Prerequisites
@@ -99,14 +96,13 @@ The wizard explains each field and provides sensible defaults. You can also `cd`
 npx agentic-usability eval -p pipelines/my-sdk-eval
 ```
 
-This runs the evaluation pipeline: **execute → analyze → judge → report**.
+This runs the evaluation pipeline: **execute → judge → report**.
 
 Or run stages individually:
 
 ```bash
 npx agentic-usability generate -p pipelines/my-sdk-eval
 npx agentic-usability execute  -p pipelines/my-sdk-eval
-npx agentic-usability analyze  -p pipelines/my-sdk-eval
 npx agentic-usability judge    -p pipelines/my-sdk-eval
 npx agentic-usability report   -p pipelines/my-sdk-eval
 ```
@@ -115,7 +111,6 @@ Use `--tests` to run specific test cases (comma-separated):
 
 ```bash
 npx agentic-usability execute -p pipelines/my-sdk-eval --tests TC-001,TC-003
-npx agentic-usability analyze -p pipelines/my-sdk-eval --tests TC-001,TC-003
 npx agentic-usability judge   -p pipelines/my-sdk-eval --tests TC-001,TC-003
 ```
 
@@ -139,7 +134,6 @@ pipelines/my-sdk-eval/           # project root (= CWD or -p target)
           agent-cmd.log
           agent-output.log
           agent-proxy.log.json       # executor proxy request logs
-          token-analysis.json
           judge.json
           judge-cmd.log
           judge-output.log
@@ -157,10 +151,9 @@ Each `eval` invocation creates a new run directory. Previous runs are preserved 
 | `init` | Create a new pipeline project (interactive wizard) | `-p <dir>` |
 | `generate` | Generate test suite from SDK source | `--fresh`, `--non-interactive` |
 | `execute` | Run agents in sandboxes to solve test cases | `--tests <ids>`, `--run <runId>` |
-| `analyze` | Regex-based token analysis of generated solutions | `--tests <ids>`, `--run <runId>` |
-| `judge` | LLM comparison of reference vs generated solutions | `--skip-judge`, `--tests <ids>`, `--run <runId>` |
+| `judge` | LLM comparison of reference vs generated solutions | `--tests <ids>`, `--run <runId>` |
 | `report` | Display terminal scorecard | `--json`, `--run <runId>` |
-| `eval` | Run evaluation pipeline: execute → analyze → judge → report | `--resume`, `--fresh`, `--skip-judge`, `--label <name>`, `--run <runId>` |
+| `eval` | Run evaluation pipeline: execute → judge → report | `--resume`, `--fresh`, `--label <name>`, `--run <runId>` |
 | `inspect` | Open web UI to inspect, edit, and run the pipeline | `--port <number>` |
 | `insights` | Interactive AI analysis of pipeline results | `--fresh` |
 
@@ -410,10 +403,9 @@ npx agentic-usability insights -p pipelines/my-sdk-eval
 ```
 
 The agent is given:
-- **Aggregate scores** per target — API coverage, token coverage, judge scores, pass rate, and difficulty breakdowns
-- **Worst-performing APIs and missed tokens** — which SDK surface areas agents struggle with most
+- **Aggregate scores** per target — judge scores, pass rate, and difficulty breakdowns
 - **Per-test-case results** — problem statements, scores, verdicts, and judge notes
-- **File paths** to generated solutions, token analysis, and judge assessments for deep dives
+- **File paths** to generated solutions and judge assessments for deep dives
 - **Scoring methodology** — the exact difficulty rubric and judge scoring bands used during evaluation
 - **SDK source locations** — so the agent can read your source code and correlate failures with API design
 
@@ -421,7 +413,7 @@ Ask about failure patterns, documentation gaps, API design issues, or request pr
 
 ## Pipeline and Resume
 
-The `eval` command orchestrates 4 stages: **execute → analyze → judge → report**. Each eval creates a new **run** — an isolated directory under `results/` with its own pipeline state and artifacts. Previous runs are preserved and browsable in the web UI.
+The `eval` command orchestrates 3 stages: **execute → judge → report**. Each eval creates a new **run** — an isolated directory under `results/` with its own pipeline state and artifacts. Previous runs are preserved and browsable in the web UI.
 
 ```bash
 # Basic run
@@ -435,16 +427,13 @@ npx agentic-usability eval -p pipelines/my-sdk-eval --resume
 
 # Resume a specific run
 npx agentic-usability eval -p pipelines/my-sdk-eval --resume --run run-2026-04-17T10-30-00-604Z
-
-# Skip the LLM judge stage (faster, token-analysis only)
-npx agentic-usability eval -p pipelines/my-sdk-eval --skip-judge
 ```
 
 Run standalone stages against a specific run (defaults to the latest run):
 
 ```bash
-npx agentic-usability analyze -p pipelines/my-sdk-eval --run run-2026-04-17T10-30-00-604Z
-npx agentic-usability report  -p pipelines/my-sdk-eval --run run-2026-04-17T10-30-00-604Z
+npx agentic-usability judge  -p pipelines/my-sdk-eval --run run-2026-04-17T10-30-00-604Z
+npx agentic-usability report -p pipelines/my-sdk-eval --run run-2026-04-17T10-30-00-604Z
 ```
 
 ## Test Suite Format
@@ -464,8 +453,6 @@ The test suite (`suite.json`) is a JSON array of test cases. Difficulty levels h
       { "path": "solution/index.ts", "content": "import { Client } from..." }
     ],
     "difficulty": "medium",
-    "targetApis": ["Client", "Client.query", "QueryBuilder.where"],
-    "expectedTokens": ["new Client\\(", "\\.query\\(", "\\.where\\("],
     "tags": ["querying", "filtering"],
     "setupInstructions": "npm install @example/sdk"
   }
@@ -473,13 +460,6 @@ The test suite (`suite.json`) is a JSON array of test cases. Difficulty levels h
 ```
 
 ## Scoring
-
-### Code Token Analysis
-
-Deterministic regex matching against the generated solution files:
-
-- **API Coverage**: Word-boundary match for each entry in `targetApis`. REST-style APIs (e.g. `POST /build`) are automatically decomposed into separate HTTP method + URL path checks.
-- **Token Coverage**: Full regex match (with dotAll/multiline support) for each entry in `expectedTokens` (invalid regex falls back to escaped literal)
 
 ### LLM Judge (Sandboxed)
 
@@ -500,7 +480,7 @@ src/
   core/           types, config, paths, pipeline state, source resolver, suite I/O, results
   agents/         adapter pattern: claude, codex, gemini, custom + spawn utility
   sandbox/        OpenSandbox client, workspace scaffolding, worker pool
-  scoring/        token analysis, LLM judge
+  scoring/        LLM judge
   commands/       one file per CLI command
   server/         Express API server + WebSocket for the inspect UI
 ui/               React SPA (Vite + Monaco editor), built to dist-ui/

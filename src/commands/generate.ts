@@ -24,12 +24,10 @@ const TEST_SUITE_SCHEMA = {
         },
       },
       difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
-      targetApis: { type: 'array', items: { type: 'string' } },
-      expectedTokens: { type: 'array', items: { type: 'string' } },
       tags: { type: 'array', items: { type: 'string' } },
       setupInstructions: { type: 'string' },
     },
-    required: ['problemStatement', 'referenceSolution', 'difficulty', 'targetApis', 'expectedTokens', 'tags'],
+    required: ['problemStatement', 'referenceSolution', 'difficulty', 'tags'],
   },
 };
 
@@ -41,8 +39,6 @@ Output ONLY a valid JSON array of test case objects matching this schema:
     "problemStatement": string (required),
     "referenceSolution": [{ "path": string, "content": string }] (required),
     "difficulty": "easy" | "medium" | "hard" (required),
-    "targetApis": string[] (required),
-    "expectedTokens": string[] (required),
     "tags": string[] (required),
     "setupInstructions": string (optional)
   }
@@ -54,8 +50,7 @@ function summarizeExistingTests(testCases: TestCase[]): string {
   if (testCases.length === 0) return '';
 
   const lines = testCases.map((tc) => {
-    const apis = tc.targetApis.join(', ');
-    return `- ${tc.id} (${tc.difficulty}): ${tc.problemStatement.slice(0, 100)}${tc.problemStatement.length > 100 ? '...' : ''} [APIs: ${apis}]`;
+    return `- ${tc.id} (${tc.difficulty}): ${tc.problemStatement.slice(0, 100)}${tc.problemStatement.length > 100 ? '...' : ''}`;
   });
 
   return `\n## Existing Test Cases (DO NOT DUPLICATE)\nThe suite already contains ${testCases.length} test case(s). Do NOT generate test cases that overlap with these:\n${lines.join('\n')}\n\nGenerate new, complementary test cases that cover different APIs and scenarios.\n`;
@@ -85,8 +80,6 @@ Each test case must be a JSON object with these fields:
 - "referenceSolution" (array of objects, required): Each object has "path" (string, file path) and "content" (string, file contents). This is the correct implementation.
 - "difficulty" (string, required): One of "easy", "medium", or "hard":
 ${DIFFICULTY_RUBRIC}
-- "targetApis" (array of strings, required): The SDK APIs that the solution should use (e.g., function names, class names, methods).
-- "expectedTokens" (array of strings, required): Regex patterns or literal strings expected in the solution code (e.g., "import.*${packageName}").
 - "tags" (array of strings, required): Categorization tags (e.g., "auth", "database", "http").
 - "setupInstructions" (string, optional): Shell commands to run before the agent starts.
 
@@ -94,8 +87,6 @@ Guidelines:
 - Generate a diverse set of test cases covering different difficulty levels and API surface areas.
 - Each problem statement should be self-contained — the agent should be able to solve it with only the problem description and SDK documentation.
 - Reference solutions should be correct, idiomatic usage of the SDK.
-- Target APIs should be the specific SDK functions/classes the solution needs.
-- Expected tokens should match patterns that indicate correct SDK usage. Prefer API endpoint paths over library-specific patterns when possible (e.g. prefer "/v1/messages" over "requests\\.post").
 - IMPORTANT: Problem statements must describe the GOAL in domain/product terms, not prescribe the implementation. Write them as if from a developer who knows what the product does but has not read the API reference. For example:
   BAD:  "Use POST /processor/convert_to_pdf with multipart/form-data containing a field named 'file'"
   GOOD: "Convert a .docx file to PDF using the document processing API and save the result locally"
@@ -140,13 +131,9 @@ function printSummary(testCases: TestCase[]): void {
   console.log(chalk.green(`\nGenerated ${testCases.length} test case(s)\n`));
 
   const byDifficulty = { easy: 0, medium: 0, hard: 0 };
-  const allApis = new Set<string>();
 
   for (const tc of testCases) {
     byDifficulty[tc.difficulty]++;
-    for (const api of tc.targetApis) {
-      allApis.add(api);
-    }
   }
 
   console.log(chalk.bold('Difficulty breakdown:'));
@@ -154,12 +141,6 @@ function printSummary(testCases: TestCase[]): void {
   console.log(`  Medium: ${byDifficulty.medium}`);
   console.log(`  Hard:   ${byDifficulty.hard}`);
 
-  console.log(chalk.bold(`\nTarget APIs found: ${allApis.size}`));
-  if (allApis.size > 0) {
-    for (const api of allApis) {
-      console.log(`  - ${api}`);
-    }
-  }
 }
 
 export async function generateCommand(paths: ProjectPaths, options: { fresh?: boolean; nonInteractive?: boolean } = {}): Promise<void> {

@@ -84,8 +84,6 @@ interface EditState {
   id: string;
   problemStatement: string;
   difficulty: 'easy' | 'medium' | 'hard';
-  targetApis: string;
-  expectedTokens: string;
   tags: string;
   setupInstructions: string;
   referenceSolution: SolutionFile[];
@@ -96,8 +94,6 @@ function tcToEditState(tc: TestCase): EditState {
     id: tc.id,
     problemStatement: tc.problemStatement,
     difficulty: tc.difficulty,
-    targetApis: tc.targetApis.join(', '),
-    expectedTokens: tc.expectedTokens.join(', '),
     tags: tc.tags.join(', '),
     setupInstructions: tc.setupInstructions ?? '',
     referenceSolution: tc.referenceSolution.map((f) => ({ ...f })),
@@ -109,8 +105,6 @@ function editStateToTc(s: EditState): TestCase {
     id: s.id,
     problemStatement: s.problemStatement,
     difficulty: s.difficulty,
-    targetApis: s.targetApis.split(',').map((x) => x.trim()).filter(Boolean),
-    expectedTokens: s.expectedTokens.split(',').map((x) => x.trim()).filter(Boolean),
     tags: s.tags.split(',').map((x) => x.trim()).filter(Boolean),
     setupInstructions: s.setupInstructions || undefined,
     referenceSolution: s.referenceSolution,
@@ -197,8 +191,6 @@ export function SuiteEditor() {
       const created = await createTestCase({
         problemStatement: 'New test case',
         difficulty: 'medium',
-        targetApis: [],
-        expectedTokens: [],
         tags: [],
         referenceSolution: [],
       });
@@ -498,35 +490,6 @@ export function SuiteEditor() {
                 <option value="medium">medium</option>
                 <option value="hard">hard</option>
               </select>
-            </div>
-
-            {/* Target APIs */}
-            <div style={fieldStyle}>
-              <label style={labelStyle}>Target APIs (comma-separated, optional)</label>
-              <div style={{ fontSize: '14px', color: colors.textMuted, marginBottom: '4px', lineHeight: '1.5' }}>
-                SDK functions or endpoints the solution should use. Matched via word-boundary check against generated code.
-                REST-style entries (e.g. <span style={{ fontFamily: 'monospace' }}>POST /builds</span>) are split into separate HTTP method + path checks.
-              </div>
-              <input
-                value={editState.targetApis}
-                onChange={(e) => updateEdit({ targetApis: e.target.value })}
-                style={inputStyle}
-                placeholder="e.g. Client.query, POST /api/users"
-              />
-            </div>
-
-            {/* Expected Tokens */}
-            <div style={fieldStyle}>
-              <label style={labelStyle}>Expected Tokens (comma-separated, optional)</label>
-              <div style={{ fontSize: '14px', color: colors.textMuted, marginBottom: '4px', lineHeight: '1.5' }}>
-                Regex patterns matched against generated code (dotAll + multiline). Invalid regex is treated as a literal string match.
-              </div>
-              <input
-                value={editState.expectedTokens}
-                onChange={(e) => updateEdit({ expectedTokens: e.target.value })}
-                style={inputStyle}
-                placeholder={'e.g. new Client\\\\(, \\\\.query\\\\('}
-              />
             </div>
 
             {/* Tags */}
