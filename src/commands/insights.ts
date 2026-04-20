@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 import ora from 'ora';
-import { join } from 'node:path';
 import { loadConfig } from '../core/config.js';
 import { resolveSources, getUrlSources } from '../core/source-resolver.js';
 import { loadTestSuite } from '../core/suite-io.js';
@@ -72,22 +71,38 @@ function buildTestResultsSection(agg: AggregateResults): string {
 }
 
 function buildFilePathsSection(paths: ProjectPaths, allAggregates: AggregateResults[]): string {
-  const lines: string[] = [
-    `The full test suite (with reference solutions) is at: ${paths.suite}`,
-    '',
-    'Per-test-case result files are at:',
-  ];
+  const targets = allAggregates.map(a => a.target);
+  const testIds = [...new Set(allAggregates.flatMap(a => a.testResults.map(r => r.testId)))];
 
-  for (const agg of allAggregates) {
-    for (const r of agg.testResults) {
-      const dir = join(paths.results, agg.target, r.testId);
-      lines.push(`- ${dir}/generated-solution.json — agent's generated solution`);
-      lines.push(`- ${dir}/agent-notes.md — agent's self-reported progress and gotchas`);
-      lines.push(`- ${dir}/judge.json — full judge assessment`);
-    }
-  }
+  return `The full test suite (with reference solutions) is at: ${paths.suite}
 
-  return lines.join('\n');
+Results base directory: ${paths.results}
+
+Results are organized as: {resultsDir}/{target}/{testId}/
+
+Run-level files (in resultsDir):
+  run.json                     — run metadata (id, label, targets, testCount)
+  pipeline-state.json          — resume checkpoint
+  report.json                  — scorecard export
+
+Per-test-case files (in {resultsDir}/{target}/{testId}/):
+  generated-solution.json      — agent's generated solution
+  workspace-snapshot.tar.gz    — sandbox state for judge reconstruction
+  setup.log                    — workspace scaffolding log
+  install-error.log            — agent CLI install failure (only on error)
+  agent-cmd.log                — agent command that was executed
+  agent-output.log             — raw agent stdout/stderr
+  agent-notes.md               — agent's self-reported working notes
+  agent-proxy.log.json         — executor proxy request logs
+  agent-error.log              — execution error (only on error)
+  judge.json                   — full judge assessment
+  judge-cmd.log                — judge command that was executed
+  judge-output.log             — raw judge stdout/stderr
+  judge-proxy.log.json         — judge proxy request logs
+  judge-error.log              — judge error (only on error)
+
+Targets in this run: ${targets.join(', ')}
+Test IDs: ${testIds.join(', ')}`;
 }
 
 export function buildInsightsPrompt(
