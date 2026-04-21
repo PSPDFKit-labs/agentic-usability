@@ -17,7 +17,7 @@ vi.mock('../../scoring/judge.js', () => ({
 }));
 
 vi.mock('../execute.js', () => ({
-  prepareSandboxEnv: vi.fn().mockResolvedValue({ proxy: undefined, proxyEnv: undefined }),
+  prepareSandboxEnv: vi.fn().mockResolvedValue({ proxy: undefined, proxyEnv: undefined, urlProxy: undefined, config: makeConfig() }),
 }));
 
 vi.mock('../../sandbox/worker-pool.js', () => ({
@@ -83,7 +83,7 @@ describe('judgeCommand', () => {
     vi.mocked(runSandboxedJudge).mockResolvedValue(makeJudgeScore() as any);
     vi.mocked(saveResult).mockResolvedValue(undefined);
 
-    vi.mocked(prepareSandboxEnv).mockResolvedValue({ proxy: undefined, proxyEnv: undefined });
+    vi.mocked(prepareSandboxEnv).mockResolvedValue({ proxy: undefined, proxyEnv: undefined, urlProxy: undefined, config: makeConfig() });
   });
 
   it('runs judge for each target and test case', async () => {

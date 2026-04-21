@@ -115,14 +115,17 @@ export async function evalCommand(paths: ProjectPaths, options: {
   if (stageIndex(stateManager.getState().stage) <= stageIndex('execute')) {
     console.log(chalk.bold.blue(`\n[Stage 1/${totalStages}] Executing test cases...`));
 
-    const { proxy, proxyEnv } = await prepareSandboxEnv(config);
+    const { proxy, proxyEnv, urlProxy, config: execConfig } = await prepareSandboxEnv(config, paths.root);
     if (proxy) {
       const ports = proxy.listeners.map((l) => `${l.baseUrlVar}→:${l.port}`).join(', ');
       console.log(chalk.dim(`  Auth proxy listening (${ports})`));
     }
+    if (urlProxy) {
+      console.log(chalk.dim(`  URL access log: ${urlProxy.accessLogPath}`));
+    }
 
     const execResult = await runExecuteStage({
-      config, paths: runPaths, testCases,
+      config: execConfig, paths: runPaths, testCases,
       proxyEnv, proxyHandle: proxy,
       onTestComplete: (id, target) => { stateManager.markTestComplete('execute', id, target); stateManager.save(); },
       filterForTarget: (tcs, targetName) => {
@@ -132,6 +135,7 @@ export async function evalCommand(paths: ProjectPaths, options: {
     });
 
     await proxy?.stop();
+    await urlProxy?.stop();
 
     if (execResult.aborted || pipelineAborted) {
       console.log(chalk.yellow('\nPipeline aborted. State saved — use --resume to continue.'));
@@ -150,14 +154,17 @@ export async function evalCommand(paths: ProjectPaths, options: {
   if (stageIndex(stateManager.getState().stage) <= stageIndex('judge')) {
     console.log(chalk.bold.blue(`\n[Stage 2/${totalStages}] Judging solutions (sandboxed)...`));
 
-    const { proxy: judgeProxy, proxyEnv: judgeProxyEnv } = await prepareSandboxEnv(config);
+    const { proxy: judgeProxy, proxyEnv: judgeProxyEnv, urlProxy: judgeUrlProxy, config: judgeConfig } = await prepareSandboxEnv(config, paths.root);
     if (judgeProxy) {
       const ports = judgeProxy.listeners.map((l) => `${l.baseUrlVar}→:${l.port}`).join(', ');
       console.log(chalk.dim(`  Judge auth proxy listening (${ports})`));
     }
+    if (judgeUrlProxy) {
+      console.log(chalk.dim(`  Judge URL access log: ${judgeUrlProxy.accessLogPath}`));
+    }
 
     const judgeResult = await runJudgeStage({
-      config, paths: runPaths, testCases,
+      config: judgeConfig, paths: runPaths, testCases,
       proxyEnv: judgeProxyEnv, proxyHandle: judgeProxy,
       onTestComplete: (id, target) => { stateManager.markTestComplete('judge', id, target); stateManager.save(); },
       filterForTarget: (tcs, targetName) => {
@@ -167,6 +174,7 @@ export async function evalCommand(paths: ProjectPaths, options: {
     });
 
     await judgeProxy?.stop();
+    await judgeUrlProxy?.stop();
 
     if (judgeResult.aborted || pipelineAborted) {
       console.log(chalk.yellow('\nPipeline aborted. State saved — use --resume to continue.'));

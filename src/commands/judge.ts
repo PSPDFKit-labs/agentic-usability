@@ -122,7 +122,7 @@ export async function runJudgeStage(opts: StageOptions): Promise<{ aborted: bool
 
 export async function judgeCommand(paths: ProjectPaths, options: { testIds?: string[] } = {}): Promise<void> {
 
-  const config = await loadConfig(paths.config);
+  const loadedConfig = await loadConfig(paths.config);
 
   const spinner = ora('Loading test suite...').start();
   const allTestCases = await loadTestSuite(paths);
@@ -131,16 +131,20 @@ export async function judgeCommand(paths: ProjectPaths, options: { testIds?: str
     : allTestCases;
   spinner.succeed(`Loaded ${testCases.length} test case(s)${options.testIds ? ` (filtered from ${allTestCases.length})` : ''}`);
 
-  const { proxy, proxyEnv } = await prepareSandboxEnv(config);
+  const { proxy, proxyEnv, urlProxy, config } = await prepareSandboxEnv(loadedConfig, paths.root);
   if (proxy) {
     const ports = proxy.listeners.map((l) => `${l.baseUrlVar}→:${l.port}`).join(', ');
     console.log(chalk.dim(`Auth proxy listening (${ports})`));
+  }
+  if (urlProxy) {
+    console.log(chalk.dim(`URL access log: ${urlProxy.accessLogPath}`));
   }
 
   try {
     await runJudgeStage({ config, paths, testCases, proxyEnv, proxyHandle: proxy });
   } finally {
     await proxy?.stop();
+    await urlProxy?.stop();
   }
 
   console.log(chalk.dim(`\nResults saved to ${paths.results}`));

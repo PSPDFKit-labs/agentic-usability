@@ -28,6 +28,15 @@ describe('scaffoldWorkspace', () => {
     expect(log).toBe('');
   });
 
+  it('installs curl in sandbox', async () => {
+    const config = makeConfig();
+    await scaffoldWorkspace(client as any, config, makeTestCase());
+
+    expect(client.runCommand).toHaveBeenCalledWith(
+      expect.stringContaining('command -v curl'),
+    );
+  });
+
   it('uploads template directory files to /workspace/ (Layer 2)', async () => {
     const config = makeConfig({ workspace: { template: '/templates/basic' } });
     mockStat.mockResolvedValue({} as any);
@@ -71,7 +80,7 @@ describe('scaffoldWorkspace', () => {
     expect(client.uploadFiles).toHaveBeenCalledWith([
       expect.objectContaining({ path: '/workspace/.setup.sh' }),
     ]);
-    expect(client.runCommand).toHaveBeenCalledWith(
+    expect(client.runCommand).toHaveBeenLastCalledWith(
       'chmod +x /workspace/.setup.sh && /workspace/.setup.sh',
     );
     expect(log).toContain('[Layer 3]');
@@ -91,7 +100,7 @@ describe('scaffoldWorkspace', () => {
     const tc = makeTestCase({ setupInstructions: 'npm install' });
 
     const log = await scaffoldWorkspace(client as any, config, tc);
-    expect(client.runCommand).toHaveBeenCalledWith('npm install');
+    expect(client.runCommand).toHaveBeenLastCalledWith('npm install');
     expect(log).toContain('[Layer 4]');
   });
 

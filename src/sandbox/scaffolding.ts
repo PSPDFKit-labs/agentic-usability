@@ -130,6 +130,8 @@ export async function scaffoldWorkspace(
 ): Promise<string> {
   const logs: string[] = [];
 
+  await ensureCurlAvailable(client, logs);
+
   // Layer 2: Template directory
   if (config.workspace?.template) {
     const templatePath = config.workspace.template;
@@ -193,6 +195,37 @@ export async function scaffoldWorkspace(
   }
 
   return logs.join('\n');
+}
+
+async function ensureCurlAvailable(
+  client: SandboxClient,
+  logs: string[],
+): Promise<void> {
+  const installCmd = [
+    'command -v curl >/dev/null 2>&1',
+    '|| (',
+    '  (command -v apt-get >/dev/null 2>&1 && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates)',
+    '  || (command -v apk >/dev/null 2>&1 && apk add --no-cache curl ca-certificates)',
+    '  || (command -v dnf >/dev/null 2>&1 && dnf install -y curl ca-certificates)',
+    '  || (command -v yum >/dev/null 2>&1 && yum install -y curl ca-certificates)',
+    '  || (command -v microdnf >/dev/null 2>&1 && microdnf install -y curl ca-certificates)',
+    '  || (command -v zypper >/dev/null 2>&1 && zypper --non-interactive install curl ca-certificates)',
+    ')',
+  ].join(' ');
+
+  const result = await client.runCommand(installCmd);
+  if (result.exitCode !== 0) {
+    logs.push('[Layer 1] Warning: Failed to ensure curl is available in the sandbox');
+    if (result.stderr) logs.push(`[Layer 1] stderr: ${result.stderr}`);
+    if (result.stdout) logs.push(`[Layer 1] stdout: ${result.stdout}`);
+    return;
+  }
+
+  if (result.stdout || result.stderr) {
+    logs.push('[Layer 1] Ensured curl is available in the sandbox');
+    if (result.stdout) logs.push(`[Layer 1] stdout: ${result.stdout}`);
+    if (result.stderr) logs.push(`[Layer 1] stderr: ${result.stderr}`);
+  }
 }
 
 /**

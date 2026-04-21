@@ -6,6 +6,7 @@ import { loadTestSuite, saveResult, saveBinaryResult, formatElapsed } from '../c
 import { SandboxClient, getSandboxHostAddress } from '../sandbox/opensandbox.js';
 import { rewriteEnv, applyProxyUrls, stampProxyTag } from '../proxy/env-rewriter.js';
 import { startAuthProxy, type AuthProxyHandle } from '../proxy/auth-proxy.js';
+import { startUrlProxy, rewriteConfigUrlsForProxy, type UrlProxyHandle } from '../proxy/url-proxy.js';
 import { scaffoldWorkspace } from '../sandbox/scaffolding.js';
 import { WorkerPool } from '../sandbox/worker-pool.js';
 import { createAdapter } from '../agents/adapter.js';
@@ -14,6 +15,8 @@ import type { Config, TestCase, SolutionFile, TargetConfig, ProjectPaths } from 
 export interface ProxySetupResult {
   proxy?: AuthProxyHandle;
   proxyEnv?: Record<string, string>;
+  urlProxy?: UrlProxyHandle;
+  config: Config;
 }
 
 /**
@@ -21,7 +24,7 @@ export interface ProxySetupResult {
  * and return the rewritten env (with BASE_URL vars) + proxy handle.
  * Call once before executing test cases; stop the proxy when done.
  */
-export async function startProxy(config: Config): Promise<ProxySetupResult> {
+export async function startProxy(config: Config, projectRoot?: string): Promise<ProxySetupResult> {
   const sandboxEnv = resolveEnv(config.sandbox?.env);
   const hostAddr = getSandboxHostAddress();
   let proxy: AuthProxyHandle | undefined;
@@ -35,17 +38,24 @@ export async function startProxy(config: Config): Promise<ProxySetupResult> {
     proxyEnv = sandboxEnv;
   }
 
-  return { proxy, proxyEnv };
+  const urlProxy = projectRoot
+    ? await startUrlProxy(config, projectRoot, hostAddr)
+    : undefined;
+  const effectiveConfig = urlProxy
+    ? rewriteConfigUrlsForProxy(config, urlProxy.sandboxBaseUrl)
+    : config;
+
+  return { proxy, proxyEnv, urlProxy, config: effectiveConfig };
 }
 
 /**
  * Full sandbox bootstrap: load .env secrets, verify connectivity, start auth proxy.
  * Shared by eval, execute, and judge commands.
  */
-export async function prepareSandboxEnv(config: Config): Promise<ProxySetupResult> {
+export async function prepareSandboxEnv(config: Config, projectRoot?: string): Promise<ProxySetupResult> {
   await loadDotenv();
   await SandboxClient.checkConnectivity(config.sandbox);
-  return startProxy(config);
+  return startProxy(config, projectRoot);
 }
 
 function resolveEnv(
@@ -357,7 +367,7 @@ export async function runExecuteStage(opts: StageOptions): Promise<{ aborted: bo
 }
 
 export async function executeCommand(paths: ProjectPaths, options: { testIds?: string[] } = {}): Promise<void> {
-  const config = await loadConfig(paths.config);
+  const loadedConfig = await loadConfig(paths.config);
 
   const spinner = ora('Loading test suite...').start();
   const allTestCases = await loadTestSuite(paths);
@@ -366,15 +376,19 @@ export async function executeCommand(paths: ProjectPaths, options: { testIds?: s
     : allTestCases;
   spinner.succeed(`Loaded ${testCases.length} test case(s)${options.testIds ? ` (filtered from ${allTestCases.length})` : ''}`);
 
-  const { proxy, proxyEnv } = await prepareSandboxEnv(config);
+  const { proxy, proxyEnv, urlProxy, config } = await prepareSandboxEnv(loadedConfig, paths.root);
   if (proxy) {
     const ports = proxy.listeners.map((l) => `${l.baseUrlVar}→:${l.port}`).join(', ');
     console.log(chalk.dim(`Auth proxy listening (${ports})`));
+  }
+  if (urlProxy) {
+    console.log(chalk.dim(`URL access log: ${urlProxy.accessLogPath}`));
   }
 
   try {
     await runExecuteStage({ config, paths, testCases, proxyEnv, proxyHandle: proxy });
   } finally {
     await proxy?.stop();
+    await urlProxy?.stop();
   }
 }

@@ -53,6 +53,11 @@ vi.mock('../../sandbox/scaffolding.js', () => ({
   scaffoldWorkspace: vi.fn().mockResolvedValue('setup log'),
 }));
 
+vi.mock('../../proxy/url-proxy.js', () => ({
+  startUrlProxy: vi.fn().mockResolvedValue(undefined),
+  rewriteConfigUrlsForProxy: vi.fn((config) => config),
+}));
+
 vi.mock('../../sandbox/worker-pool.js', () => ({
   WorkerPool: vi.fn(function (this: any) {
     this.run = vi.fn().mockResolvedValue({ passed: 1, failed: 0 });

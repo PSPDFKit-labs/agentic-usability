@@ -37,7 +37,23 @@ export class CodexAdapter extends BaseAdapter {
     const schemaPath = join(tmpdir(), `codex-schema-${timestamp}.json`);
     const outputPath = join(tmpdir(), `codex-output-${timestamp}.json`);
 
-    await writeFile(schemaPath, JSON.stringify(schema), 'utf-8');
+    // Codex currently only accepts root object schemas for --output-schema.
+    // Wrap non-object schemas (e.g. the generator's top-level array) and unwrap
+    // the result after reading the output file.
+    const rootSchema = schema as { type?: string };
+    const needsWrapper = rootSchema.type !== 'object';
+    const codexSchema = needsWrapper
+      ? {
+          type: 'object',
+          properties: {
+            result: schema,
+          },
+          required: ['result'],
+          additionalProperties: false,
+        }
+      : schema;
+
+    await writeFile(schemaPath, JSON.stringify(codexSchema), 'utf-8');
 
     const args = [
       'exec',
@@ -55,7 +71,13 @@ export class CodexAdapter extends BaseAdapter {
 
     // Read structured output from the output file
     try {
-      result.stdout = await readFile(outputPath, 'utf-8');
+      const raw = await readFile(outputPath, 'utf-8');
+      if (needsWrapper) {
+        const parsed = JSON.parse(raw) as { result?: unknown };
+        result.stdout = JSON.stringify(parsed.result ?? null);
+      } else {
+        result.stdout = raw;
+      }
     } catch {
       // If output file doesn't exist, use stdout as-is
     }

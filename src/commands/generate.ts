@@ -7,6 +7,7 @@ import { createAdapter, type AgentAdapter } from '../agents/adapter.js';
 import type { TestCase, Config, ProjectPaths } from '../types.js';
 import { printSuiteTable, validateTestCase } from './suite-utils.js';
 import { buildSourceList, buildUrlSourceList, DIFFICULTY_RUBRIC, extractJson } from './prompt-helpers.js';
+import { startUrlProxy, rewriteConfigUrlsForProxy } from '../proxy/url-proxy.js';
 
 const TEST_SUITE_SCHEMA = {
   type: 'array',
@@ -144,11 +145,20 @@ function printSummary(testCases: TestCase[]): void {
 }
 
 export async function generateCommand(paths: ProjectPaths, options: { fresh?: boolean; nonInteractive?: boolean } = {}): Promise<void> {
-  const config = await loadConfig(paths.config);
+  const loadedConfig = await loadConfig(paths.config);
+  const urlProxy = await startUrlProxy(loadedConfig, paths.root, 'host.docker.internal');
+  const config = urlProxy
+    ? rewriteConfigUrlsForProxy(loadedConfig, urlProxy.localBaseUrl)
+    : loadedConfig;
 
-  const spinner = ora('Resolving sources...').start();
-  const sourcePaths = await resolveSources(config, { fresh: options.fresh, reposDir: paths.cacheRepos });
-  spinner.succeed(`Sources resolved: ${sourcePaths.join(', ')}`);
+  if (urlProxy) {
+    console.log(chalk.dim(`URL access log: ${urlProxy.accessLogPath}`));
+  }
+
+  try {
+    const spinner = ora('Resolving sources...').start();
+    const sourcePaths = await resolveSources(config, { fresh: options.fresh, reposDir: paths.cacheRepos });
+    spinner.succeed(`Sources resolved: ${sourcePaths.join(', ')}`);
 
   const generatorConfig = config.agents?.generator ?? { command: 'claude' };
   const adapter = createAdapter(generatorConfig);
@@ -175,28 +185,31 @@ export async function generateCommand(paths: ProjectPaths, options: { fresh?: bo
   const prompt = buildPrompt(sourcePaths, config, existingTests)
     + `\n\nWhen you are done, write the final JSON array to: ${suiteFile}`;
 
-  // Always use the project root as cwd. The prompt already contains the full source path,
-  // so the agent can navigate to it regardless. This avoids ENOTDIR when the source is a
-  // single file, and keeps behavior consistent across local/git/url source types.
-  const workDir = paths.root;
+    // Always use the project root as cwd. The prompt already contains the full source path,
+    // so the agent can navigate to it regardless. This avoids ENOTDIR when the source is a
+    // single file, and keeps behavior consistent across local/git/url source types.
+    const workDir = paths.root;
 
-  if (options.nonInteractive) {
-    // Non-interactive mode: use adapter with piped stdio (for CI or automation)
-    return generateNonInteractive(adapter, prompt, workDir, suiteFile, existingTests);
+    if (options.nonInteractive) {
+      // Non-interactive mode: use adapter with piped stdio (for CI or automation)
+      return await generateNonInteractive(adapter, prompt, workDir, suiteFile, existingTests);
+    }
+
+    // Interactive mode: launch the agent with inherited stdio so the user can collaborate
+    console.log(chalk.bold(`\nLaunching interactive ${adapter.name} session...`));
+    console.log(chalk.dim(`The agent will explore ${sourcePaths.join(', ')} and generate test cases.`));
+    console.log(chalk.dim(`You can give feedback, ask for changes, and guide the generation.`));
+    console.log(chalk.dim(`The agent will write the suite to ${suiteFile} when done.\n`));
+
+    const { exitCode, durationMs } = await adapter.interactive(prompt, workDir);
+
+    console.log(chalk.dim(`\nAgent exited (code ${exitCode}, ${Math.round(durationMs / 1000)}s)`));
+
+    // Validate the suite file the agent wrote
+    await validateAndFinalize(suiteFile);
+  } finally {
+    await urlProxy?.stop();
   }
-
-  // Interactive mode: launch the agent with inherited stdio so the user can collaborate
-  console.log(chalk.bold(`\nLaunching interactive ${adapter.name} session...`));
-  console.log(chalk.dim(`The agent will explore ${sourcePaths.join(', ')} and generate test cases.`));
-  console.log(chalk.dim(`You can give feedback, ask for changes, and guide the generation.`));
-  console.log(chalk.dim(`The agent will write the suite to ${suiteFile} when done.\n`));
-
-  const { exitCode, durationMs } = await adapter.interactive(prompt, workDir);
-
-  console.log(chalk.dim(`\nAgent exited (code ${exitCode}, ${Math.round(durationMs / 1000)}s)`));
-
-  // Validate the suite file the agent wrote
-  await validateAndFinalize(suiteFile);
 }
 
 async function generateNonInteractive(

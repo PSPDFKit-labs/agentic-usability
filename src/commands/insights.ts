@@ -7,6 +7,7 @@ import { createAdapter } from '../agents/adapter.js';
 import type { AggregateResults, ProjectPaths, Config } from '../types.js';
 import { loadAllResults, computeAggregates } from '../core/results.js';
 import { buildSourceList, buildUrlSourceList, DIFFICULTY_RUBRIC, JUDGE_SCORING_CRITERIA } from './prompt-helpers.js';
+import { startUrlProxy, rewriteConfigUrlsForProxy } from '../proxy/url-proxy.js';
 
 function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
@@ -175,39 +176,51 @@ Start by giving an overview of the key findings, then let the developer guide th
 }
 
 export async function insightsCommand(paths: ProjectPaths, options: { fresh?: boolean } = {}): Promise<void> {
-  const config = await loadConfig(paths.config);
+  const loadedConfig = await loadConfig(paths.config);
+  const urlProxy = await startUrlProxy(loadedConfig, paths.root, 'host.docker.internal');
+  const config = urlProxy
+    ? rewriteConfigUrlsForProxy(loadedConfig, urlProxy.localBaseUrl)
+    : loadedConfig;
 
-  const spinner = ora('Resolving sources...').start();
-  const sourcePaths = await resolveSources(config, { fresh: options.fresh, reposDir: paths.cacheRepos });
-  spinner.succeed(`Sources resolved: ${sourcePaths.join(', ')}`);
-
-  const loadSpinner = ora('Loading test suite and results...').start();
-  const testCases = await loadTestSuite(paths);
-
-  const allAggregates: AggregateResults[] = [];
-  for (const target of config.targets) {
-    const testResults = await loadAllResults(paths, testCases, target.name);
-    const aggregates = computeAggregates(testResults, target.name);
-    allAggregates.push(aggregates);
-  }
-  loadSpinner.succeed(`Loaded ${testCases.length} test case(s) across ${config.targets.length} target(s)`);
-
-  const totalResults = allAggregates.reduce((sum, agg) => sum + agg.testResults.filter(r => r.judgeScore).length, 0);
-  if (totalResults === 0) {
-    console.log(chalk.yellow('\nNo results found. Run the pipeline first: agentic-usability eval'));
-    return;
+  if (urlProxy) {
+    console.log(chalk.dim(`URL access log: ${urlProxy.accessLogPath}`));
   }
 
-  const prompt = buildInsightsPrompt(sourcePaths, config, allAggregates, paths);
+  try {
+    const spinner = ora('Resolving sources...').start();
+    const sourcePaths = await resolveSources(config, { fresh: options.fresh, reposDir: paths.cacheRepos });
+    spinner.succeed(`Sources resolved: ${sourcePaths.join(', ')}`);
 
-  const adapterConfig = config.agents?.insights ?? { command: 'claude' };
-  const adapter = createAdapter(adapterConfig);
+    const loadSpinner = ora('Loading test suite and results...').start();
+    const testCases = await loadTestSuite(paths);
 
-  console.log(chalk.bold(`\nLaunching interactive ${adapter.name} session for SDK insights...`));
-  console.log(chalk.dim(`The agent has been pre-loaded with all benchmark results.`));
-  console.log(chalk.dim(`Ask about failure patterns, API design issues, documentation gaps, and improvement priorities.\n`));
+    const allAggregates: AggregateResults[] = [];
+    for (const target of config.targets) {
+      const testResults = await loadAllResults(paths, testCases, target.name);
+      const aggregates = computeAggregates(testResults, target.name);
+      allAggregates.push(aggregates);
+    }
+    loadSpinner.succeed(`Loaded ${testCases.length} test case(s) across ${config.targets.length} target(s)`);
 
-  const { exitCode, durationMs } = await adapter.interactive(prompt, paths.root);
+    const totalResults = allAggregates.reduce((sum, agg) => sum + agg.testResults.filter(r => r.judgeScore).length, 0);
+    if (totalResults === 0) {
+      console.log(chalk.yellow('\nNo results found. Run the pipeline first: agentic-usability eval'));
+      return;
+    }
 
-  console.log(chalk.dim(`\nAgent exited (code ${exitCode}, ${Math.round(durationMs / 1000)}s)`));
+    const prompt = buildInsightsPrompt(sourcePaths, config, allAggregates, paths);
+
+    const adapterConfig = config.agents?.insights ?? { command: 'claude' };
+    const adapter = createAdapter(adapterConfig);
+
+    console.log(chalk.bold(`\nLaunching interactive ${adapter.name} session for SDK insights...`));
+    console.log(chalk.dim(`The agent has been pre-loaded with all benchmark results.`));
+    console.log(chalk.dim(`Ask about failure patterns, API design issues, documentation gaps, and improvement priorities.\n`));
+
+    const { exitCode, durationMs } = await adapter.interactive(prompt, paths.root);
+
+    console.log(chalk.dim(`\nAgent exited (code ${exitCode}, ${Math.round(durationMs / 1000)}s)`));
+  } finally {
+    await urlProxy?.stop();
+  }
 }
