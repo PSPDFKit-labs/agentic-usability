@@ -16,6 +16,7 @@ import { reportCommand } from './commands/report.js';
 import { evalCommand } from './commands/eval.js';
 import { inspectCommand } from './commands/inspect.js';
 import { insightsCommand } from './commands/insights.js';
+import { exportCommand } from './commands/export.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -123,6 +124,15 @@ program
     const runId = opts.run ?? await getLatestRunId(paths.results);
     if (!runId) { console.error(chalk.red('No runs found. Run "eval" first.')); process.exit(1); }
     await insightsCommand(resolveRunPaths(paths, runId), { fresh: opts.fresh });
+  });
+
+program
+  .command('export')
+  .description('Export a pipeline as a zip file (excludes cache and workspace snapshots)')
+  .option('-o, --output <path>', 'Output zip file path')
+  .option('-r, --run <runId>', 'Export only a specific run')
+  .action(async (opts: { output?: string; run?: string }) => {
+    await exportCommand(getPaths(), opts);
   });
 
 program.parseAsync().catch((err: unknown) => {

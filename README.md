@@ -161,6 +161,7 @@ Each `eval` invocation creates a new run directory. Previous runs are preserved 
 | `eval` | Run evaluation pipeline: execute → judge → report | `--resume`, `--fresh`, `--label <name>`, `--run <runId>` |
 | `inspect` | Open web UI to inspect, edit, and run the pipeline | `--port <number>` |
 | `insights` | Interactive AI analysis of pipeline results | `--fresh` |
+| `export` | Export a pipeline as a zip (excludes cache and snapshots) | `-o <path>`, `-r <runId>` |
 
 ## Configuration Reference
 
