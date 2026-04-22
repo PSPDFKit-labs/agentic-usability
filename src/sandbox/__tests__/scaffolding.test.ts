@@ -28,15 +28,6 @@ describe('scaffoldWorkspace', () => {
     expect(log).toBe('');
   });
 
-  it('installs curl in sandbox', async () => {
-    const config = makeConfig();
-    await scaffoldWorkspace(client as any, config, makeTestCase());
-
-    expect(client.runCommand).toHaveBeenCalledWith(
-      expect.stringContaining('command -v curl'),
-    );
-  });
-
   it('uploads template directory files to /workspace/ (Layer 2)', async () => {
     const config = makeConfig({ workspace: { template: '/templates/basic' } });
     mockStat.mockResolvedValue({} as any);

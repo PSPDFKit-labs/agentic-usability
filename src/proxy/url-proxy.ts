@@ -151,7 +151,7 @@ export async function startUrlProxy(
     }
   });
 
-  await new Promise<void>((resolve) => server.listen(0, '0.0.0.0', () => resolve()));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
   const address = server.address();
   if (!address || typeof address === 'string') {
     throw new Error('Failed to determine URL proxy port');
