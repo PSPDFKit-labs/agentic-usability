@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-ui/
+.agentic-usability/
+.env
+/pipelines/
+tsconfig.tsbuildinfo
+.DS_Store
+.idea/
+*.tgz

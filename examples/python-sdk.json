@@ -1,0 +1,44 @@
+{
+  "privateInfo": [
+    {
+      "type": "local",
+      "path": "./path-to/python-sdk",
+      "additionalContext": "This is a Python SDK that wraps a native library via a bridge. Explore how the bridge is done in the source code."
+    }
+  ],
+  "publicInfo": [
+    {
+      "type": "package",
+      "name": "nutrient-sdk",
+      "installCommand": "pip install nutrient-sdk",
+      "language": "python"
+    },
+    {
+      "type": "url",
+      "url": "https://www.nutrient.io/guides/python/"
+    }
+  ],
+  "agents": {
+    "generator": { "command": "claude" },
+    "executor": {
+      "command": "claude",
+      "secret": { "value": "$ANTHROPIC_API_KEY" }
+    },
+    "judge": {
+      "command": "claude",
+      "secret": { "value": "$ANTHROPIC_API_KEY" }
+    }
+  },
+  "targets": [
+    {
+      "name": "python-3.12",
+      "image": "python:3.12-slim",
+      "timeout": 1200,
+      "additionalContext": "Use 'pip install <package>' in setupInstructions."
+    }
+  ],
+  "sandbox": {
+    "concurrency": 3,
+    "defaultTimeout": 600
+  }
+}

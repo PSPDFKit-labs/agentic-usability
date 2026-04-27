@@ -1,0 +1,39 @@
+{
+  "privateInfo": [
+    {
+      "type": "local",
+      "path": "./path-to/document-authoring-sdk",
+      "additionalContext": "This is the source code for the Nutrient Document Authoring SDK"
+    }
+  ],
+  "publicInfo": [
+    {
+      "type": "package",
+      "name": "@nutrient-sdk/document-authoring",
+      "installCommand": "npm i @nutrient-sdk/document-authoring",
+      "language": "javascript/typescript"
+    }
+  ],
+  "agents": {
+    "generator": { "command": "claude" },
+    "executor": {
+      "command": "claude",
+      "secret": { "value": "$ANTHROPIC_API_KEY" }
+    },
+    "judge": {
+      "command": "claude",
+      "secret": { "value": "$ANTHROPIC_API_KEY" }
+    }
+  },
+  "targets": [
+    {
+      "name": "node-20",
+      "image": "node:20-slim",
+      "timeout": 1200
+    }
+  ],
+  "sandbox": {
+    "concurrency": 3,
+    "defaultTimeout": 600
+  }
+}

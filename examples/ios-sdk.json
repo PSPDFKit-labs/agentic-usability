@@ -1,0 +1,43 @@
+{
+  "privateInfo": [
+    {
+      "type": "local",
+      "path": "./path-to/ios-sdk",
+      "additionalContext": "This is the source code directory of the iOS SDK"
+    }
+  ],
+  "publicInfo": [
+    {
+      "type": "package",
+      "name": "PSPDFKit-SP",
+      "language": "swift"
+    },
+    {
+      "type": "url",
+      "url": "https://www.nutrient.io/sdk/ios/getting-started/"
+    }
+  ],
+  "agents": {
+    "generator": { "command": "claude" },
+    "executor": {
+      "command": "claude",
+      "secret": { "value": "$ANTHROPIC_API_KEY" },
+      "systemPrompt": "Write the solution code only. This is not an Apple environment so you won't be able to run the code."
+    },
+    "judge": {
+      "command": "claude",
+      "secret": { "value": "$ANTHROPIC_API_KEY" }
+    }
+  },
+  "targets": [
+    {
+      "name": "node-20",
+      "image": "node:20-slim",
+      "timeout": 1200
+    }
+  ],
+  "sandbox": {
+    "concurrency": 3,
+    "defaultTimeout": 600
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "name": "agentic-usability",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "SDK Usability Benchmark CLI",
+  "bin": {
+    "agentic-usability": "dist/index.js"
+  },
+  "scripts": {
+    "build": "npm run build:ui && npm run build:server",
+    "build:ui": "npm run build --prefix ui",
+    "build:server": "tsc && chmod +x dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "!dist/**/__tests__",
+    "ui/dist",
+    ".claude-plugin",
+    "skills"
+  ],
+  "keywords": [
+    "benchmark",
+    "ai-agents",
+    "sdk",
+    "usability",
+    "cli",
+    "sandbox"
+  ],
+  "author": "PSPDFKit GmbH",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PSPDFKit-labs/agentic-usability.git"
+  },
+  "homepage": "https://github.com/PSPDFKit-labs/agentic-usability#readme",
+  "bugs": {
+    "url": "https://github.com/PSPDFKit-labs/agentic-usability/issues"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "chalk": "^5.4.1",
+    "cli-table3": "^0.6.5",
+    "commander": "^13.1.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "microsandbox": "https://github.com/PSPDFKit-labs/microsandbox/releases/download/v0.3.14-pspdfkit.1/microsandbox-node-sdk.tgz",
+    "open": "^11.0.0",
+    "ora": "^8.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.23.0",
+    "@types/archiver": "^7.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.13.14",
+    "@types/supertest": "^7.2.0",
+    "eslint": "^9.23.0",
+    "supertest": "^7.2.2",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.29.0",
+    "vitest": "^4.1.4"
+  }
+}

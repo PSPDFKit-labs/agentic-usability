@@ -1,0 +1,16 @@
+{
+  "name": "agentic-usability-marketplace",
+  "owner": {
+    "name": "PSPDFKit GmbH"
+  },
+  "metadata": {
+    "description": "SDK Usability Benchmark — Claude Code plugin with skills for every pipeline stage"
+  },
+  "plugins": [
+    {
+      "name": "agentic-usability",
+      "source": ".",
+      "description": "SDK Usability Benchmark — generate, execute, judge, and analyze AI agent benchmark suites"
+    }
+  ]
+}

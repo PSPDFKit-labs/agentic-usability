@@ -1,0 +1,42 @@
+{
+  "privateInfo": [
+    {
+      "type": "local",
+      "path": "./path-to/dotnet-sdk",
+      "additionalContext": "This is the source code directory of the .NET SDK"
+    }
+  ],
+  "publicInfo": [
+    {
+      "type": "package",
+      "name": "GdPicture14",
+      "language": "c-sharp"
+    },
+    {
+      "type": "url",
+      "url": "https://www.nutrient.io/sdk/dotnet/getting-started/integrate/"
+    }
+  ],
+  "agents": {
+    "generator": { "command": "claude" },
+    "executor": {
+      "command": "claude",
+      "secret": { "value": "$ANTHROPIC_API_KEY" }
+    },
+    "judge": {
+      "command": "claude",
+      "secret": { "value": "$ANTHROPIC_API_KEY" }
+    }
+  },
+  "targets": [
+    {
+      "name": "node-20",
+      "image": "node:20-slim",
+      "timeout": 1200
+    }
+  ],
+  "sandbox": {
+    "concurrency": 3,
+    "defaultTimeout": 600
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "privateInfo": [
+    {
+      "type": "local",
+      "path": "./path-to/specs/viewer-api.yml",
+      "additionalContext": "This is the OpenAPI YAML spec for the Nutrient DWS Viewer API"
+    },
+    {
+      "type": "local",
+      "path": "./path-to/server",
+      "additionalContext": "This is the source code directory of the DWS server. Focus only on the DWS Viewer API and not other APIs/products."
+    }
+  ],
+  "publicInfo": [
+    {
+      "type": "url",
+      "url": "https://www.nutrient.io/guides/dws-viewer/",
+      "additionalContext": "This is a REST API service called Nutrient DWS Viewer API."
+    }
+  ],
+  "agents": {
+    "generator": { "command": "claude" },
+    "executor": {
+      "command": "claude",
+      "secret": { "value": "$ANTHROPIC_API_KEY" },
+      "systemPrompt": "Write the solution code only and run linting and typecheck only. You are not provided the API key in this environment."
+    },
+    "judge": {
+      "command": "claude",
+      "secret": { "value": "$ANTHROPIC_API_KEY" }
+    }
+  },
+  "targets": [
+    {
+      "name": "python-3.12",
+      "image": "python:3.12-slim",
+      "timeout": 1200
+    }
+  ],
+  "sandbox": {
+    "concurrency": 3,
+    "defaultTimeout": 600
+  }
+}
