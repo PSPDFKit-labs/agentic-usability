@@ -23,7 +23,7 @@
   "files": [
     "dist",
     "!dist/**/__tests__",
-    "ui/dist",
+    "dist-ui",
     ".claude-plugin",
     "skills"
   ],
@@ -52,7 +52,7 @@
     "commander": "^13.1.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "microsandbox": "https://github.com/PSPDFKit-labs/microsandbox/releases/download/v0.3.14-pspdfkit.1/microsandbox-node-sdk.tgz",
+    "microsandbox": "https://github.com/PSPDFKit-labs/microsandbox/releases/download/v0.3.14-pspdfkit.2/microsandbox-node-sdk.tgz",
     "open": "^11.0.0",
     "ora": "^8.2.0"
   },

@@ -21,10 +21,11 @@ describe('scaffoldWorkspace', () => {
     client = makeMockSandboxClient();
   });
 
-  it('returns empty log when no template, setupScript, or setupInstructions', async () => {
+  it('creates /workspace and returns empty log when no template, setupScript, or setupInstructions', async () => {
     const config = makeConfig();
     const tc = makeTestCase();
     const log = await scaffoldWorkspace(client as any, config, tc);
+    expect(client.runCommand).toHaveBeenCalledWith('mkdir -p /workspace');
     expect(log).toBe('');
   });
 
@@ -91,7 +92,7 @@ describe('scaffoldWorkspace', () => {
     const tc = makeTestCase({ setupInstructions: 'npm install' });
 
     const log = await scaffoldWorkspace(client as any, config, tc);
-    expect(client.runCommand).toHaveBeenLastCalledWith('npm install');
+    expect(client.runCommand).toHaveBeenLastCalledWith('cd /workspace && npm install');
     expect(log).toContain('[Layer 4]');
   });
 

@@ -33,7 +33,7 @@
   "targets": [
     {
       "name": "python-3.12",
-      "image": "python:3.12-slim",
+      "image": "nikolaik/python-nodejs:python3.12-nodejs20-slim",
       "timeout": 1200
     }
   ],

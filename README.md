@@ -379,13 +379,13 @@ Custom agents support additional args fields with `{prompt}` and `{workDir}` pla
 
 ### Targets
 
-Docker environments where agents solve problems. Each target runs independently — results are stored per-target.
+Docker environments where agents solve problems. Each target runs independently — results are stored per-target. Bear in mind that the image should have Node and npm installed for the installation of Agent CLI
 
 ```json
 {
   "targets": [
     { "name": "node-20", "image": "node:20-slim", "timeout": 600 },
-    { "name": "python-3.12", "image": "python:3.12-slim", "timeout": 1200 }
+    { "name": "python-3.12", "image": "nikolaik/python-nodejs:python3.12-nodejs20-slim", "timeout": 1200 }
   ]
 }
 ```

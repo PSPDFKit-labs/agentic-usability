@@ -130,6 +130,9 @@ export async function scaffoldWorkspace(
 ): Promise<string> {
   const logs: string[] = [];
 
+  // Layer 1: Ensure /workspace exists — all subsequent layers assume it.
+  await client.runCommand('mkdir -p /workspace');
+
   // Layer 2: Template directory
   if (config.workspace?.template) {
     const templatePath = config.workspace.template;
@@ -179,7 +182,7 @@ export async function scaffoldWorkspace(
   if (testCase.setupInstructions) {
     logs.push(`[Layer 4] Running per-test setup instructions`);
 
-    const result = await client.runCommand(testCase.setupInstructions);
+    const result = await client.runCommand(`cd /workspace && ${testCase.setupInstructions}`);
     if (result.stdout) logs.push(`[Layer 4] stdout: ${result.stdout}`);
     if (result.stderr) logs.push(`[Layer 4] stderr: ${result.stderr}`);
 

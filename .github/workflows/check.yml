@@ -42,6 +42,17 @@ jobs:
       - name: Test (UI)
         run: npm test --prefix ui
 
+      - name: Verify build artifacts
+        run: |
+          missing=0
+          for f in dist/index.js dist-ui/index.html; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing build artifact: $f"
+              missing=1
+            fi
+          done
+          exit $missing
+
       - name: Dry-run pack
         run: npm pack --dry-run
 
