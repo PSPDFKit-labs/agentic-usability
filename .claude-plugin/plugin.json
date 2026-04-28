@@ -1,8 +1,10 @@
 {
   "name": "agentic-usability",
   "description": "SDK Usability Benchmark — generate, execute, judge, and analyze AI agent benchmark suites",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "author": {
     "name": "PSPDFKit GmbH"
-  }
+  },
+  "skills": "./skills/",
+  "keywords": ["automation", "agent", "benchmark", "tests", "usability"]
 }

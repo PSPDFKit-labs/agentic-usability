@@ -9,8 +9,11 @@
   "plugins": [
     {
       "name": "agentic-usability",
-      "source": ".",
-      "description": "SDK Usability Benchmark — generate, execute, judge, and analyze AI agent benchmark suites"
+      "source": "./",
+      "description": "SDK Usability Benchmark — generate, execute, judge, and analyze AI agent benchmark suites",
+      "version": "0.1.2",
+      "keywords": ["automation", "agent", "benchmark", "tests", "usability"],
+      "skills": "./skills/"
     }
   ]
 }
