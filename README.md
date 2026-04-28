@@ -32,7 +32,7 @@ stateDiagram-v2
 ## Installation
 
 ```bash
-npm install -g agentic-usability
+npm install -g @pspdfkit-labs/agentic-usability
 ```
 
 Then run commands directly:
