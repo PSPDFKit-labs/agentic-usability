@@ -107,6 +107,7 @@ export class MicrosandboxClient {
       replace: true,
       network: {
         egressInterceptHosts: ['*'],
+        egressTimeoutMs: 0, // Prevent connection issues for long-running Agent connection
       },
       logLevel: 'debug'
     };
