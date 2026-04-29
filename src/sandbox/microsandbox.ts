@@ -106,6 +106,7 @@ export class MicrosandboxClient {
       maxDurationSecs: maxDurationSecs + 120, // hard safety net — extraction window is the gap
       replace: true,
       network: {
+        maxConnections: 2048, // Avoid port exhaustion
         egressInterceptHosts: ['*'],
         egressTimeoutMs: 0, // Prevent connection issues for long-running Agent connection
       },
@@ -155,9 +156,13 @@ export class MicrosandboxClient {
         exitCode: output.code,
       };
     } catch (err) {
-      throw new Error(
-        `Failed to run command '${cmd}': ${err instanceof Error ? err.message : String(err)}`,
-      );
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('[ExecTimeout]')) {
+        const timeout = new Error(`Command timed out '${cmd}': ${message}`);
+        timeout.name = 'TimeoutError';
+        throw timeout;
+      }
+      throw new Error(`Failed to run command '${cmd}': ${message}`);
     }
   }
 

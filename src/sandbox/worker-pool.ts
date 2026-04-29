@@ -8,7 +8,7 @@ export interface ProgressInfo {
   total: number;
 }
 
-export type ProgressCallback = (info: ProgressInfo, testCase: TestCase, event: 'start' | 'done' | 'fail') => void;
+export type ProgressCallback = (info: ProgressInfo, testCase: TestCase, event: 'start' | 'done' | 'fail' | 'timeout') => void;
 
 export class WorkerPool {
   private concurrency: number;
@@ -33,11 +33,12 @@ export class WorkerPool {
     testCases: TestCase[],
     executeFn: (testCase: TestCase) => Promise<void>,
     onProgress?: ProgressCallback,
-  ): Promise<{ passed: number; failed: number; aborted: boolean }> {
+  ): Promise<{ passed: number; failed: number; timedOut: number; aborted: boolean }> {
     const total = testCases.length;
     const queue = [...testCases];
     let completed = 0;
     let failed = 0;
+    let timedOut = 0;
     let running = 0;
 
     let sigintCount = 0;
@@ -57,7 +58,7 @@ export class WorkerPool {
     };
     process.on('SIGINT', onShutdown);
 
-    const report = (tc: TestCase, event: 'start' | 'done' | 'fail') => {
+    const report = (tc: TestCase, event: 'start' | 'done' | 'fail' | 'timeout') => {
       onProgress?.({
         completed,
         running,
@@ -74,6 +75,7 @@ export class WorkerPool {
         report(tc, 'start');
 
         let success = false;
+        let wasTimeout = false;
         const maxRetries = 2;
         const backoffs = [1000, 3000];
 
@@ -86,13 +88,12 @@ export class WorkerPool {
             break;
           } catch (err) {
             if (this.aborted) break;
-            if (attempt < maxRetries) {
-              await sleep(backoffs[attempt]);
-            } else {
+            wasTimeout = err instanceof Error && err.name === 'TimeoutError';
+            if (wasTimeout || attempt >= maxRetries) {
               success = false;
-              const message = err instanceof Error ? err.message : String(err);
-              void message;
+              break;
             }
+            await sleep(backoffs[attempt]);
           }
         }
 
@@ -102,6 +103,10 @@ export class WorkerPool {
         if (success) {
           completed++;
           report(tc, 'done');
+        } else if (wasTimeout) {
+          timedOut++;
+          completed++;
+          report(tc, 'timeout');
         } else {
           failed++;
           completed++;
@@ -119,7 +124,7 @@ export class WorkerPool {
 
     process.removeListener('SIGINT', onShutdown);
 
-    return { passed: completed - failed, failed, aborted: this.aborted };
+    return { passed: completed - failed - timedOut, failed, timedOut, aborted: this.aborted };
   }
 }
 

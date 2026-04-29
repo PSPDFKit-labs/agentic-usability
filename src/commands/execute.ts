@@ -3,7 +3,7 @@ import ora from 'ora';
 import { loadDotenv } from '../core/env.js';
 import { loadConfig } from '../core/config.js';
 import { loadTestSuite, saveResult, saveBinaryResult, formatElapsed } from '../core/suite-io.js';
-import { MicrosandboxClient, buildSecrets, buildAgentSecret, resolveEnv } from '../sandbox/microsandbox.js';
+import { MicrosandboxClient, buildSecrets, buildAgentSecret, resolveEnv, type CommandResult } from '../sandbox/microsandbox.js';
 import { createEgressLogger } from '../sandbox/egress-logger.js';
 import { scaffoldWorkspace } from '../sandbox/scaffolding.js';
 import { WorkerPool } from '../sandbox/worker-pool.js';
@@ -217,9 +217,23 @@ export async function executeTestCase(
     const prompt = buildAgentPrompt(config, publicSourceDirs);
     const agentCmd = adapter.sandboxCommand(prompt);
     await saveResult(paths, testCase.id, 'agent-cmd.log', agentCmd, target.name);
-    const agentResult = await client.runCommandTimed(agentCmd, {
-      timeoutMs: timeoutSecs * 1000,
-    });
+
+    let agentResult: CommandResult & { durationMs: number };
+    let agentError: unknown = null;
+    try {
+      agentResult = await client.runCommandTimed(agentCmd, {
+        timeoutMs: timeoutSecs * 1000,
+      });
+    } catch (err) {
+      agentError = err;
+      const message = err instanceof Error ? err.message : String(err);
+      agentResult = {
+        exitCode: -1,
+        stdout: '',
+        stderr: message,
+        durationMs: timeoutSecs * 1000,
+      };
+    }
 
     // Save agent output
     const agentLog = [
@@ -277,6 +291,11 @@ export async function executeTestCase(
     if (egressLogs.length > 0) {
       await saveResult(paths, testCase.id, 'agent-egress.log.json', JSON.stringify(egressLogs, null, 2), target.name);
     }
+
+    // After extracting all logs, propagate the original error
+    if (agentError) {
+      throw agentError;
+    }
   } finally {
     unregisterAbort?.();
     await client.destroy();
@@ -328,6 +347,8 @@ export async function runExecuteStage(opts: StageOptions): Promise<{ aborted: bo
         console.log(chalk.dim(`  [${info.completed + info.running}/${info.total}] ${tc.id} (${tc.difficulty}) — running... [${elapsed}]`));
       } else if (event === 'done') {
         console.log(chalk.green(`  [${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — done [${elapsed}]`));
+      } else if (event === 'timeout') {
+        console.log(chalk.yellow(`  [${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — timeout [${elapsed}]`));
       } else {
         console.log(chalk.red(`  [${info.completed}/${info.total}] ${tc.id} (${tc.difficulty}) — failed [${elapsed}]`));
       }
@@ -339,6 +360,9 @@ export async function runExecuteStage(opts: StageOptions): Promise<{ aborted: bo
     console.log(chalk.bold(`Execution Summary (${target.name})`));
     console.log(`  Total:  ${targetTests.length}`);
     console.log(chalk.green(`  Passed: ${poolResult.passed}`));
+    if (poolResult.timedOut > 0) {
+      console.log(chalk.yellow(`  Timeout: ${poolResult.timedOut}`));
+    }
     if (poolResult.failed > 0) {
       console.log(chalk.red(`  Failed: ${poolResult.failed}`));
     }
