@@ -1,6 +1,6 @@
 {
   "name": "@pspdfkit-labs/agentic-usability",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "description": "SDK Usability Benchmark CLI",
   "bin": {
