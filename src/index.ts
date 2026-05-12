@@ -1,5 +1,23 @@
 #!/usr/bin/env node
 
+// microsandbox's egress-intercept background loop runs as a fire-and-forget IIFE
+// inside its egressIntercept() helper, with try/finally but no catch. When the
+// native binding throws (most commonly "egress frame too large" — a frame from
+// the sandbox exceeds the protocol parser's buffer), it becomes an
+// unhandledRejection and crashes the parent process mid-run, taking out the
+// whole eval. Swallow that specific error so the eval keeps making forward
+// progress; egress logging for that test case stops, which is acceptable
+// (egress logs are observability, not correctness). Re-throw everything else.
+process.on('unhandledRejection', (err) => {
+  const e = err as { message?: string; code?: string } | null | undefined;
+  const msg = e?.message ?? '';
+  if (e?.code === 'GenericFailure' && /egress frame too large/i.test(msg)) {
+    console.warn(`\n[egress] interception loop terminated mid-run: ${msg} — eval continuing without further egress logging for this case`);
+    return;
+  }
+  throw err as Error;
+});
+
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { readFileSync } from 'node:fs';
