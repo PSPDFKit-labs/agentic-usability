@@ -364,6 +364,32 @@ Generator and insights agents run locally and do not require a secret.
 | `baseUrl` | API base URL. Hostname is used for network allowlisting. Auto-detected for known agents. |
 | `baseUrlEnvVar` | Override the base URL env var name. Auto-detected for known agents. |
 
+#### Claude Code subscription auth (avoid API billing)
+
+If you have a Claude Pro / Max / Team / Enterprise subscription, sandbox agents using `command: "claude"` can authenticate via your subscription instead of paying per-token API charges. Set `useOAuth: true` instead of providing a `secret`:
+
+```json
+{
+  "agents": {
+    "executor": { "command": "claude", "useOAuth": true },
+    "judge":    { "command": "claude", "useOAuth": true }
+  }
+}
+```
+
+One-time host setup:
+
+```bash
+claude setup-token             # interactive — generates a long-lived OAuth token
+export CLAUDE_CODE_OAUTH_TOKEN='<token>'   # before running the eval
+```
+
+Notes:
+- Token is injected into the sandbox as a plain env var (Claude reads it directly from `process.env`; the API-key TLS-substitution model does not apply).
+- Only valid for `command: "claude"`. The framework rejects `useOAuth: true` on other adapters at config-load time.
+- Setting both `secret` and `useOAuth` is rejected — choose one path per role.
+- Subscription concurrent-session caps apply.
+
 #### Custom agents
 
 Custom agents support additional args fields with `{prompt}` and `{workDir}` placeholders:

@@ -149,9 +149,9 @@ describe('loadConfig', () => {
     mockReadFile.mockResolvedValue(JSON.stringify(config));
     const result = await loadConfig('/fake/config.json');
     // Defaults should be filled in
-    expect(result.agents?.judge?.secret.envVar).toBe('ANTHROPIC_API_KEY');
-    expect(result.agents?.judge?.secret.baseUrl).toBe('https://api.anthropic.com');
-    expect(result.agents?.judge?.secret.baseUrlEnvVar).toBe('ANTHROPIC_BASE_URL');
+    expect(result.agents?.judge?.secret?.envVar).toBe('ANTHROPIC_API_KEY');
+    expect(result.agents?.judge?.secret?.baseUrl).toBe('https://api.anthropic.com');
+    expect(result.agents?.judge?.secret?.baseUrlEnvVar).toBe('ANTHROPIC_BASE_URL');
   });
 
   it('accepts known agent with all secret fields explicit', async () => {
@@ -166,7 +166,7 @@ describe('loadConfig', () => {
     };
     mockReadFile.mockResolvedValue(JSON.stringify(config));
     const result = await loadConfig('/fake/config.json');
-    expect(result.agents?.judge?.secret.envVar).toBe('ANTHROPIC_API_KEY');
+    expect(result.agents?.judge?.secret?.envVar).toBe('ANTHROPIC_API_KEY');
   });
 
   it('throws when sandbox agent (executor) is missing secret', async () => {
@@ -222,5 +222,45 @@ describe('loadConfig', () => {
     };
     mockReadFile.mockResolvedValue(JSON.stringify(config));
     await expect(loadConfig('/fake/config.json')).rejects.toThrow(/valid URL/);
+  });
+
+  describe('useOAuth (Claude Code subscription auth)', () => {
+    it('accepts judge with useOAuth: true and no secret', async () => {
+      const config = {
+        ...validConfig,
+        agents: { judge: { command: 'claude', useOAuth: true } },
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      const result = await loadConfig('/fake/config.json');
+      expect(result.agents?.judge?.useOAuth).toBe(true);
+      expect(result.agents?.judge?.secret).toBeUndefined();
+    });
+
+    it('rejects useOAuth with command != claude', async () => {
+      const config = {
+        ...validConfig,
+        agents: { judge: { command: 'codex', useOAuth: true } },
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/useOAuth.*only supported for command: "claude"/);
+    });
+
+    it('rejects sandbox role with neither secret nor useOAuth', async () => {
+      const config = {
+        ...validConfig,
+        agents: { judge: { command: 'claude' } },
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/secret.*or.*useOAuth/);
+    });
+
+    it('rejects setting both secret and useOAuth on the same role', async () => {
+      const config = {
+        ...validConfig,
+        agents: { judge: { command: 'claude', useOAuth: true, secret: { value: '$ANTHROPIC_API_KEY' } } },
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/cannot set both useOAuth and secret/);
+    });
   });
 });

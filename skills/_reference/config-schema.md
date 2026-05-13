@@ -76,11 +76,16 @@
 
 ### SandboxAgentConfig (executor, judge)
 
-Extends AgentConfig with one **required** field:
+Extends AgentConfig with auth fields. **Exactly one of `secret` or `useOAuth` is required.**
 
 | Field | Type | Required |
 |-------|------|----------|
-| `secret` | `AgentSecretConfig` | **Yes** |
+| `secret` | `AgentSecretConfig` | One-of — API key via TLS injection |
+| `useOAuth` | `boolean` | One-of — Claude Code subscription via `CLAUDE_CODE_OAUTH_TOKEN`. Only valid when `command: "claude"`. |
+
+**API-key path (`secret`)** — microsandbox TLS-injects the value, so the cleartext never enters the VM. Inside the sandbox the env var contains only a placeholder substituted on the wire for the allowed host.
+
+**Subscription path (`useOAuth: true`)** — reads `CLAUDE_CODE_OAUTH_TOKEN` from the host environment and injects it into the sandbox as a plain env var. Claude reads the token directly. Generate the token once with `claude setup-token` (Pro / Max / Team / Enterprise required), export it, then `useOAuth: true` on both executor and judge. Avoids per-token API billing.
 
 ### AgentSecretConfig
 
@@ -147,6 +152,7 @@ Custom agents (any command not in the table above) **must** provide `envVar` and
 7. `agents.executor` and `agents.judge` must have `secret.value` (non-empty string)
 8. Custom agents must provide `envVar` and `baseUrl` in their secret
 9. `baseUrl` must be a parseable URL
+10. Each sandbox agent role (`executor`, `judge`) must declare auth: either `secret` (API-key path) or `useOAuth: true` (Claude Code subscription path). Setting both is rejected. `useOAuth: true` requires `command: "claude"`.
 
 ## Minimal Examples
 

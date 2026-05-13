@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MicrosandboxClient, buildSecrets, resolveEnv } from '../microsandbox.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { MicrosandboxClient, buildSecrets, resolveEnv, resolveOAuthToken } from '../microsandbox.js';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -327,5 +327,27 @@ describe('MicrosandboxClient', () => {
 
       await expect(client.destroy()).resolves.toBeUndefined();
     });
+  });
+});
+
+describe('resolveOAuthToken', () => {
+  const ORIGINAL_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+
+  afterEach(() => {
+    if (ORIGINAL_TOKEN === undefined) {
+      delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    } else {
+      process.env.CLAUDE_CODE_OAUTH_TOKEN = ORIGINAL_TOKEN;
+    }
+  });
+
+  it('returns the token when CLAUDE_CODE_OAUTH_TOKEN is set on the host', () => {
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat-test-value';
+    expect(resolveOAuthToken()).toBe('sk-ant-oat-test-value');
+  });
+
+  it('throws with a clear setup-token hint when CLAUDE_CODE_OAUTH_TOKEN is unset', () => {
+    delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    expect(() => resolveOAuthToken()).toThrow(/claude setup-token/);
   });
 });

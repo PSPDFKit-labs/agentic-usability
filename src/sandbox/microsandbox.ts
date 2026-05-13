@@ -63,6 +63,29 @@ export function buildAgentSecret(secret: AgentSecretConfig, additionalAllowHosts
   return Secret.env(secret.envVar, { value, allowHosts });
 }
 
+/**
+ * Resolve the Claude Code OAuth token from the host environment for
+ * `useOAuth: true` agent configs. Unlike API keys (TLS-injected as
+ * placeholders by microsandbox), OAuth tokens must enter the VM as the real
+ * value because Claude reads them directly from `process.env`. The caller
+ * places the returned value under `sandbox.env.CLAUDE_CODE_OAUTH_TOKEN`.
+ *
+ * Throws with a clear message if `CLAUDE_CODE_OAUTH_TOKEN` is not set on
+ * the host — fail-fast so the user knows to run `claude setup-token` and
+ * export the result before the eval starts.
+ */
+export function resolveOAuthToken(): string {
+  const value = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  if (!value) {
+    throw new Error(
+      "CLAUDE_CODE_OAUTH_TOKEN is not set on the host. " +
+      "Generate a long-lived subscription token with `claude setup-token` " +
+      "and `export CLAUDE_CODE_OAUTH_TOKEN=<value>` before running the eval.",
+    );
+  }
+  return value;
+}
+
 function resolveValue(value: string, envVar: string): string {
   if (value.startsWith('$')) {
     const hostVar = value.slice(1);
