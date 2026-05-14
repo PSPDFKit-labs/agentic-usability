@@ -366,13 +366,13 @@ Generator and insights agents run locally and do not require a secret.
 
 #### Claude Code subscription auth (avoid API billing)
 
-If you have a Claude Pro / Max / Team / Enterprise subscription, sandbox agents using `command: "claude"` can authenticate via your subscription instead of paying per-token API charges. Set `useOAuth: true` instead of providing a `secret`:
+If you have a Claude Pro / Max / Team / Enterprise subscription, sandbox agents using `command: "claude"` can authenticate via your subscription instead of paying per-token API charges. Point `secret.value` at the Claude Code OAuth token instead of an API key:
 
 ```json
 {
   "agents": {
-    "executor": { "command": "claude", "useOAuth": true },
-    "judge":    { "command": "claude", "useOAuth": true }
+    "executor": { "command": "claude", "secret": { "value": "$CLAUDE_CODE_OAUTH_TOKEN" } },
+    "judge":    { "command": "claude", "secret": { "value": "$CLAUDE_CODE_OAUTH_TOKEN" } }
   }
 }
 ```
@@ -384,11 +384,7 @@ claude setup-token             # interactive — generates a long-lived OAuth to
 export CLAUDE_CODE_OAUTH_TOKEN='<token>'   # before running the eval
 ```
 
-Notes:
-- Token is injected into the sandbox as a plain env var (Claude reads it directly from `process.env`; the API-key TLS-substitution model does not apply).
-- Only valid for `command: "claude"`. The framework rejects `useOAuth: true` on other adapters at config-load time.
-- Setting both `secret` and `useOAuth` is rejected — choose one path per role.
-- Subscription concurrent-session caps apply.
+How it works: the runtime sniffs the resolved value's prefix at sandbox-create time. Anthropic OAuth tokens start with `sk-ant-oat-`; API keys start with `sk-ant-api-`. When the value is an OAuth token, it's injected as a plain `CLAUDE_CODE_OAUTH_TOKEN` env var (Claude Code reads it directly from `process.env`; the API-key TLS-substitution model doesn't apply for OAuth). Subscription concurrent-session caps apply.
 
 #### Custom agents
 

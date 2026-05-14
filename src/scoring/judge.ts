@@ -1,7 +1,7 @@
 import type { SolutionFile, JudgeScore, TestCase, SandboxAgentConfig, TargetConfig, Config, ProjectPaths, SourceConfig } from '../types.js';
 import { createAdapter } from '../agents/adapter.js';
 import { JUDGE_SCORING_CRITERIA, extractJson } from '../commands/prompt-helpers.js';
-import { MicrosandboxClient, buildSecrets, buildAgentSecret, resolveEnv, resolveOAuthToken } from '../sandbox/microsandbox.js';
+import { MicrosandboxClient, buildSecrets, applyAgentAuth, isOAuthSecret, resolveEnv } from '../sandbox/microsandbox.js';
 import { createEgressLockdownLogger } from '../sandbox/egress-logger.js';
 import { scaffoldWorkspace, uploadSources } from '../sandbox/scaffolding.js';
 import { deduplicateSources } from '../core/source-resolver.js';
@@ -135,14 +135,15 @@ const INFRA_ALLOWLIST = [
 export function buildJudgeAllowlist(judgeConfig: SandboxAgentConfig, config: Config): string[] {
   const hosts = new Set<string>();
 
-  // 1. Agent API endpoint — from secret.baseUrl (API-key path) or adapter default (OAuth path).
-  if (judgeConfig.secret?.baseUrl) {
-    try { hosts.add(new URL(judgeConfig.secret.baseUrl).hostname); } catch { /* skip malformed */ }
-  } else if (judgeConfig.useOAuth) {
+  // 1. Agent API endpoint — adapter default for OAuth tokens (Claude reads directly
+  //    from process.env, so secret.baseUrl is irrelevant), else secret.baseUrl.
+  if (isOAuthSecret(judgeConfig.secret)) {
     const adapter = createAdapter(judgeConfig);
     if (adapter.defaultBaseUrl) {
       try { hosts.add(new URL(adapter.defaultBaseUrl).hostname); } catch { /* skip malformed */ }
     }
+  } else if (judgeConfig.secret.baseUrl) {
+    try { hosts.add(new URL(judgeConfig.secret.baseUrl).hostname); } catch { /* skip malformed */ }
   }
 
   // 2. Secrets allowHosts
@@ -291,20 +292,8 @@ export async function runSandboxedJudge(
     const env = resolveEnv(config.sandbox?.env);
     const timeoutSecs = target.timeout ?? config.sandbox.defaultTimeout ?? 600;
 
-    // Resolve agent auth — same two-path model as the executor.
     const judgeAdapter = createAdapter(judgeConfig);
-    if (judgeConfig.useOAuth) {
-      env.CLAUDE_CODE_OAUTH_TOKEN = resolveOAuthToken();
-      if (judgeAdapter.baseUrlEnvVar && judgeAdapter.defaultBaseUrl) {
-        env[judgeAdapter.baseUrlEnvVar] = judgeAdapter.defaultBaseUrl;
-      }
-    } else if (judgeConfig.secret) {
-      secrets.push(buildAgentSecret(judgeConfig.secret, judgeAdapter.additionalAllowHosts));
-      const baseUrlVar = judgeConfig.secret.baseUrlEnvVar ?? judgeAdapter.baseUrlEnvVar;
-      if (baseUrlVar && judgeConfig.secret.baseUrl) {
-        env[baseUrlVar] = judgeConfig.secret.baseUrl;
-      }
-    }
+    applyAgentAuth(judgeConfig.secret, judgeAdapter, secrets, env);
 
     await client.create(
       sandboxName(testCase.id),

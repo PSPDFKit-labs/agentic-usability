@@ -76,16 +76,18 @@
 
 ### SandboxAgentConfig (executor, judge)
 
-Extends AgentConfig with auth fields. **Exactly one of `secret` or `useOAuth` is required.**
+Extends AgentConfig with one **required** field:
 
 | Field | Type | Required |
 |-------|------|----------|
-| `secret` | `AgentSecretConfig` | One-of — API key via TLS injection |
-| `useOAuth` | `boolean` | One-of — Claude Code subscription via `CLAUDE_CODE_OAUTH_TOKEN`. Only valid when `command: "claude"`. |
+| `secret` | `AgentSecretConfig` | **Yes** |
 
-**API-key path (`secret`)** — microsandbox TLS-injects the value, so the cleartext never enters the VM. Inside the sandbox the env var contains only a placeholder substituted on the wire for the allowed host.
+Auth mode is auto-detected from the resolved `secret.value`'s prefix at sandbox-create time:
 
-**Subscription path (`useOAuth: true`)** — reads `CLAUDE_CODE_OAUTH_TOKEN` from the host environment and injects it into the sandbox as a plain env var. Claude reads the token directly. Generate the token once with `claude setup-token` (Pro / Max / Team / Enterprise required), export it, then `useOAuth: true` on both executor and judge. Avoids per-token API billing.
+- `sk-ant-api-…` (Anthropic API key) → microsandbox TLS-injects the value, so the cleartext never enters the VM. Inside the sandbox the env var contains only a placeholder substituted on the wire for the allowed host.
+- `sk-ant-oat-…` (Claude Code subscription OAuth token, issued by `claude setup-token`) → injected as a plain `CLAUDE_CODE_OAUTH_TOKEN` env var. Claude Code reads the token directly from `process.env`, so the TLS-substitution model does not apply. Avoids per-token API billing on Pro / Max / Team / Enterprise plans.
+
+Point `secret.value` at the host env var that holds the credential — `"$ANTHROPIC_API_KEY"` for the API-key path, `"$CLAUDE_CODE_OAUTH_TOKEN"` for the subscription path.
 
 ### AgentSecretConfig
 
@@ -152,7 +154,6 @@ Custom agents (any command not in the table above) **must** provide `envVar` and
 7. `agents.executor` and `agents.judge` must have `secret.value` (non-empty string)
 8. Custom agents must provide `envVar` and `baseUrl` in their secret
 9. `baseUrl` must be a parseable URL
-10. Each sandbox agent role (`executor`, `judge`) must declare auth: either `secret` (API-key path) or `useOAuth: true` (Claude Code subscription path). Setting both is rejected. `useOAuth: true` requires `command: "claude"`.
 
 ## Minimal Examples
 

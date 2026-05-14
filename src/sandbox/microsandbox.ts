@@ -50,40 +50,68 @@ export function resolveEnv(
 }
 
 /**
- * Build a microsandbox `Secret.env()` entry from an agent's secret config.
- * The `allowHosts` is derived from the base URL hostname.
+ * Claude Code subscription OAuth tokens are prefixed `sk-ant-oat-` (issued by
+ * `claude setup-token`). API keys are prefixed `sk-ant-api-`. The auth mode is
+ * determined by inspecting the resolved secret value at sandbox-create time —
+ * no separate config flag needed.
  */
-export function buildAgentSecret(secret: AgentSecretConfig, additionalAllowHosts?: string[]): SecretEntry {
+const OAUTH_TOKEN_PREFIX = 'sk-ant-oat-';
+
+/** Whether the agent secret's resolved value is a Claude Code subscription OAuth token. */
+export function isOAuthSecret(secret: AgentSecretConfig): boolean {
+  if (!secret.envVar) return false;
+  try {
+    const value = resolveValue(secret.value, secret.envVar);
+    return value.startsWith(OAUTH_TOKEN_PREFIX);
+  } catch {
+    return false;
+  }
+}
+
+interface AgentAuthAdapter {
+  baseUrlEnvVar: string | null;
+  defaultBaseUrl: string | null;
+  additionalAllowHosts: string[];
+}
+
+/**
+ * Wire an agent's secret into the sandbox `secrets` and `env`, picking the auth
+ * mode by inspecting the resolved value:
+ *
+ * - Claude Code subscription OAuth tokens (prefix `sk-ant-oat-`) → plain
+ *   `CLAUDE_CODE_OAUTH_TOKEN` env var. Claude Code reads the token directly
+ *   from `process.env`, so microsandbox's TLS-substitution model doesn't apply.
+ * - Everything else (API keys for known agents, custom-agent secrets) → wrapped
+ *   in `Secret.env()` with TLS substitution and the configured base URL env var.
+ *
+ * Mutates `secrets` and `env` in place.
+ */
+export function applyAgentAuth(
+  secret: AgentSecretConfig,
+  adapter: AgentAuthAdapter,
+  secrets: SecretEntry[],
+  env: Record<string, string>,
+): void {
   if (!secret.envVar || !secret.baseUrl) {
     throw new Error('Agent secret must have envVar and baseUrl set (should be filled by config validation)');
   }
   const value = resolveValue(secret.value, secret.envVar);
-  const hostname = new URL(secret.baseUrl).hostname;
-  const allowHosts = [hostname, ...(additionalAllowHosts ?? [])];
-  return Secret.env(secret.envVar, { value, allowHosts });
-}
 
-/**
- * Resolve the Claude Code OAuth token from the host environment for
- * `useOAuth: true` agent configs. Unlike API keys (TLS-injected as
- * placeholders by microsandbox), OAuth tokens must enter the VM as the real
- * value because Claude reads them directly from `process.env`. The caller
- * places the returned value under `sandbox.env.CLAUDE_CODE_OAUTH_TOKEN`.
- *
- * Throws with a clear message if `CLAUDE_CODE_OAUTH_TOKEN` is not set on
- * the host — fail-fast so the user knows to run `claude setup-token` and
- * export the result before the eval starts.
- */
-export function resolveOAuthToken(): string {
-  const value = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-  if (!value) {
-    throw new Error(
-      "CLAUDE_CODE_OAUTH_TOKEN is not set on the host. " +
-      "Generate a long-lived subscription token with `claude setup-token` " +
-      "and `export CLAUDE_CODE_OAUTH_TOKEN=<value>` before running the eval.",
-    );
+  if (value.startsWith(OAUTH_TOKEN_PREFIX)) {
+    env.CLAUDE_CODE_OAUTH_TOKEN = value;
+    if (adapter.baseUrlEnvVar && adapter.defaultBaseUrl) {
+      env[adapter.baseUrlEnvVar] = adapter.defaultBaseUrl;
+    }
+    return;
   }
-  return value;
+
+  const hostname = new URL(secret.baseUrl).hostname;
+  const allowHosts = [hostname, ...adapter.additionalAllowHosts];
+  secrets.push(Secret.env(secret.envVar, { value, allowHosts }));
+  const baseUrlVar = secret.baseUrlEnvVar ?? adapter.baseUrlEnvVar;
+  if (baseUrlVar) {
+    env[baseUrlVar] = secret.baseUrl;
+  }
 }
 
 function resolveValue(value: string, envVar: string): string {

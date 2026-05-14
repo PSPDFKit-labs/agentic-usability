@@ -129,55 +129,38 @@ export function validateConfig(data: unknown, configPath?: string): Config {
       const isSandboxRole = SANDBOX_ROLES.includes(role);
 
       if (isSandboxRole) {
-        const useOAuth = agent.useOAuth === true;
+        // Sandbox agents (executor/judge) require secret. Auth mode (API key vs Claude Code
+        // subscription OAuth token) is auto-detected from the resolved value's prefix at
+        // sandbox-create time.
+        if (!agent.secret || typeof agent.secret !== 'object' || Array.isArray(agent.secret)) {
+          throw new Error(`agents.${role} requires a secret with at least { value } for secure sandbox execution`);
+        }
+        const secret = agent.secret as Record<string, unknown>;
+        if (!secret.value || typeof secret.value !== 'string') {
+          throw new Error(`agents.${role}.secret.value must be a non-empty string`);
+        }
 
-        if (useOAuth) {
-          // OAuth path: Claude Code subscription via CLAUDE_CODE_OAUTH_TOKEN.
-          if (command !== 'claude') {
-            throw new Error(
-              `agents.${role}.useOAuth: true is only supported for command: "claude" (Claude Code subscription auth). ` +
-              `Got command: "${command ?? '(unset)'}".`,
-            );
-          }
-          if (agent.secret !== undefined) {
-            throw new Error(
-              `agents.${role} cannot set both useOAuth and secret — choose one auth path.`,
-            );
-          }
+        // Fill defaults from adapter for known agents
+        const adapter = createAdapter({ command } as AgentConfig);
+        if (adapter.defaultEnvVar) {
+          if (!secret.envVar) secret.envVar = adapter.defaultEnvVar;
+          if (!secret.baseUrl) secret.baseUrl = adapter.defaultBaseUrl;
+          if (!secret.baseUrlEnvVar) secret.baseUrlEnvVar = adapter.baseUrlEnvVar;
         } else {
-          // API-key path: secret with TLS-injected value.
-          if (!agent.secret || typeof agent.secret !== 'object' || Array.isArray(agent.secret)) {
-            throw new Error(
-              `agents.${role} requires either { secret: {...} } or { useOAuth: true } for sandbox auth`,
-            );
+          // Custom agents must specify envVar and baseUrl
+          if (!secret.envVar || typeof secret.envVar !== 'string') {
+            throw new Error(`agents.${role}.secret.envVar is required for custom agent '${command}'`);
           }
-          const secret = agent.secret as Record<string, unknown>;
-          if (!secret.value || typeof secret.value !== 'string') {
-            throw new Error(`agents.${role}.secret.value must be a non-empty string`);
+          if (!secret.baseUrl || typeof secret.baseUrl !== 'string') {
+            throw new Error(`agents.${role}.secret.baseUrl is required for custom agent '${command}'`);
           }
+        }
 
-          // Fill defaults from adapter for known agents
-          const adapter = createAdapter({ command } as AgentConfig);
-          if (adapter.defaultEnvVar) {
-            if (!secret.envVar) secret.envVar = adapter.defaultEnvVar;
-            if (!secret.baseUrl) secret.baseUrl = adapter.defaultBaseUrl;
-            if (!secret.baseUrlEnvVar) secret.baseUrlEnvVar = adapter.baseUrlEnvVar;
-          } else {
-            // Custom agents must specify envVar and baseUrl
-            if (!secret.envVar || typeof secret.envVar !== 'string') {
-              throw new Error(`agents.${role}.secret.envVar is required for custom agent '${command}'`);
-            }
-            if (!secret.baseUrl || typeof secret.baseUrl !== 'string') {
-              throw new Error(`agents.${role}.secret.baseUrl is required for custom agent '${command}'`);
-            }
-          }
-
-          // Validate baseUrl is a valid URL
-          try {
-            new URL(secret.baseUrl as string);
-          } catch {
-            throw new Error(`agents.${role}.secret.baseUrl must be a valid URL`);
-          }
+        // Validate baseUrl is a valid URL
+        try {
+          new URL(secret.baseUrl as string);
+        } catch {
+          throw new Error(`agents.${role}.secret.baseUrl must be a valid URL`);
         }
       }
     }
