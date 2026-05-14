@@ -42,7 +42,6 @@ vi.mock('../../sandbox/microsandbox.js', () => {
     MicrosandboxClient: MockMicrosandboxClient,
     buildSecrets: vi.fn().mockReturnValue([]),
     applyAgentAuth: vi.fn(),
-    isOAuthSecret: vi.fn().mockReturnValue(false),
     resolveEnv: vi.fn().mockReturnValue({}),
   };
 });

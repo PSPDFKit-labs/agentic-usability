@@ -135,9 +135,7 @@ const INFRA_ALLOWLIST = [
 export function buildJudgeAllowlist(judgeConfig: SandboxAgentConfig, config: Config): string[] {
   const hosts = new Set<string>();
 
-  // 1. Agent API endpoint — secret.baseUrl is always populated by validation
-  //    (filled from adapter defaults for known agents). Same source whether
-  //    the secret resolves to an API key or an OAuth token.
+  // 1. Agent API endpoint from secret.baseUrl
   if (judgeConfig.secret.baseUrl) {
     try { hosts.add(new URL(judgeConfig.secret.baseUrl).hostname); } catch { /* skip malformed */ }
   }

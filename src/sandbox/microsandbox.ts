@@ -5,6 +5,7 @@ import type {
   FsEntry,
 } from 'microsandbox';
 import type { SandboxConfig, SecretConfig, AgentSecretConfig } from '../types.js';
+import type { AgentAdapter } from '../agents/adapter.js';
 
 export interface CommandResult {
   stdout: string;
@@ -49,20 +50,13 @@ export function resolveEnv(
   return resolved;
 }
 
-/**
- * Claude Code subscription OAuth tokens are prefixed `sk-ant-oat` followed by a
- * version number (e.g. `sk-ant-oat01-…`), issued by `claude setup-token`. API
- * keys use `sk-ant-api` (e.g. `sk-ant-api03-…`). The auth mode is determined
- * by inspecting the resolved secret value at sandbox-create time — no separate
- * config flag needed.
- */
+// Claude-specific credential format. Subscription OAuth tokens are prefixed
+// `sk-ant-oat` followed by a version (e.g. `sk-ant-oat01-…`), issued by
+// `claude setup-token`. API keys use `sk-ant-api`. The framework picks the
+// env-var slot the placeholder lands under by inspecting the resolved
+// value's prefix — no separate config flag needed.
 const OAUTH_TOKEN_PREFIX = 'sk-ant-oat';
-
-interface AgentAuthAdapter {
-  baseUrlEnvVar: string | null;
-  defaultBaseUrl: string | null;
-  additionalAllowHosts: string[];
-}
+const OAUTH_TOKEN_ENV_VAR = 'CLAUDE_CODE_OAUTH_TOKEN';
 
 /**
  * Wire an agent's secret into the sandbox `secrets` and `env`.
@@ -83,7 +77,7 @@ interface AgentAuthAdapter {
  */
 export function applyAgentAuth(
   secret: AgentSecretConfig,
-  adapter: AgentAuthAdapter,
+  adapter: Pick<AgentAdapter, 'baseUrlEnvVar' | 'additionalAllowHosts'>,
   secrets: SecretEntry[],
   env: Record<string, string>,
 ): void {
@@ -93,7 +87,7 @@ export function applyAgentAuth(
   const value = resolveValue(secret.value, secret.envVar);
 
   const envVar = value.startsWith(OAUTH_TOKEN_PREFIX)
-    ? 'CLAUDE_CODE_OAUTH_TOKEN'
+    ? OAUTH_TOKEN_ENV_VAR
     : secret.envVar;
 
   const hostname = new URL(secret.baseUrl).hostname;
