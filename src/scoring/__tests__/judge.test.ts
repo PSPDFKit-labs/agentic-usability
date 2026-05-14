@@ -71,6 +71,7 @@ function makeMockAdapter(opts: { stdout: string }) {
     sandboxCommand: vi.fn().mockReturnValue('claude --print "prompt"'),
     extractResult: vi.fn().mockImplementation((stdout: string) => stdout),
     extractLog: vi.fn().mockResolvedValue(null),
+    installPluginsInSandbox: vi.fn().mockResolvedValue(undefined),
   };
 }
 

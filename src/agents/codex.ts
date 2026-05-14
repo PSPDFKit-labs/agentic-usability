@@ -1,8 +1,9 @@
-import { writeFile, readFile, rm } from 'node:fs/promises';
+import { writeFile, readFile, rm, access, readdir, stat as fsStat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { AgentConfig, AgentResult } from '../types.js';
+import type { AgentConfig, AgentResult, ResolvedExecutorPlugin } from '../types.js';
 import type { MicrosandboxClient } from '../sandbox/microsandbox.js';
+import { uploadDirToSandbox } from '../sandbox/scaffolding.js';
 import { BaseAdapter } from './base.js';
 
 export class CodexAdapter extends BaseAdapter {
@@ -93,6 +94,107 @@ export class CodexAdapter extends BaseAdapter {
     await rm(outputPath, { force: true }).catch(() => {});
 
     return result;
+  }
+
+  /**
+   * Install plugin skills into the Codex CLI's auto-discovered skills dir.
+   *
+   * Codex doesn't have a "plugin" abstraction like Claude's marketplaces; it
+   * auto-discovers individual skills under `${CODEX_HOME:-$HOME/.codex}/skills/<name>/`.
+   * For each plugin we iterate its `skills/` subtree and lay out each
+   * SKILL.md-bearing directory at `$CODEX_HOME/skills/<skill-name>/`.
+   *
+   * A plugin contributes nothing to Codex if it has no `.codex-plugin/plugin.json`
+   * manifest, or if it has no `skills/` subdirectory with at least one
+   * SKILL.md. We fail fast in that case so the user knows the A/B comparison
+   * won't actually exercise the plugin.
+   */
+  async installPluginsInSandbox(
+    client: MicrosandboxClient,
+    plugins: ResolvedExecutorPlugin[],
+  ): Promise<void> {
+    if (plugins.length === 0) return;
+
+    type SkillInstall = { srcDir: string; skillName: string };
+    const skillsToInstall: Array<{ plugin: string; install: SkillInstall }> = [];
+
+    for (const plugin of plugins) {
+      const manifestPath = join(plugin.hostDir, '.codex-plugin', 'plugin.json');
+      try {
+        await access(manifestPath);
+      } catch {
+        throw new Error(
+          `Plugin '${plugin.name}' is missing the Codex manifest at ${manifestPath}. ` +
+          `Codex executors need each plugin to ship a .codex-plugin/plugin.json file.`,
+        );
+      }
+
+      const skillsDir = join(plugin.hostDir, 'skills');
+      let entries;
+      try {
+        entries = await readdir(skillsDir, { withFileTypes: true });
+      } catch {
+        throw new Error(
+          `Plugin '${plugin.name}' has no 'skills/' directory at ${skillsDir}. ` +
+          `Codex auto-discovers skills from individual subdirectories — bundle each as <plugin>/skills/<skill-name>/SKILL.md.`,
+        );
+      }
+
+      let pluginContributed = false;
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const entryName = String(entry.name);
+        const skillDir = join(skillsDir, entryName);
+        const skillFile = join(skillDir, 'SKILL.md');
+        try {
+          const skillStat = await fsStat(skillFile);
+          if (!skillStat.isFile()) continue;
+        } catch {
+          continue;
+        }
+        skillsToInstall.push({
+          plugin: plugin.name,
+          install: { srcDir: skillDir, skillName: entryName },
+        });
+        pluginContributed = true;
+      }
+
+      if (!pluginContributed) {
+        throw new Error(
+          `Plugin '${plugin.name}' contains no usable Codex skills (no <skills>/<name>/SKILL.md). ` +
+          `Each plugin must contribute at least one SKILL.md file under its skills/ subdirectory.`,
+        );
+      }
+    }
+
+    const homeResult = await client.runCommand('printf %s "${CODEX_HOME:-${HOME:-/root}/.codex}"');
+    const codexHome = homeResult.stdout.trim() || '/root/.codex';
+    const codexSkillsDir = `${codexHome}/skills`;
+
+    const setup = await client.runCommand(`mkdir -p '${codexSkillsDir}'`);
+    if (setup.exitCode !== 0) {
+      throw new Error(
+        `Failed to prepare ${codexSkillsDir} in sandbox: ${setup.stderr || setup.stdout}`,
+      );
+    }
+
+    const seenSkillNames = new Set<string>();
+    for (const { plugin, install } of skillsToInstall) {
+      if (seenSkillNames.has(install.skillName)) {
+        throw new Error(
+          `Skill '${install.skillName}' is contributed by more than one plugin (latest: '${plugin}'). ` +
+          `Codex requires skill names to be unique across all installed plugins.`,
+        );
+      }
+      seenSkillNames.add(install.skillName);
+      const destDir = `${codexSkillsDir}/${install.skillName}`;
+      await uploadDirToSandbox(
+        client,
+        install.srcDir,
+        destDir,
+        `codex_skill_${install.skillName}`,
+      );
+    }
   }
 
   async extractLog(client: MicrosandboxClient): Promise<string | null> {

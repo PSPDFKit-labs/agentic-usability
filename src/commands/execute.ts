@@ -5,7 +5,7 @@ import { loadConfig } from '../core/config.js';
 import { loadTestSuite, saveResult, saveBinaryResult, formatElapsed } from '../core/suite-io.js';
 import { MicrosandboxClient, buildSecrets, buildAgentSecret, resolveEnv, type CommandResult } from '../sandbox/microsandbox.js';
 import { createEgressLogger } from '../sandbox/egress-logger.js';
-import { scaffoldWorkspace } from '../sandbox/scaffolding.js';
+import { scaffoldWorkspace, resolveExecutorPlugins } from '../sandbox/scaffolding.js';
 import { WorkerPool } from '../sandbox/worker-pool.js';
 import { createAdapter } from '../agents/adapter.js';
 import { getPackageSource, getUrlSources, getFileSources } from '../types.js';
@@ -200,6 +200,23 @@ export async function executeTestCase(
         ].filter(Boolean).join('\n');
         await saveResult(paths, testCase.id, 'install-error.log', installLog, target.name);
         throw new Error(`Agent install failed (exit ${installResult.exitCode}): ${installResult.stderr || installResult.stdout}`);
+      }
+    }
+
+    // Install executor plugins (Claude Code marketplace, Codex skills, Gemini extensions).
+    // Plugins go AFTER the agent CLI install so any per-CLI plugin paths exist, and
+    // BEFORE the agent runs so the plugin manifest is in place when the CLI boots.
+    // Plugins are deliberately not installed in the judge sandbox — keeping the
+    // judge's environment independent of the executor's tooling is what makes the
+    // A/B comparison meaningful.
+    if (config.executorPlugins && config.executorPlugins.length > 0) {
+      const resolvedPlugins = await resolveExecutorPlugins(config.executorPlugins, paths.cacheRepos);
+      try {
+        await adapter.installPluginsInSandbox(client, resolvedPlugins);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await saveResult(paths, testCase.id, 'plugin-install-error.log', message, target.name);
+        throw new Error(`Executor plugin install failed: ${message}`);
       }
     }
 

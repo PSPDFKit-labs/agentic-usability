@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentResult } from '../types.js';
+import type { AgentConfig, AgentResult, ResolvedExecutorPlugin } from '../types.js';
 import type { AgentAdapter } from './adapter.js';
 import type { MicrosandboxClient } from '../sandbox/microsandbox.js';
 import { spawnAgent, spawnInteractive } from './spawn.js';
@@ -83,6 +83,23 @@ export abstract class BaseAdapter implements AgentAdapter {
   /** Default: no log extraction. Subclasses override with agent-specific log discovery. */
   async extractLog(_client: MicrosandboxClient): Promise<string | null> {
     return null;
+  }
+
+  /**
+   * Install plugin directories into the sandbox VM. Subclasses override with
+   * CLI-specific layout (Claude: `~/.claude/plugins/`, Codex: `~/.codex/plugins/`).
+   * Default raises a clear error so adapters that don't (yet) support plugins
+   * fail loudly when the user wires `executorPlugins` against them.
+   */
+  async installPluginsInSandbox(
+    _client: MicrosandboxClient,
+    plugins: ResolvedExecutorPlugin[],
+  ): Promise<void> {
+    if (plugins.length === 0) return;
+    throw new Error(
+      `Agent adapter '${this.name}' does not support executorPlugins. ` +
+      `Either remove executorPlugins from config or switch executor to an adapter that supports plugin loading.`,
+    );
   }
 
   /** Shared helper: spawn the agent process with piped stdio. */

@@ -1,4 +1,4 @@
-import { AgentConfig, AgentResult } from '../types.js';
+import { AgentConfig, AgentResult, ResolvedExecutorPlugin } from '../types.js';
 import type { MicrosandboxClient } from '../sandbox/microsandbox.js';
 import { ClaudeAdapter } from './claude.js';
 import { CodexAdapter } from './codex.js';
@@ -34,6 +34,15 @@ export interface AgentAdapter {
 
   /** Extract agent session log from inside the sandbox. Returns raw log content or null. */
   extractLog(client: MicrosandboxClient): Promise<string | null>;
+
+  /**
+   * Install plugin directory trees into the running sandbox so the agent CLI
+   * picks them up at startup. Each adapter knows the CLI-specific layout
+   * (e.g. `~/.claude/plugins/<name>/` + `~/.claude/settings.json` for Claude).
+   * Adapters whose CLI cannot load plugins in non-interactive mode raise a
+   * clear error here instead of silently succeeding.
+   */
+  installPluginsInSandbox(client: MicrosandboxClient, plugins: ResolvedExecutorPlugin[]): Promise<void>;
 }
 
 const KNOWN_ADAPTERS: Record<string, new (config: AgentConfig) => AgentAdapter> = {

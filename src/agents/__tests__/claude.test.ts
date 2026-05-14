@@ -1,15 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { access } from 'node:fs/promises';
 import { spawnAgent, spawnInteractive } from '../spawn.js';
+import { uploadDirToSandbox } from '../../sandbox/scaffolding.js';
 import { ClaudeAdapter } from '../claude.js';
 import { makeAgentResult } from '../../__tests__/helpers/fixtures.js';
+import { makeMockSandboxClient } from '../../__tests__/helpers/mock-sandbox-client.js';
 
 vi.mock('../spawn.js', () => ({
   spawnAgent: vi.fn(),
   spawnInteractive: vi.fn(),
 }));
 
+vi.mock('node:fs/promises', () => ({
+  access: vi.fn(),
+}));
+
+vi.mock('../../sandbox/scaffolding.js', () => ({
+  uploadDirToSandbox: vi.fn(),
+}));
+
 const mockSpawnAgent = vi.mocked(spawnAgent);
 const mockSpawnInteractive = vi.mocked(spawnInteractive);
+const mockAccess = vi.mocked(access);
+const mockUploadDir = vi.mocked(uploadDirToSandbox);
 
 describe('ClaudeAdapter', () => {
   let adapter: ClaudeAdapter;
@@ -129,6 +142,49 @@ describe('ClaudeAdapter', () => {
   describe('installCommand', () => {
     it('returns correct npm install command', () => {
       expect(adapter.installCommand).toBe('npm i -g @anthropic-ai/claude-code');
+    });
+  });
+
+  describe('installPluginsInSandbox', () => {
+    it('is a no-op when given an empty plugin list', async () => {
+      const client = makeMockSandboxClient();
+      await adapter.installPluginsInSandbox(client as any, []);
+      expect(client.runCommand).not.toHaveBeenCalled();
+      expect(client.uploadFiles).not.toHaveBeenCalled();
+    });
+
+    it('throws clearly when a plugin is missing its Claude manifest', async () => {
+      mockAccess.mockRejectedValueOnce(new Error('ENOENT'));
+      const client = makeMockSandboxClient();
+      await expect(adapter.installPluginsInSandbox(client as any, [
+        { name: 'broken', hostDir: '/tmp/broken' },
+      ])).rejects.toThrow(/\.claude-plugin\/plugin\.json/);
+      expect(client.runCommand).not.toHaveBeenCalled();
+    });
+
+    it('extracts each plugin into /root/.claude/plugins/<name> and records the paths', async () => {
+      mockAccess.mockResolvedValue(undefined);
+      const client = makeMockSandboxClient();
+
+      await adapter.installPluginsInSandbox(client as any, [
+        { name: 'plugin-a', hostDir: '/tmp/a' },
+        { name: 'plugin-b', hostDir: '/tmp/b' },
+      ]);
+
+      expect(mockUploadDir).toHaveBeenCalledTimes(2);
+      expect(mockUploadDir).toHaveBeenCalledWith(client, '/tmp/a', '/root/.claude/plugins/plugin-a', 'plugin_plugin-a');
+      expect(mockUploadDir).toHaveBeenCalledWith(client, '/tmp/b', '/root/.claude/plugins/plugin-b', 'plugin_plugin-b');
+
+      // sandboxCommand should now emit --plugin-dir for each plugin.
+      const cmd = adapter.sandboxCommand('do the thing');
+      expect(cmd).toContain("--plugin-dir '/root/.claude/plugins/plugin-a'");
+      expect(cmd).toContain("--plugin-dir '/root/.claude/plugins/plugin-b'");
+    });
+
+    it('sandboxCommand does not include --plugin-dir flags when no plugins have been installed', () => {
+      const fresh = new ClaudeAdapter({ command: 'claude' });
+      const cmd = fresh.sandboxCommand('do the thing');
+      expect(cmd).not.toContain('--plugin-dir');
     });
   });
 });

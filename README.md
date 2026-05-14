@@ -419,6 +419,45 @@ Template files and setup scripts for the test workspace:
 | `template` | Local directory uploaded to `/workspace/` in the sandbox |
 | `setupScript` | Script file uploaded and executed during scaffolding |
 
+### Executor plugins
+
+Install Claude Code / Codex / Gemini plugins into the executor sandbox before the agent runs. Useful for A/B-testing whether shipping a plugin (skills, slash commands, marketplace bundles) measurably improves an agent's ability to use your SDK.
+
+Plugins are installed **only** in the executor sandbox — the judge sandbox stays plugin-free so its scoring is independent of the executor's tooling. Run the same suite twice (once without `executorPlugins`, once with) and compare per-test-case judge scores in the inspect UI.
+
+```json
+{
+  "executorPlugins": [
+    { "type": "local", "name": "my-sdk-skills", "path": "/abs/path/to/plugin-dir" },
+    {
+      "type": "git",
+      "name": "shared-skills",
+      "url": "https://github.com/example/skills.git",
+      "branch": "main",
+      "subpath": "plugins/shared-skills"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `type` | `"local"` or `"git"` |
+| `name` | Plugin slug (letters, digits, `.`, `_`, `-`). Must match the plugin manifest's name and must be unique across `executorPlugins`. |
+| `path` | For `type: "local"`. Directory on the host containing the adapter-specific manifest. |
+| `url` / `branch` / `subpath` / `sparse` | For `type: "git"`. Same semantics as `GitSource` under `privateInfo`. |
+
+What each adapter expects inside the plugin directory:
+
+| Adapter | Required file(s) | Where it lands in the sandbox |
+|---|---|---|
+| `claude` | `.claude-plugin/plugin.json` | Plugin dir extracted to `$HOME/.claude/plugins/<name>/`, then loaded via the documented `--plugin-dir <path>` CLI flag at each invocation. (Marketplace registration is intentionally skipped — Claude Code's marketplace flow prompts for trust, which can't be answered in `--print` mode.) |
+| `codex` | `.codex-plugin/plugin.json` plus one or more `skills/<skill-name>/SKILL.md` | Each `skills/<skill-name>/` extracted to `$CODEX_HOME/skills/<skill-name>/`. Codex auto-discovers skills from that directory. |
+| `gemini` | `gemini-extension.json` at the plugin root | The whole plugin dir extracted to `$HOME/.gemini/extensions/<name>/`. |
+| custom | — | Not supported. The adapter raises a clear error at install time. |
+
+Adapters fail fast at install time if the required manifest is missing, so an A/B run cannot silently no-op against the wrong CLI.
+
 ### Sandbox
 
 Resource limits, secrets, and environment variables for sandbox VMs:
