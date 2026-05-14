@@ -111,23 +111,23 @@ export interface AgentConfig {
 
 /** Agent config for sandboxed execution (executor/judge).
  *
- * Auth mode is auto-detected from the resolved `secret.value`:
+ * Both auth modes flow through microsandbox `Secret.env()` TLS substitution —
+ * the cleartext credential never enters the VM. Inside the sandbox the env
+ * var contains a `$MSB_<name>` placeholder; microsandbox swaps it for the
+ * real value on outbound TLS to the allowed host only.
  *
- * - API keys (anything not matching the OAuth prefix) are TLS-injected by
- *   microsandbox — cleartext never enters the VM; the env var inside the
- *   sandbox contains a placeholder substituted on the wire only for the
- *   agent's allowed host.
- * - Claude Code subscription OAuth tokens (prefix `sk-ant-oat`, e.g.
- *   `sk-ant-oat01-…`, issued by
- *   `claude setup-token`) are injected as a plain `CLAUDE_CODE_OAUTH_TOKEN`
- *   env var. Claude Code reads the token directly from `process.env`, so the
- *   TLS-substitution model does not apply. Avoids per-token API billing on
- *   Pro / Max / Team / Enterprise plans.
+ * The resolved `secret.value`'s prefix picks which env var name carries the
+ * placeholder:
+ *
+ * - `sk-ant-oat…` (Claude Code subscription OAuth token, issued by
+ *   `claude setup-token`, requires Pro / Max / Team / Enterprise) →
+ *   `CLAUDE_CODE_OAUTH_TOKEN`. Avoids per-token API billing.
+ * - anything else (API keys for known agents, custom-agent secrets) →
+ *   `secret.envVar` (= `ANTHROPIC_API_KEY` for claude, etc.).
  *
  * Point `secret.value` at the host env var that holds the credential —
  * `$ANTHROPIC_API_KEY` for the API-key path, `$CLAUDE_CODE_OAUTH_TOKEN` for
- * the subscription path. The runtime sniffs the resolved value to pick the
- * path.
+ * the subscription path.
  */
 export interface SandboxAgentConfig extends AgentConfig {
   /** Agent's secret and base URL. Auth mode is determined from the resolved value's prefix. */

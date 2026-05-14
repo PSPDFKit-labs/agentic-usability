@@ -58,17 +58,6 @@ export function resolveEnv(
  */
 const OAUTH_TOKEN_PREFIX = 'sk-ant-oat';
 
-/** Whether the agent secret's resolved value is a Claude Code subscription OAuth token. */
-export function isOAuthSecret(secret: AgentSecretConfig): boolean {
-  if (!secret.envVar) return false;
-  try {
-    const value = resolveValue(secret.value, secret.envVar);
-    return value.startsWith(OAUTH_TOKEN_PREFIX);
-  } catch {
-    return false;
-  }
-}
-
 interface AgentAuthAdapter {
   baseUrlEnvVar: string | null;
   defaultBaseUrl: string | null;
@@ -76,15 +65,19 @@ interface AgentAuthAdapter {
 }
 
 /**
- * Wire an agent's secret into the sandbox `secrets` and `env`, picking the auth
- * mode by inspecting the resolved value:
+ * Wire an agent's secret into the sandbox `secrets` and `env`.
  *
- * - Claude Code subscription OAuth tokens (prefix `sk-ant-oat`, e.g.
- *   `sk-ant-oat01-…`) → plain
- *   `CLAUDE_CODE_OAUTH_TOKEN` env var. Claude Code reads the token directly
- *   from `process.env`, so microsandbox's TLS-substitution model doesn't apply.
- * - Everything else (API keys for known agents, custom-agent secrets) → wrapped
- *   in `Secret.env()` with TLS substitution and the configured base URL env var.
+ * Both auth modes (API key and Claude Code subscription OAuth) go through
+ * microsandbox `Secret.env()` TLS substitution — the cleartext value never
+ * enters the VM. Inside the sandbox the env var contains the
+ * `$MSB_<env-var-name>` placeholder; microsandbox swaps it for the real value
+ * on outbound TLS to the allowed host only.
+ *
+ * The resolved value's prefix picks which env var name carries the placeholder:
+ * - `sk-ant-oat…` (Claude Code subscription OAuth, issued by `claude setup-token`)
+ *   → `CLAUDE_CODE_OAUTH_TOKEN`
+ * - anything else (API keys for known agents, custom-agent secrets)
+ *   → `secret.envVar` (= `ANTHROPIC_API_KEY` for claude, etc.)
  *
  * Mutates `secrets` and `env` in place.
  */
@@ -99,17 +92,14 @@ export function applyAgentAuth(
   }
   const value = resolveValue(secret.value, secret.envVar);
 
-  if (value.startsWith(OAUTH_TOKEN_PREFIX)) {
-    env.CLAUDE_CODE_OAUTH_TOKEN = value;
-    if (adapter.baseUrlEnvVar && adapter.defaultBaseUrl) {
-      env[adapter.baseUrlEnvVar] = adapter.defaultBaseUrl;
-    }
-    return;
-  }
+  const envVar = value.startsWith(OAUTH_TOKEN_PREFIX)
+    ? 'CLAUDE_CODE_OAUTH_TOKEN'
+    : secret.envVar;
 
   const hostname = new URL(secret.baseUrl).hostname;
   const allowHosts = [hostname, ...adapter.additionalAllowHosts];
-  secrets.push(Secret.env(secret.envVar, { value, allowHosts }));
+  secrets.push(Secret.env(envVar, { value, allowHosts }));
+
   const baseUrlVar = secret.baseUrlEnvVar ?? adapter.baseUrlEnvVar;
   if (baseUrlVar) {
     env[baseUrlVar] = secret.baseUrl;

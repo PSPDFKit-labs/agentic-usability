@@ -82,10 +82,12 @@ Extends AgentConfig with one **required** field:
 |-------|------|----------|
 | `secret` | `AgentSecretConfig` | **Yes** |
 
-Auth mode is auto-detected from the resolved `secret.value`'s prefix at sandbox-create time:
+Both auth modes flow through microsandbox `Secret.env()` TLS substitution — the cleartext credential never enters the VM. Inside the sandbox the env var contains a `$MSB_<name>` placeholder; microsandbox swaps it for the real value on outbound TLS to the allowed host only.
 
-- `sk-ant-api…` (Anthropic API key, e.g. `sk-ant-api03-…`) → microsandbox TLS-injects the value, so the cleartext never enters the VM. Inside the sandbox the env var contains only a placeholder substituted on the wire for the allowed host.
-- `sk-ant-oat…` (Claude Code subscription OAuth token, e.g. `sk-ant-oat01-…`, issued by `claude setup-token`) → injected as a plain `CLAUDE_CODE_OAUTH_TOKEN` env var. Claude Code reads the token directly from `process.env`, so the TLS-substitution model does not apply. Avoids per-token API billing on Pro / Max / Team / Enterprise plans.
+The resolved `secret.value`'s prefix picks which env var name carries the placeholder:
+
+- `sk-ant-api…` (Anthropic API key, e.g. `sk-ant-api03-…`) → `ANTHROPIC_API_KEY`.
+- `sk-ant-oat…` (Claude Code subscription OAuth token, e.g. `sk-ant-oat01-…`, issued by `claude setup-token`) → `CLAUDE_CODE_OAUTH_TOKEN`. Avoids per-token API billing on Pro / Max / Team / Enterprise plans.
 
 Point `secret.value` at the host env var that holds the credential — `"$ANTHROPIC_API_KEY"` for the API-key path, `"$CLAUDE_CODE_OAUTH_TOKEN"` for the subscription path.
 

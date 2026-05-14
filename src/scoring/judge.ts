@@ -1,7 +1,7 @@
 import type { SolutionFile, JudgeScore, TestCase, SandboxAgentConfig, TargetConfig, Config, ProjectPaths, SourceConfig } from '../types.js';
 import { createAdapter } from '../agents/adapter.js';
 import { JUDGE_SCORING_CRITERIA, extractJson } from '../commands/prompt-helpers.js';
-import { MicrosandboxClient, buildSecrets, applyAgentAuth, isOAuthSecret, resolveEnv } from '../sandbox/microsandbox.js';
+import { MicrosandboxClient, buildSecrets, applyAgentAuth, resolveEnv } from '../sandbox/microsandbox.js';
 import { createEgressLockdownLogger } from '../sandbox/egress-logger.js';
 import { scaffoldWorkspace, uploadSources } from '../sandbox/scaffolding.js';
 import { deduplicateSources } from '../core/source-resolver.js';
@@ -135,14 +135,10 @@ const INFRA_ALLOWLIST = [
 export function buildJudgeAllowlist(judgeConfig: SandboxAgentConfig, config: Config): string[] {
   const hosts = new Set<string>();
 
-  // 1. Agent API endpoint — adapter default for OAuth tokens (Claude reads directly
-  //    from process.env, so secret.baseUrl is irrelevant), else secret.baseUrl.
-  if (isOAuthSecret(judgeConfig.secret)) {
-    const adapter = createAdapter(judgeConfig);
-    if (adapter.defaultBaseUrl) {
-      try { hosts.add(new URL(adapter.defaultBaseUrl).hostname); } catch { /* skip malformed */ }
-    }
-  } else if (judgeConfig.secret.baseUrl) {
+  // 1. Agent API endpoint — secret.baseUrl is always populated by validation
+  //    (filled from adapter defaults for known agents). Same source whether
+  //    the secret resolves to an API key or an OAuth token.
+  if (judgeConfig.secret.baseUrl) {
     try { hosts.add(new URL(judgeConfig.secret.baseUrl).hostname); } catch { /* skip malformed */ }
   }
 

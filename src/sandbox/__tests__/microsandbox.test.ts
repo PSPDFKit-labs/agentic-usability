@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { SecretEntry } from 'microsandbox';
-import { MicrosandboxClient, buildSecrets, resolveEnv, applyAgentAuth, isOAuthSecret } from '../microsandbox.js';
+import { MicrosandboxClient, buildSecrets, resolveEnv, applyAgentAuth } from '../microsandbox.js';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -331,7 +331,7 @@ describe('MicrosandboxClient', () => {
   });
 });
 
-describe('agent secret auth-mode detection', () => {
+describe('applyAgentAuth', () => {
   const ORIGINAL_API_KEY = process.env.ANTHROPIC_API_KEY;
   const ORIGINAL_OAUTH = process.env.CLAUDE_CODE_OAUTH_TOKEN;
 
@@ -350,71 +350,47 @@ describe('agent secret auth-mode detection', () => {
     additionalAllowHosts: [],
   };
 
-  describe('isOAuthSecret', () => {
-    it('returns true when the resolved value starts with sk-ant-oat (followed by a version, e.g. sk-ant-oat01-)', () => {
-      process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-fake-test-token';
-      expect(isOAuthSecret({
-        envVar: 'CLAUDE_CODE_OAUTH_TOKEN',
-        value: '$CLAUDE_CODE_OAUTH_TOKEN',
-        baseUrl: 'https://api.anthropic.com',
-      })).toBe(true);
-    });
+  // The microsandbox `SecretEntry` is opaque, but inspecting its keys gives us
+  // enough confidence that the right env var name is being TLS-substituted.
+  const secretEnvVarName = (entry: SecretEntry): string | undefined =>
+    (entry as { envVar?: string; env_var?: string; name?: string }).envVar
+    ?? (entry as { env_var?: string }).env_var
+    ?? (entry as { name?: string }).name;
 
-    it('returns false for an API-key shaped value', () => {
-      process.env.ANTHROPIC_API_KEY = 'sk-ant-api-fake-test-key';
-      expect(isOAuthSecret({
-        envVar: 'ANTHROPIC_API_KEY',
-        value: '$ANTHROPIC_API_KEY',
-        baseUrl: 'https://api.anthropic.com',
-      })).toBe(false);
-    });
-
-    it('returns false when the referenced host env var is unset (no throw)', () => {
-      delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
-      expect(isOAuthSecret({
-        envVar: 'CLAUDE_CODE_OAUTH_TOKEN',
-        value: '$CLAUDE_CODE_OAUTH_TOKEN',
-        baseUrl: 'https://api.anthropic.com',
-      })).toBe(false);
-    });
+  it('routes an OAuth-prefixed value through Secret.env under CLAUDE_CODE_OAUTH_TOKEN', () => {
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-fake-test-token';
+    const secrets: SecretEntry[] = [];
+    const env: Record<string, string> = {};
+    applyAgentAuth({
+      envVar: 'CLAUDE_CODE_OAUTH_TOKEN',
+      value: '$CLAUDE_CODE_OAUTH_TOKEN',
+      baseUrl: 'https://api.anthropic.com',
+    }, claudeAdapter, secrets, env);
+    expect(secrets).toHaveLength(1);
+    expect(secretEnvVarName(secrets[0])).toBe('CLAUDE_CODE_OAUTH_TOKEN');
+    expect(env.ANTHROPIC_BASE_URL).toBe('https://api.anthropic.com');
   });
 
-  describe('applyAgentAuth', () => {
-    it('injects CLAUDE_CODE_OAUTH_TOKEN as a plain env var when value is an OAuth token', () => {
-      process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-fake-test-token';
-      const secrets: SecretEntry[] = [];
-      const env: Record<string, string> = {};
-      applyAgentAuth({
-        envVar: 'CLAUDE_CODE_OAUTH_TOKEN',
-        value: '$CLAUDE_CODE_OAUTH_TOKEN',
-        baseUrl: 'https://api.anthropic.com',
-      }, claudeAdapter, secrets, env);
-      expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe('sk-ant-oat01-fake-test-token');
-      expect(env.ANTHROPIC_BASE_URL).toBe('https://api.anthropic.com');
-      expect(secrets).toHaveLength(0);
-    });
+  it('routes an API-key value through Secret.env under the agent-specific env var', () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-api03-fake-test-key';
+    const secrets: SecretEntry[] = [];
+    const env: Record<string, string> = {};
+    applyAgentAuth({
+      envVar: 'ANTHROPIC_API_KEY',
+      value: '$ANTHROPIC_API_KEY',
+      baseUrl: 'https://api.anthropic.com',
+      baseUrlEnvVar: 'ANTHROPIC_BASE_URL',
+    }, claudeAdapter, secrets, env);
+    expect(secrets).toHaveLength(1);
+    expect(secretEnvVarName(secrets[0])).toBe('ANTHROPIC_API_KEY');
+    expect(env.ANTHROPIC_BASE_URL).toBe('https://api.anthropic.com');
+  });
 
-    it('wraps an API-key value in Secret.env() with the agent host on allowHosts', () => {
-      process.env.ANTHROPIC_API_KEY = 'sk-ant-api-fake-test-key';
-      const secrets: SecretEntry[] = [];
-      const env: Record<string, string> = {};
-      applyAgentAuth({
-        envVar: 'ANTHROPIC_API_KEY',
-        value: '$ANTHROPIC_API_KEY',
-        baseUrl: 'https://api.anthropic.com',
-        baseUrlEnvVar: 'ANTHROPIC_BASE_URL',
-      }, claudeAdapter, secrets, env);
-      expect(secrets).toHaveLength(1);
-      expect(env.ANTHROPIC_BASE_URL).toBe('https://api.anthropic.com');
-      expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
-    });
-
-    it('throws when envVar or baseUrl is missing', () => {
-      const secrets: SecretEntry[] = [];
-      const env: Record<string, string> = {};
-      expect(() => applyAgentAuth({
-        value: 'literal-value',
-      } as never, claudeAdapter, secrets, env)).toThrow(/envVar and baseUrl/);
-    });
+  it('throws when envVar or baseUrl is missing', () => {
+    const secrets: SecretEntry[] = [];
+    const env: Record<string, string> = {};
+    expect(() => applyAgentAuth({
+      value: 'literal-value',
+    } as never, claudeAdapter, secrets, env)).toThrow(/envVar and baseUrl/);
   });
 });
