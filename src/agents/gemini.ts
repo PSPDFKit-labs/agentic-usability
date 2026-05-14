@@ -6,7 +6,7 @@ export class GeminiAdapter extends BaseAdapter {
   readonly name = 'gemini';
   readonly installCommand = 'npm i -g @google/gemini-cli';
   readonly baseUrlEnvVar = 'GEMINI_API_BASE_URL';
-  readonly defaultEnvVar = 'GOOGLE_API_KEY';
+  readonly defaultEnvVar = 'GEMINI_API_KEY';
   readonly defaultBaseUrl = 'https://generativelanguage.googleapis.com';
 
   constructor(config: AgentConfig) {

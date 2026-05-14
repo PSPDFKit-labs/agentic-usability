@@ -9,6 +9,7 @@ export abstract class BaseAdapter implements AgentAdapter {
   abstract readonly baseUrlEnvVar: string | null;
   abstract readonly defaultEnvVar: string | null;
   abstract readonly defaultBaseUrl: string | null;
+  readonly additionalAllowHosts: string[] = [];
   protected readonly config: AgentConfig;
 
   constructor(config: AgentConfig) {

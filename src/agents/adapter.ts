@@ -14,6 +14,8 @@ export interface AgentAdapter {
   readonly defaultEnvVar: string | null;
   /** Default API base URL (e.g. "https://api.anthropic.com"). Null for custom agents. */
   readonly defaultBaseUrl: string | null;
+  /** Extra hosts the agent needs to reach with the secret (e.g. telemetry endpoints). */
+  readonly additionalAllowHosts: string[];
 
   /** Full lifecycle: spawn with schema args → envelope unwrap → retry on parse failure → return clean result. */
   run(prompt: string, schema: object, workDir: string, options?: {

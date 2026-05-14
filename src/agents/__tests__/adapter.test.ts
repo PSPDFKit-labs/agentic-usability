@@ -32,7 +32,7 @@ describe('createAdapter', () => {
 
   it('returns correct installCommand for each adapter type', () => {
     expect(createAdapter({ command: 'claude' }).installCommand).toBe('npm i -g @anthropic-ai/claude-code');
-    expect(createAdapter({ command: 'codex' }).installCommand).toBe('npm i -g @openai/codex');
+    expect(createAdapter({ command: 'codex' }).installCommand).toBe('npm i -g @openai/codex@0.93.0');
     expect(createAdapter({ command: 'gemini' }).installCommand).toBe('npm i -g @google/gemini-cli');
     expect(createAdapter({ command: 'my-agent' }).installCommand).toBeNull();
   });

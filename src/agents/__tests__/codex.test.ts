@@ -117,7 +117,7 @@ describe('CodexAdapter', () => {
 
   describe('installCommand', () => {
     it('returns npm install command for codex', () => {
-      expect(adapter.installCommand).toBe('npm i -g @openai/codex');
+      expect(adapter.installCommand).toBe('npm i -g @openai/codex@0.93.0');
     });
   });
 });

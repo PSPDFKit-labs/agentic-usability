@@ -65,6 +65,7 @@ function makeMockAdapter(opts: { stdout: string }) {
     baseUrlEnvVar: 'ANTHROPIC_BASE_URL',
     defaultEnvVar: 'ANTHROPIC_API_KEY',
     defaultBaseUrl: 'https://api.anthropic.com',
+    additionalAllowHosts: [],
     run: vi.fn(),
     interactive: vi.fn(),
     sandboxCommand: vi.fn().mockReturnValue('claude --print "prompt"'),

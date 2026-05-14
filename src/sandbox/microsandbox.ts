@@ -53,13 +53,14 @@ export function resolveEnv(
  * Build a microsandbox `Secret.env()` entry from an agent's secret config.
  * The `allowHosts` is derived from the base URL hostname.
  */
-export function buildAgentSecret(secret: AgentSecretConfig): SecretEntry {
+export function buildAgentSecret(secret: AgentSecretConfig, additionalAllowHosts?: string[]): SecretEntry {
   if (!secret.envVar || !secret.baseUrl) {
     throw new Error('Agent secret must have envVar and baseUrl set (should be filled by config validation)');
   }
   const value = resolveValue(secret.value, secret.envVar);
   const hostname = new URL(secret.baseUrl).hostname;
-  return Secret.env(secret.envVar, { value, allowHosts: [hostname] });
+  const allowHosts = [hostname, ...(additionalAllowHosts ?? [])];
+  return Secret.env(secret.envVar, { value, allowHosts });
 }
 
 function resolveValue(value: string, envVar: string): string {

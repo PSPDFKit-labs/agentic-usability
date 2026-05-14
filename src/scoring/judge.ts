@@ -287,8 +287,8 @@ export async function runSandboxedJudge(
     const timeoutSecs = target.timeout ?? config.sandbox.defaultTimeout ?? 600;
 
     // Merge agent secret into sandbox secrets and set base URL env var
-    secrets.push(buildAgentSecret(judgeConfig.secret));
     const judgeAdapter = createAdapter(judgeConfig);
+    secrets.push(buildAgentSecret(judgeConfig.secret, judgeAdapter.additionalAllowHosts));
     const baseUrlVar = judgeConfig.secret.baseUrlEnvVar ?? judgeAdapter.baseUrlEnvVar;
     if (baseUrlVar && judgeConfig.secret.baseUrl) {
       env[baseUrlVar] = judgeConfig.secret.baseUrl;

@@ -161,8 +161,8 @@ export async function executeTestCase(
     // Merge agent secret into sandbox secrets and set base URL env var
     const executorConfig: SandboxAgentConfig = config.agents?.executor
       ?? { command: 'claude', secret: { value: '$ANTHROPIC_API_KEY' } };
-    secrets.push(buildAgentSecret(executorConfig.secret));
     const execAdapter = createAdapter(executorConfig);
+    secrets.push(buildAgentSecret(executorConfig.secret, execAdapter.additionalAllowHosts));
     const baseUrlVar = executorConfig.secret.baseUrlEnvVar ?? execAdapter.baseUrlEnvVar;
     if (baseUrlVar && executorConfig.secret.baseUrl) {
       env[baseUrlVar] = executorConfig.secret.baseUrl;

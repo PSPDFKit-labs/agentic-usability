@@ -83,6 +83,7 @@ From within Claude Code:
 | `/agentic-usability:inspect` | Open web UI |
 | `/agentic-usability:insights` | AI analysis of results |
 | `/agentic-usability:export` | Export pipeline as zip |
+| `/agentic-usability:sandbox` | Debug shell inside a sandbox |
 
 ## Quick Start
 
@@ -175,6 +176,7 @@ Each `eval` invocation creates a new run directory. Previous runs are preserved 
 | `inspect` | Open web UI to inspect, edit, and run the pipeline | `--port <number>` |
 | `insights` | Interactive AI analysis of pipeline results | `--fresh` |
 | `export` | Export a pipeline as a zip (excludes cache and snapshots) | `-o <path>`, `-r <runId>` |
+| `sandbox` | Launch an interactive debug shell inside a sandbox | `--mode <executor\|judge>`, `--test <id>`, `--target <name>`, `--run <runId>` |
 
 ## Configuration Reference
 
@@ -484,7 +486,7 @@ You can create a `.env` file in your project root (loaded automatically, git-ign
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
+CODEX_API_KEY=sk-...
 ```
 
 #### 1Password support
@@ -494,7 +496,7 @@ Instead of storing plain-text secrets in `.env`, you can use [1Password CLI](htt
 ```bash
 # .env — secrets stay in 1Password, never on disk
 ANTHROPIC_API_KEY=op://Engineering/Anthropic/api-key
-OPENAI_API_KEY=op://Shared/OpenAI/credential
+CODEX_API_KEY=op://Shared/OpenAI/credential
 ```
 
 Requirements:
@@ -541,6 +543,26 @@ The agent is given:
 - **SDK source locations** — so the agent can read your source code and correlate failures with API design
 
 Ask about failure patterns, documentation gaps, API design issues, or request prioritized improvement recommendations. The agent can read any file in the project directory for deeper analysis.
+
+## Debug Sandbox
+
+The `sandbox` command launches an interactive shell inside a microsandbox identical to what the pipeline uses. Useful for debugging agent auth issues, inspecting environment variables, and reproducing sandbox failures.
+
+```bash
+# Bare sandbox — just image + secrets + env
+agentic-usability sandbox -p pipelines/my-sdk-eval
+
+# With executor agent installed
+agentic-usability sandbox -p pipelines/my-sdk-eval --mode executor
+
+# Full executor setup with a specific test case
+agentic-usability sandbox -p pipelines/my-sdk-eval --mode executor --test TC-001
+
+# Judge setup with workspace snapshot from a run
+agentic-usability sandbox -p pipelines/my-sdk-eval --mode judge --test TC-001 --run run-2026-04-17T10-30-00-604Z
+```
+
+Press `Ctrl-]` to detach and destroy the sandbox.
 
 ## Pipeline and Resume
 

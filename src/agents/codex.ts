@@ -7,10 +7,12 @@ import { BaseAdapter } from './base.js';
 
 export class CodexAdapter extends BaseAdapter {
   readonly name = 'codex';
-  readonly installCommand = 'npm i -g @openai/codex';
+  // Pin to 0.93.0: Current Codex (May 14th 2026) v0.130.0 have a lot of issues with WebSocket
+  readonly installCommand = 'npm i -g @openai/codex@0.93.0';
   readonly baseUrlEnvVar = 'OPENAI_BASE_URL';
-  readonly defaultEnvVar = 'OPENAI_API_KEY';
-  readonly defaultBaseUrl = 'https://api.openai.com';
+  readonly defaultEnvVar = 'CODEX_API_KEY';
+  readonly defaultBaseUrl = 'https://api.openai.com/v1';
+  readonly additionalAllowHosts = ['chatgpt.com', 'ab.chatgpt.com'];
 
   constructor(config: AgentConfig) {
     super(config);

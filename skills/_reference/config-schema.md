@@ -96,8 +96,8 @@ Extends AgentConfig with one **required** field:
 | `command` | `envVar` | `baseUrl` | `baseUrlEnvVar` |
 |-----------|----------|-----------|-----------------|
 | `claude` | `ANTHROPIC_API_KEY` | `https://api.anthropic.com` | `ANTHROPIC_BASE_URL` |
-| `codex` | `OPENAI_API_KEY` | `https://api.openai.com` | `OPENAI_BASE_URL` |
-| `gemini` | `GOOGLE_API_KEY` | `https://generativelanguage.googleapis.com` | `GEMINI_API_BASE_URL` |
+| `codex` | `CODEX_API_KEY` | `https://api.openai.com/v1` | `OPENAI_BASE_URL` |
+| `gemini` | `GEMINI_API_KEY` | `https://generativelanguage.googleapis.com` | `GEMINI_API_BASE_URL` |
 
 Custom agents (any command not in the table above) **must** provide `envVar` and `baseUrl` explicitly.
 

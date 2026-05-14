@@ -4,7 +4,8 @@ import { writeFile, access } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import chalk from 'chalk';
 import { ensureProjectDirs } from '../core/paths.js';
-import type { Config, ProjectPaths, SourceConfig, PackageSource } from '../types.js';
+import type { Config, ProjectPaths, SourceConfig, PackageSource, AgentConfig } from '../types.js';
+import { createAdapter } from '../agents/adapter.js';
 
 async function prompt(rl: ReturnType<typeof createInterface>, question: string, defaultValue?: string): Promise<string> {
   const suffix = defaultValue ? ` ${chalk.dim(`(${defaultValue})`)}` : '';
@@ -167,18 +168,12 @@ export async function initCommand(paths: ProjectPaths): Promise<void> {
     hint("The API key for your agent. Microsandbox injects it via TLS — the VM never sees the raw value.");
     hint("This is required for sandboxed execution (executor and judge).\n");
 
-    const KNOWN_DEFAULTS: Record<string, { envVar: string; baseUrl: string }> = {
-      claude: { envVar: 'ANTHROPIC_API_KEY', baseUrl: 'https://api.anthropic.com' },
-      codex: { envVar: 'OPENAI_API_KEY', baseUrl: 'https://api.openai.com' },
-      gemini: { envVar: 'GOOGLE_API_KEY', baseUrl: 'https://generativelanguage.googleapis.com' },
-    };
-
-    const knownDefaults = KNOWN_DEFAULTS[agentCommand];
+    const adapter = createAdapter({ command: agentCommand } as AgentConfig);
     let agentSecret: { envVar?: string; value: string; baseUrl?: string };
 
-    if (knownDefaults) {
+    if (adapter.defaultEnvVar) {
       hint(`Detected known agent '${agentCommand}' — envVar and baseUrl auto-configured.`);
-      const value = await prompt(rl, `Value for ${knownDefaults.envVar}`, `$${knownDefaults.envVar}`);
+      const value = await prompt(rl, `Value for ${adapter.defaultEnvVar}`, `$${adapter.defaultEnvVar}`);
       agentSecret = { value };
     } else {
       const envVar = await promptRequired(rl, 'API key env var name');

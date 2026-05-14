@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import { Config } from '../types.js';
+import { Config, AgentConfig } from '../types.js';
+import { createAdapter } from '../agents/adapter.js';
 
 export async function loadConfig(configPath: string): Promise<Config> {
   let raw: string;
@@ -118,11 +119,6 @@ export function validateConfig(data: unknown, configPath?: string): Config {
 
   // Validate agent configs and secrets
   const SANDBOX_ROLES = ['executor', 'judge'];
-  const KNOWN_AGENT_DEFAULTS: Record<string, { envVar: string; baseUrl: string; baseUrlEnvVar: string }> = {
-    claude: { envVar: 'ANTHROPIC_API_KEY', baseUrl: 'https://api.anthropic.com', baseUrlEnvVar: 'ANTHROPIC_BASE_URL' },
-    codex: { envVar: 'OPENAI_API_KEY', baseUrl: 'https://api.openai.com', baseUrlEnvVar: 'OPENAI_BASE_URL' },
-    gemini: { envVar: 'GOOGLE_API_KEY', baseUrl: 'https://generativelanguage.googleapis.com', baseUrlEnvVar: 'GEMINI_API_BASE_URL' },
-  };
 
   if (obj.agents && typeof obj.agents === 'object' && !Array.isArray(obj.agents)) {
     const agents = obj.agents as Record<string, unknown>;
@@ -142,12 +138,12 @@ export function validateConfig(data: unknown, configPath?: string): Config {
           throw new Error(`agents.${role}.secret.value must be a non-empty string`);
         }
 
-        // Fill defaults for known agents
-        const defaults = command ? KNOWN_AGENT_DEFAULTS[command] : undefined;
-        if (defaults) {
-          if (!secret.envVar) secret.envVar = defaults.envVar;
-          if (!secret.baseUrl) secret.baseUrl = defaults.baseUrl;
-          if (!secret.baseUrlEnvVar) secret.baseUrlEnvVar = defaults.baseUrlEnvVar;
+        // Fill defaults from adapter for known agents
+        const adapter = createAdapter({ command } as AgentConfig);
+        if (adapter.defaultEnvVar) {
+          if (!secret.envVar) secret.envVar = adapter.defaultEnvVar;
+          if (!secret.baseUrl) secret.baseUrl = adapter.defaultBaseUrl;
+          if (!secret.baseUrlEnvVar) secret.baseUrlEnvVar = adapter.baseUrlEnvVar;
         } else {
           // Custom agents must specify envVar and baseUrl
           if (!secret.envVar || typeof secret.envVar !== 'string') {

@@ -17,6 +17,7 @@ import { evalCommand } from './commands/eval.js';
 import { inspectCommand } from './commands/inspect.js';
 import { insightsCommand } from './commands/insights.js';
 import { exportCommand } from './commands/export.js';
+import { sandboxCommand } from './commands/sandbox.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -140,6 +141,22 @@ program
   .option('-r, --run <runId>', 'Export only a specific run')
   .action(async (opts: { output?: string; run?: string }) => {
     await exportCommand(getPaths(), opts);
+  });
+
+program
+  .command('sandbox')
+  .description('Launch an interactive shell inside a sandbox for debugging')
+  .option('--target <name>', 'Target to use (default: first in config)')
+  .option('--mode <mode>', 'Sandbox mode: executor or judge')
+  .option('--test <id>', 'Test case to set up (requires --mode)')
+  .option('--run <runId>', 'Run for judge workspace snapshot (default: latest)')
+  .option('--output <dir>', 'Directory to save debug artifacts')
+  .action(async (opts: { target?: string; mode?: string; test?: string; run?: string; output?: string }) => {
+    const paths = getPaths();
+    await sandboxCommand(paths, {
+      ...opts,
+      mode: opts.mode as 'executor' | 'judge' | undefined,
+    });
   });
 
 program.parseAsync().catch((err: unknown) => {
