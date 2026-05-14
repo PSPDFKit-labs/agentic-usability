@@ -384,7 +384,7 @@ claude setup-token             # interactive — generates a long-lived OAuth to
 export CLAUDE_CODE_OAUTH_TOKEN='<token>'   # before running the eval
 ```
 
-How it works: the runtime sniffs the resolved value's prefix at sandbox-create time. Anthropic OAuth tokens start with `sk-ant-oat-`; API keys start with `sk-ant-api-`. When the value is an OAuth token, it's injected as a plain `CLAUDE_CODE_OAUTH_TOKEN` env var (Claude Code reads it directly from `process.env`; the API-key TLS-substitution model doesn't apply for OAuth). Subscription concurrent-session caps apply.
+How it works: the runtime sniffs the resolved value's prefix at sandbox-create time. Anthropic OAuth tokens start with `sk-ant-oat` (e.g. `sk-ant-oat01-…`); API keys start with `sk-ant-api` (e.g. `sk-ant-api03-…`). When the value is an OAuth token, it's injected as a plain `CLAUDE_CODE_OAUTH_TOKEN` env var (Claude Code reads it directly from `process.env`; the API-key TLS-substitution model doesn't apply for OAuth). Subscription concurrent-session caps apply.
 
 #### Custom agents
 

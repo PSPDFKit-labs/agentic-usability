@@ -50,12 +50,13 @@ export function resolveEnv(
 }
 
 /**
- * Claude Code subscription OAuth tokens are prefixed `sk-ant-oat-` (issued by
- * `claude setup-token`). API keys are prefixed `sk-ant-api-`. The auth mode is
- * determined by inspecting the resolved secret value at sandbox-create time —
- * no separate config flag needed.
+ * Claude Code subscription OAuth tokens are prefixed `sk-ant-oat` followed by a
+ * version number (e.g. `sk-ant-oat01-…`), issued by `claude setup-token`. API
+ * keys use `sk-ant-api` (e.g. `sk-ant-api03-…`). The auth mode is determined
+ * by inspecting the resolved secret value at sandbox-create time — no separate
+ * config flag needed.
  */
-const OAUTH_TOKEN_PREFIX = 'sk-ant-oat-';
+const OAUTH_TOKEN_PREFIX = 'sk-ant-oat';
 
 /** Whether the agent secret's resolved value is a Claude Code subscription OAuth token. */
 export function isOAuthSecret(secret: AgentSecretConfig): boolean {
@@ -78,7 +79,8 @@ interface AgentAuthAdapter {
  * Wire an agent's secret into the sandbox `secrets` and `env`, picking the auth
  * mode by inspecting the resolved value:
  *
- * - Claude Code subscription OAuth tokens (prefix `sk-ant-oat-`) → plain
+ * - Claude Code subscription OAuth tokens (prefix `sk-ant-oat`, e.g.
+ *   `sk-ant-oat01-…`) → plain
  *   `CLAUDE_CODE_OAUTH_TOKEN` env var. Claude Code reads the token directly
  *   from `process.env`, so microsandbox's TLS-substitution model doesn't apply.
  * - Everything else (API keys for known agents, custom-agent secrets) → wrapped

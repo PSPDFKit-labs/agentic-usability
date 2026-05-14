@@ -117,7 +117,8 @@ export interface AgentConfig {
  *   microsandbox — cleartext never enters the VM; the env var inside the
  *   sandbox contains a placeholder substituted on the wire only for the
  *   agent's allowed host.
- * - Claude Code subscription OAuth tokens (prefix `sk-ant-oat-`, issued by
+ * - Claude Code subscription OAuth tokens (prefix `sk-ant-oat`, e.g.
+ *   `sk-ant-oat01-…`, issued by
  *   `claude setup-token`) are injected as a plain `CLAUDE_CODE_OAUTH_TOKEN`
  *   env var. Claude Code reads the token directly from `process.env`, so the
  *   TLS-substitution model does not apply. Avoids per-token API billing on

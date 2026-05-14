@@ -351,8 +351,8 @@ describe('agent secret auth-mode detection', () => {
   };
 
   describe('isOAuthSecret', () => {
-    it('returns true when the resolved value starts with sk-ant-oat-', () => {
-      process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat-fake-test-token';
+    it('returns true when the resolved value starts with sk-ant-oat (followed by a version, e.g. sk-ant-oat01-)', () => {
+      process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-fake-test-token';
       expect(isOAuthSecret({
         envVar: 'CLAUDE_CODE_OAUTH_TOKEN',
         value: '$CLAUDE_CODE_OAUTH_TOKEN',
@@ -381,7 +381,7 @@ describe('agent secret auth-mode detection', () => {
 
   describe('applyAgentAuth', () => {
     it('injects CLAUDE_CODE_OAUTH_TOKEN as a plain env var when value is an OAuth token', () => {
-      process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat-fake-test-token';
+      process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-fake-test-token';
       const secrets: SecretEntry[] = [];
       const env: Record<string, string> = {};
       applyAgentAuth({
@@ -389,7 +389,7 @@ describe('agent secret auth-mode detection', () => {
         value: '$CLAUDE_CODE_OAUTH_TOKEN',
         baseUrl: 'https://api.anthropic.com',
       }, claudeAdapter, secrets, env);
-      expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe('sk-ant-oat-fake-test-token');
+      expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe('sk-ant-oat01-fake-test-token');
       expect(env.ANTHROPIC_BASE_URL).toBe('https://api.anthropic.com');
       expect(secrets).toHaveLength(0);
     });
