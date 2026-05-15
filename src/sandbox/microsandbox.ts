@@ -5,6 +5,7 @@ import type {
   FsEntry,
 } from 'microsandbox';
 import type { SandboxConfig, SecretConfig, AgentSecretConfig } from '../types.js';
+import type { AgentAdapter } from '../agents/adapter.js';
 
 export interface CommandResult {
   stdout: string;
@@ -49,18 +50,54 @@ export function resolveEnv(
   return resolved;
 }
 
+// Claude-specific credential format. Subscription OAuth tokens are prefixed
+// `sk-ant-oat` followed by a version (e.g. `sk-ant-oat01-…`), issued by
+// `claude setup-token`. API keys use `sk-ant-api`. The framework picks the
+// env-var slot the placeholder lands under by inspecting the resolved
+// value's prefix — no separate config flag needed.
+const OAUTH_TOKEN_PREFIX = 'sk-ant-oat';
+const OAUTH_TOKEN_ENV_VAR = 'CLAUDE_CODE_OAUTH_TOKEN';
+
 /**
- * Build a microsandbox `Secret.env()` entry from an agent's secret config.
- * The `allowHosts` is derived from the base URL hostname.
+ * Wire an agent's secret into the sandbox `secrets` and `env`.
+ *
+ * Both auth modes (API key and Claude Code subscription OAuth) go through
+ * microsandbox `Secret.env()` TLS substitution — the cleartext value never
+ * enters the VM. Inside the sandbox the env var contains the
+ * `$MSB_<env-var-name>` placeholder; microsandbox swaps it for the real value
+ * on outbound TLS to the allowed host only.
+ *
+ * The resolved value's prefix picks which env var name carries the placeholder:
+ * - `sk-ant-oat…` (Claude Code subscription OAuth, issued by `claude setup-token`)
+ *   → `CLAUDE_CODE_OAUTH_TOKEN`
+ * - anything else (API keys for known agents, custom-agent secrets)
+ *   → `secret.envVar` (= `ANTHROPIC_API_KEY` for claude, etc.)
+ *
+ * Mutates `secrets` and `env` in place.
  */
-export function buildAgentSecret(secret: AgentSecretConfig, additionalAllowHosts?: string[]): SecretEntry {
+export function applyAgentAuth(
+  secret: AgentSecretConfig,
+  adapter: Pick<AgentAdapter, 'baseUrlEnvVar' | 'additionalAllowHosts'>,
+  secrets: SecretEntry[],
+  env: Record<string, string>,
+): void {
   if (!secret.envVar || !secret.baseUrl) {
     throw new Error('Agent secret must have envVar and baseUrl set (should be filled by config validation)');
   }
   const value = resolveValue(secret.value, secret.envVar);
+
+  const envVar = value.startsWith(OAUTH_TOKEN_PREFIX)
+    ? OAUTH_TOKEN_ENV_VAR
+    : secret.envVar;
+
   const hostname = new URL(secret.baseUrl).hostname;
-  const allowHosts = [hostname, ...(additionalAllowHosts ?? [])];
-  return Secret.env(secret.envVar, { value, allowHosts });
+  const allowHosts = [hostname, ...adapter.additionalAllowHosts];
+  secrets.push(Secret.env(envVar, { value, allowHosts }));
+
+  const baseUrlVar = secret.baseUrlEnvVar ?? adapter.baseUrlEnvVar;
+  if (baseUrlVar) {
+    env[baseUrlVar] = secret.baseUrl;
+  }
 }
 
 function resolveValue(value: string, envVar: string): string {

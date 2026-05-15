@@ -5,7 +5,7 @@ import { loadDotenv } from '../core/env.js';
 import { loadConfig } from '../core/config.js';
 import { loadTestSuite, loadBinaryResult } from '../core/suite-io.js';
 import { loadJsonFile } from '../core/results.js';
-import { MicrosandboxClient, buildSecrets, buildAgentSecret, resolveEnv } from '../sandbox/microsandbox.js';
+import { MicrosandboxClient, buildSecrets, applyAgentAuth, resolveEnv } from '../sandbox/microsandbox.js';
 import { scaffoldWorkspace, uploadSources } from '../sandbox/scaffolding.js';
 import { createEgressLogger } from '../sandbox/egress-logger.js';
 import { createAdapter } from '../agents/adapter.js';
@@ -59,11 +59,7 @@ export async function sandboxCommand(paths: ProjectPaths, options: SandboxOption
   if (options.mode) {
     agentConfig = getAgentConfig(config, options.mode);
     adapter = createAdapter(agentConfig);
-    secrets.push(buildAgentSecret(agentConfig.secret, adapter.additionalAllowHosts));
-    const baseUrlVar = agentConfig.secret.baseUrlEnvVar ?? adapter.baseUrlEnvVar;
-    if (baseUrlVar && agentConfig.secret.baseUrl) {
-      env[baseUrlVar] = agentConfig.secret.baseUrl;
-    }
+    applyAgentAuth(agentConfig.secret, adapter, secrets, env);
   }
 
   // Prepare output directory for artifacts

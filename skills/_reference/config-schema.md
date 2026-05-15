@@ -82,6 +82,12 @@ Extends AgentConfig with one **required** field:
 |-------|------|----------|
 | `secret` | `AgentSecretConfig` | **Yes** |
 
+The resolved `secret.value` is wired into the sandbox via microsandbox `Secret.env()` TLS substitution — the cleartext credential never enters the VM. Inside the sandbox the env var contains a `$MSB_<name>` placeholder; microsandbox swaps it for the real value on outbound TLS to the allowed host only.
+
+By default the placeholder lands under the adapter's API-key env var (e.g. `ANTHROPIC_API_KEY` for claude, see [Known Agent Defaults](#known-agent-defaults-auto-filled-when-field-is-absent) below).
+
+**Claude-only: subscription auth.** When `command: "claude"` and the resolved value starts with `sk-ant-oat` (a Claude Code subscription OAuth token issued by `claude setup-token`, e.g. `sk-ant-oat01-…`), the placeholder lands under `CLAUDE_CODE_OAUTH_TOKEN` instead. This lets you bill the run against a Pro / Max / Team / Enterprise plan instead of per-token API charges. Point `secret.value` at `"$CLAUDE_CODE_OAUTH_TOKEN"` to opt in. Other adapters (codex, gemini, custom) only have the API-key path today.
+
 ### AgentSecretConfig
 
 | Field | Type | Required |
