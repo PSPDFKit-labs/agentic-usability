@@ -164,14 +164,8 @@ export class CodexAdapter extends BaseAdapter {
       return skills;
     }));
 
-    // Respect $CODEX_HOME; otherwise derive from $HOME. Some base images
-    // (e.g. node:20-slim) expand $HOME to '/' for root — fall back to /root
-    // so skills don't land in top-level dot-dirs.
-    const probe = await client.runCommand('printf "%s\\n%s" "${CODEX_HOME:-}" "${HOME:-}"');
-    const [codexHomeRaw = '', homeRaw = ''] = probe.stdout.split('\n');
-    const probedHome = homeRaw.trim();
-    const home = probedHome && probedHome !== '/' ? probedHome : '/root';
-    const codexHome = codexHomeRaw.trim() || `${home}/.codex`;
+    const homeResult = await client.runCommand('printf %s "${CODEX_HOME:-${HOME:-/root}/.codex}"');
+    const codexHome = homeResult.stdout.trim() || '/root/.codex';
     const codexSkillsDir = `${codexHome}/skills`;
 
     const skillOwners = new Map<string, string>();
