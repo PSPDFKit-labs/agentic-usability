@@ -213,7 +213,7 @@ describe('CodexAdapter', () => {
       );
     });
 
-    it('throws when two plugins contribute the same skill name', async () => {
+    it('throws when two plugins contribute the same skill name, naming both', async () => {
       mockAccess.mockResolvedValue(undefined);
       // Two plugins, each contributing a skill called 'shared'.
       mockReaddir
@@ -227,7 +227,7 @@ describe('CodexAdapter', () => {
       await expect(adapter.installPluginsInSandbox(client as any, [
         { name: 'plugin-a', hostDir: '/tmp/a' },
         { name: 'plugin-b', hostDir: '/tmp/b' },
-      ])).rejects.toThrow(/contributed by more than one plugin/);
+      ])).rejects.toThrow(/'plugin-a'.*'plugin-b'/);
     });
   });
 });

@@ -109,7 +109,7 @@ export class ClaudeAdapter extends BaseAdapter {
   /**
    * Install Claude Code plugins for the executor's CLI session.
    *
-   * Each plugin is extracted under `/root/.claude/plugins/<name>/` and the
+   * Each plugin is extracted under `$HOME/.claude/plugins/<name>/` and the
    * resulting paths are stashed for `sandboxCommand()` to emit as
    * `--plugin-dir <path>` flags. No marketplace registration or trust
    * prompt — those can't be answered in `--print` mode.
@@ -132,9 +132,9 @@ export class ClaudeAdapter extends BaseAdapter {
       }
     }));
 
-    // Target images run as root; hardcoding /root avoids brittleness around
-    // how the sandbox shell expands $HOME (some images return / instead).
-    const pluginsRoot = '/root/.claude/plugins';
+    const homeResult = await client.runCommand('printf %s "${HOME:-/root}"');
+    const home = homeResult.stdout.trim() || '/root';
+    const pluginsRoot = `${home}/.claude/plugins`;
 
     this.installedPluginDirs = await Promise.all(plugins.map(async (plugin) => {
       const destDir = `${pluginsRoot}/${plugin.name}`;

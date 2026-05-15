@@ -164,19 +164,21 @@ export class CodexAdapter extends BaseAdapter {
       return skills;
     }));
 
-    // Target images run as root; matches the hardcoded path in ClaudeAdapter.
-    const codexSkillsDir = '/root/.codex/skills';
+    const homeResult = await client.runCommand('printf %s "${CODEX_HOME:-${HOME:-/root}/.codex}"');
+    const codexHome = homeResult.stdout.trim() || '/root/.codex';
+    const codexSkillsDir = `${codexHome}/skills`;
 
-    const seenSkillNames = new Set<string>();
+    const skillOwners = new Map<string, string>();
     const installs: SkillInstall[] = [];
     for (const skill of perPluginSkills.flat()) {
-      if (seenSkillNames.has(skill.skillName)) {
+      const prior = skillOwners.get(skill.skillName);
+      if (prior !== undefined) {
         throw new Error(
-          `Skill '${skill.skillName}' is contributed by more than one plugin (latest: '${skill.plugin}'). ` +
+          `Skill '${skill.skillName}' is contributed by both '${prior}' and '${skill.plugin}'. ` +
           `Codex requires skill names to be unique across all installed plugins.`,
         );
       }
-      seenSkillNames.add(skill.skillName);
+      skillOwners.set(skill.skillName, skill.plugin);
       installs.push(skill);
     }
 

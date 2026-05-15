@@ -76,8 +76,9 @@ export class GeminiAdapter extends BaseAdapter {
       }
     }));
 
-    // Target images run as root; matches the hardcoded path in ClaudeAdapter.
-    const extensionsDir = '/root/.gemini/extensions';
+    const homeResult = await client.runCommand('printf %s "${HOME:-/root}"');
+    const home = homeResult.stdout.trim() || '/root';
+    const extensionsDir = `${home}/.gemini/extensions`;
 
     await Promise.all(plugins.map((plugin) =>
       uploadDirToSandbox(
