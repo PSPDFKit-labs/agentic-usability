@@ -109,16 +109,10 @@ export class ClaudeAdapter extends BaseAdapter {
   /**
    * Install Claude Code plugins for the executor's CLI session.
    *
-   * We extract each plugin directory under `$HOME/.claude/plugins/<name>/`
-   * and remember the paths in `installedPluginDirs`. `sandboxCommand()` then
-   * emits `--plugin-dir <path>` flags so the CLI loads each plugin for the
-   * run. This is the documented "load a local plugin for this session"
-   * mechanism (see Claude Code CLI reference); no marketplace registration,
-   * settings.json edits, or trust prompts are needed — important because
-   * trust prompts cannot be answered in `--print` mode.
-   *
-   * Plugins are validated host-side first: missing `.claude-plugin/plugin.json`
-   * fails fast with a clear error.
+   * Each plugin is extracted under `/root/.claude/plugins/<name>/` and the
+   * resulting paths are stashed for `sandboxCommand()` to emit as
+   * `--plugin-dir <path>` flags. No marketplace registration or trust
+   * prompt — those can't be answered in `--print` mode.
    */
   async installPluginsInSandbox(
     client: MicrosandboxClient,
@@ -126,8 +120,7 @@ export class ClaudeAdapter extends BaseAdapter {
   ): Promise<void> {
     if (plugins.length === 0) return;
 
-    // Validate every plugin host-side before doing any sandbox work.
-    for (const plugin of plugins) {
+    await Promise.all(plugins.map(async (plugin) => {
       const manifestPath = join(plugin.hostDir, '.claude-plugin', 'plugin.json');
       try {
         await access(manifestPath);
@@ -137,29 +130,17 @@ export class ClaudeAdapter extends BaseAdapter {
           `Each Claude Code plugin must contain a .claude-plugin/plugin.json file.`,
         );
       }
-    }
+    }));
 
-    // Target images run as root in the existing framework (no user override
-    // surface in microsandbox config — see src/sandbox/microsandbox.ts).
-    // Hardcoding /root avoids brittleness around how the sandbox shell
-    // expands $HOME, which we've seen return / instead of /root on some
-    // images.
+    // Target images run as root; hardcoding /root avoids brittleness around
+    // how the sandbox shell expands $HOME (some images return / instead).
     const pluginsRoot = '/root/.claude/plugins';
 
-    const setup = await client.runCommand(`mkdir -p '${pluginsRoot}'`);
-    if (setup.exitCode !== 0) {
-      throw new Error(
-        `Failed to prepare ${pluginsRoot} in sandbox: ${setup.stderr || setup.stdout}`,
-      );
-    }
-
-    const installedDirs: string[] = [];
-    for (const plugin of plugins) {
+    this.installedPluginDirs = await Promise.all(plugins.map(async (plugin) => {
       const destDir = `${pluginsRoot}/${plugin.name}`;
       await uploadDirToSandbox(client, plugin.hostDir, destDir, `plugin_${plugin.name}`);
-      installedDirs.push(destDir);
-    }
-    this.installedPluginDirs = installedDirs;
+      return destDir;
+    }));
   }
 
   protected parseEnvelope(result: AgentResult): AgentResult | null {

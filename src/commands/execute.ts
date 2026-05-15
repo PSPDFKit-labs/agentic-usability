@@ -203,12 +203,8 @@ export async function executeTestCase(
       }
     }
 
-    // Install executor plugins (Claude Code marketplace, Codex skills, Gemini extensions).
-    // Plugins go AFTER the agent CLI install so any per-CLI plugin paths exist, and
-    // BEFORE the agent runs so the plugin manifest is in place when the CLI boots.
-    // Plugins are deliberately not installed in the judge sandbox — keeping the
-    // judge's environment independent of the executor's tooling is what makes the
-    // A/B comparison meaningful.
+    // Plugins are intentionally executor-only — the judge sandbox stays
+    // plugin-free so its scoring is independent of the executor's tooling.
     if (config.executorPlugins && config.executorPlugins.length > 0) {
       const resolvedPlugins = await resolveExecutorPlugins(config.executorPlugins, paths.cacheRepos);
       try {

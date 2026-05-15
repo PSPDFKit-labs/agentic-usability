@@ -287,28 +287,17 @@ export async function resolveExecutorPlugins(
 ): Promise<ResolvedExecutorPlugin[]> {
   if (!plugins || plugins.length === 0) return [];
 
-  const resolved: ResolvedExecutorPlugin[] = [];
-  for (const plugin of plugins) {
-    if (plugin.type === 'local') {
-      // Reuse resolveSource for consistent path semantics (resolves relative paths against cwd).
-      const hostDir = await resolveSource(
-        { type: 'local', path: plugin.path },
-        { reposDir: cacheRepos },
-      );
-      resolved.push({ name: plugin.name, hostDir: resolvePath(hostDir) });
-    } else {
-      const hostDir = await resolveSource(
-        {
+  return Promise.all(plugins.map(async (plugin) => {
+    const source: SourceConfig = plugin.type === 'local'
+      ? { type: 'local', path: plugin.path }
+      : {
           type: 'git',
           url: plugin.url,
           branch: plugin.branch,
           subpath: plugin.subpath,
           sparse: plugin.sparse,
-        },
-        { reposDir: cacheRepos },
-      );
-      resolved.push({ name: plugin.name, hostDir: resolvePath(hostDir) });
-    }
-  }
-  return resolved;
+        };
+    const hostDir = await resolveSource(source, { reposDir: cacheRepos });
+    return { name: plugin.name, hostDir: resolvePath(hostDir) };
+  }));
 }

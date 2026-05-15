@@ -63,7 +63,7 @@ export class GeminiAdapter extends BaseAdapter {
   ): Promise<void> {
     if (plugins.length === 0) return;
 
-    for (const plugin of plugins) {
+    await Promise.all(plugins.map(async (plugin) => {
       const manifestPath = join(plugin.hostDir, 'gemini-extension.json');
       try {
         await access(manifestPath);
@@ -74,23 +74,19 @@ export class GeminiAdapter extends BaseAdapter {
           `Add one to the plugin directory or remove '${plugin.name}' from executorPlugins when running the Gemini executor.`,
         );
       }
-    }
+    }));
 
-    const homeResult = await client.runCommand('printf %s "${HOME:-/root}"');
-    const home = homeResult.stdout.trim() || '/root';
-    const extensionsDir = `${home}/.gemini/extensions`;
+    // Target images run as root; matches the hardcoded path in ClaudeAdapter.
+    const extensionsDir = '/root/.gemini/extensions';
 
-    const setup = await client.runCommand(`mkdir -p '${extensionsDir}'`);
-    if (setup.exitCode !== 0) {
-      throw new Error(
-        `Failed to prepare ${extensionsDir} in sandbox: ${setup.stderr || setup.stdout}`,
-      );
-    }
-
-    for (const plugin of plugins) {
-      const destDir = `${extensionsDir}/${plugin.name}`;
-      await uploadDirToSandbox(client, plugin.hostDir, destDir, `gemini_ext_${plugin.name}`);
-    }
+    await Promise.all(plugins.map((plugin) =>
+      uploadDirToSandbox(
+        client,
+        plugin.hostDir,
+        `${extensionsDir}/${plugin.name}`,
+        `gemini_ext_${plugin.name}`,
+      ),
+    ));
   }
 
   async extractLog(client: MicrosandboxClient): Promise<string | null> {

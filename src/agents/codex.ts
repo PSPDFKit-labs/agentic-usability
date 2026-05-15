@@ -1,4 +1,4 @@
-import { writeFile, readFile, rm, access, readdir, stat as fsStat } from 'node:fs/promises';
+import { writeFile, readFile, rm, access, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { AgentConfig, AgentResult, ResolvedExecutorPlugin } from '../types.js';
@@ -115,10 +115,9 @@ export class CodexAdapter extends BaseAdapter {
   ): Promise<void> {
     if (plugins.length === 0) return;
 
-    type SkillInstall = { srcDir: string; skillName: string };
-    const skillsToInstall: Array<{ plugin: string; install: SkillInstall }> = [];
+    type SkillInstall = { plugin: string; srcDir: string; skillName: string };
 
-    for (const plugin of plugins) {
+    const perPluginSkills = await Promise.all(plugins.map(async (plugin): Promise<SkillInstall[]> => {
       const manifestPath = join(plugin.hostDir, '.codex-plugin', 'plugin.json');
       try {
         await access(manifestPath);
@@ -140,61 +139,55 @@ export class CodexAdapter extends BaseAdapter {
         );
       }
 
-      let pluginContributed = false;
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const entryName = String(entry.name);
-        const skillDir = join(skillsDir, entryName);
-        const skillFile = join(skillDir, 'SKILL.md');
-        try {
-          const skillStat = await fsStat(skillFile);
-          if (!skillStat.isFile()) continue;
-        } catch {
-          continue;
-        }
-        skillsToInstall.push({
-          plugin: plugin.name,
-          install: { srcDir: skillDir, skillName: entryName },
-        });
-        pluginContributed = true;
-      }
+      const skillCandidates = await Promise.all(entries
+        .filter((entry) => entry.isDirectory())
+        .map(async (entry): Promise<SkillInstall | null> => {
+          const skillName = String(entry.name);
+          const skillDir = join(skillsDir, skillName);
+          try {
+            const md = await stat(join(skillDir, 'SKILL.md'));
+            if (!md.isFile()) return null;
+          } catch {
+            return null;
+          }
+          return { plugin: plugin.name, srcDir: skillDir, skillName };
+        }),
+      );
+      const skills = skillCandidates.filter((s): s is SkillInstall => s !== null);
 
-      if (!pluginContributed) {
+      if (skills.length === 0) {
         throw new Error(
           `Plugin '${plugin.name}' contains no usable Codex skills (no <skills>/<name>/SKILL.md). ` +
           `Each plugin must contribute at least one SKILL.md file under its skills/ subdirectory.`,
         );
       }
-    }
+      return skills;
+    }));
 
-    const homeResult = await client.runCommand('printf %s "${CODEX_HOME:-${HOME:-/root}/.codex}"');
-    const codexHome = homeResult.stdout.trim() || '/root/.codex';
-    const codexSkillsDir = `${codexHome}/skills`;
-
-    const setup = await client.runCommand(`mkdir -p '${codexSkillsDir}'`);
-    if (setup.exitCode !== 0) {
-      throw new Error(
-        `Failed to prepare ${codexSkillsDir} in sandbox: ${setup.stderr || setup.stdout}`,
-      );
-    }
+    // Target images run as root; matches the hardcoded path in ClaudeAdapter.
+    const codexSkillsDir = '/root/.codex/skills';
 
     const seenSkillNames = new Set<string>();
-    for (const { plugin, install } of skillsToInstall) {
-      if (seenSkillNames.has(install.skillName)) {
+    const installs: SkillInstall[] = [];
+    for (const skill of perPluginSkills.flat()) {
+      if (seenSkillNames.has(skill.skillName)) {
         throw new Error(
-          `Skill '${install.skillName}' is contributed by more than one plugin (latest: '${plugin}'). ` +
+          `Skill '${skill.skillName}' is contributed by more than one plugin (latest: '${skill.plugin}'). ` +
           `Codex requires skill names to be unique across all installed plugins.`,
         );
       }
-      seenSkillNames.add(install.skillName);
-      const destDir = `${codexSkillsDir}/${install.skillName}`;
-      await uploadDirToSandbox(
-        client,
-        install.srcDir,
-        destDir,
-        `codex_skill_${install.skillName}`,
-      );
+      seenSkillNames.add(skill.skillName);
+      installs.push(skill);
     }
+
+    await Promise.all(installs.map((skill) =>
+      uploadDirToSandbox(
+        client,
+        skill.srcDir,
+        `${codexSkillsDir}/${skill.skillName}`,
+        `codex_skill_${skill.skillName}`,
+      ),
+    ));
   }
 
   async extractLog(client: MicrosandboxClient): Promise<string | null> {
