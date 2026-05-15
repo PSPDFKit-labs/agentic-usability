@@ -76,8 +76,10 @@ export class GeminiAdapter extends BaseAdapter {
       }
     }));
 
-    const homeResult = await client.runCommand('printf %s "${HOME:-/root}"');
-    const home = homeResult.stdout.trim() || '/root';
+    // Some base images (e.g. node:20-slim) expand $HOME to '/' for root.
+    // Fall back to /root so extensions don't land in top-level dot-dirs.
+    const probedHome = (await client.runCommand('printf %s "${HOME:-/root}"')).stdout.trim();
+    const home = probedHome && probedHome !== '/' ? probedHome : '/root';
     const extensionsDir = `${home}/.gemini/extensions`;
 
     await Promise.all(plugins.map((plugin) =>

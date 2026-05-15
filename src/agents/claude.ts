@@ -132,8 +132,10 @@ export class ClaudeAdapter extends BaseAdapter {
       }
     }));
 
-    const homeResult = await client.runCommand('printf %s "${HOME:-/root}"');
-    const home = homeResult.stdout.trim() || '/root';
+    // Some base images (e.g. node:20-slim) expand $HOME to '/' for root.
+    // Fall back to /root so plugins don't land in top-level dot-dirs.
+    const probedHome = (await client.runCommand('printf %s "${HOME:-/root}"')).stdout.trim();
+    const home = probedHome && probedHome !== '/' ? probedHome : '/root';
     const pluginsRoot = `${home}/.claude/plugins`;
 
     this.installedPluginDirs = await Promise.all(plugins.map(async (plugin) => {
