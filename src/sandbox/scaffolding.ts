@@ -3,7 +3,10 @@ import { execFile } from 'node:child_process';
 import { basename, join, relative, resolve as resolvePath } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { MicrosandboxClient } from './microsandbox.js';
-import type { Config, TestCase, SourceConfig, ExecutorPlugin, ResolvedExecutorPlugin } from '../types.js';
+import type {
+  Config, TestCase, SourceConfig, ExecutorPlugin, ResolvedExecutorPlugin,
+  ExecutorMcpServer, ResolvedExecutorMcpServer,
+} from '../types.js';
 import { resolveSources, resolveSource } from '../core/source-resolver.js';
 
 /** Directories excluded from source uploads — these are large and not useful for evaluation. */
@@ -299,5 +302,43 @@ export async function resolveExecutorPlugins(
         };
     const hostDir = await resolveSource(source, { reposDir: cacheRepos });
     return { name: plugin.name, hostDir: resolvePath(hostDir) };
+  }));
+}
+
+/**
+ * Resolve `config.executorMcpServers` to host-side directories. Mirrors
+ * `resolveExecutorPlugins`: entries with a source (local/git) resolve via the
+ * shared source-resolver (git clones cached under `cacheRepos`); sourceless
+ * entries (no `type`) carry no `hostDir`.
+ *
+ * Returns an empty array when no MCP servers are configured.
+ */
+export async function resolveExecutorMcpServers(
+  servers: ExecutorMcpServer[] | undefined,
+  cacheRepos: string,
+): Promise<ResolvedExecutorMcpServer[]> {
+  if (!servers || servers.length === 0) return [];
+
+  return Promise.all(servers.map(async (server): Promise<ResolvedExecutorMcpServer> => {
+    if (server.type === undefined) {
+      // Sourceless — command/args used as-is.
+      return { name: server.name, command: server.command, args: server.args };
+    }
+    const source: SourceConfig = server.type === 'local'
+      ? { type: 'local', path: server.path }
+      : {
+          type: 'git',
+          url: server.url,
+          branch: server.branch,
+          subpath: server.subpath,
+          sparse: server.sparse,
+        };
+    const hostDir = await resolveSource(source, { reposDir: cacheRepos });
+    return {
+      name: server.name,
+      command: server.command,
+      args: server.args,
+      hostDir: resolvePath(hostDir),
+    };
   }));
 }

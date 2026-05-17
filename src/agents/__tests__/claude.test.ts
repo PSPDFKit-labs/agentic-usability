@@ -187,4 +187,45 @@ describe('ClaudeAdapter', () => {
       expect(cmd).not.toContain('--plugin-dir');
     });
   });
+
+  describe('installMcpServersInSandbox', () => {
+    it('is a no-op when given an empty server list', async () => {
+      const client = makeMockSandboxClient();
+      await adapter.installMcpServersInSandbox(client as any, []);
+      expect(client.runCommand).not.toHaveBeenCalled();
+    });
+
+    it('uploads sourced servers, substitutes ${MCP_ROOT}, and writes mcp-config.json', async () => {
+      const client = makeMockSandboxClient();
+      client.runCommand.mockResolvedValue({ stdout: '/root', stderr: '', exitCode: 0 });
+
+      await adapter.installMcpServersInSandbox(client as any, [
+        { name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js', '--flag'], hostDir: '/tmp/mine' },
+        { name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
+
+      // Sourced server is uploaded outside /workspace.
+      expect(mockUploadDir).toHaveBeenCalledWith(client, '/tmp/mine', '/root/.mcp-servers/mine', 'mcp_mine');
+      // Sourceless server is not uploaded.
+      expect(mockUploadDir).toHaveBeenCalledTimes(1);
+
+      // The base64-decoded MCP config JSON should reflect the substitution.
+      const writeCall = client.runCommand.mock.calls.find((c: any[]) => String(c[0]).includes('base64 -d'));
+      expect(writeCall).toBeDefined();
+      const b64 = String(writeCall![0]).match(/printf %s '([A-Za-z0-9+/=]+)'/)![1];
+      const cfg = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'));
+      expect(cfg.mcpServers.mine.args).toEqual(['/root/.mcp-servers/mine/server.js', '--flag']);
+      expect(cfg.mcpServers.fs).toEqual({ command: 'npx', args: ['-y', 'server-filesystem'] });
+
+      // sandboxCommand emits --mcp-config, not --strict-mcp-config.
+      const cmd = adapter.sandboxCommand('do the thing');
+      expect(cmd).toContain("--mcp-config '/root/.mcp-servers/mcp-config.json'");
+      expect(cmd).not.toContain('--strict-mcp-config');
+    });
+
+    it('sandboxCommand omits --mcp-config when no MCP servers were installed', () => {
+      const fresh = new ClaudeAdapter({ command: 'claude' });
+      expect(fresh.sandboxCommand('go')).not.toContain('--mcp-config');
+    });
+  });
 });

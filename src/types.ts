@@ -183,6 +183,70 @@ export interface ResolvedExecutorPlugin {
   hostDir: string;
 }
 
+/**
+ * Source of an MCP server to install into the executor's agent CLI.
+ *
+ * Independent of `ExecutorPlugin` — MCP servers are wired through each CLI's
+ * native MCP-config surface, NOT through agent plugins (a Claude plugin's
+ * `mcpServers` are not loaded by `claude --plugin-dir`).
+ *
+ * Three shapes, discriminated by the optional `type` field:
+ *  - `LocalExecutorMcpServer` (`type:'local'`) — upload a host directory tree.
+ *  - `GitExecutorMcpServer` (`type:'git'`)     — clone a git source.
+ *  - `CommandExecutorMcpServer` (no `type`)    — sourceless; `command`/`args`
+ *    are used as-is (e.g. an MCP server launched via `npx`).
+ *
+ * All three share `name`/`command`/`args`. `args` may contain the literal
+ * placeholder `${MCP_ROOT}`, substituted at install time with the absolute
+ * sandbox path of the uploaded source directory — only valid when there IS a
+ * source.
+ */
+export interface BaseExecutorMcpServer {
+  /** MCP server slug — used as the server name in MCP config and the install dir name. */
+  name: string;
+  /** Executable that launches the MCP server (e.g. "node", "npx"). */
+  command: string;
+  /** Args passed to `command`. May contain `${MCP_ROOT}` when a source is present. */
+  args: string[];
+}
+
+export interface LocalExecutorMcpServer extends BaseExecutorMcpServer {
+  type: 'local';
+  /** Absolute or relative path to a host directory tree uploaded into the sandbox. */
+  path: string;
+}
+
+export interface GitExecutorMcpServer extends BaseExecutorMcpServer {
+  type: 'git';
+  url: string;
+  branch?: string;
+  /** Path within the cloned repo that contains the MCP server source. */
+  subpath?: string;
+  sparse?: string[];
+}
+
+export interface CommandExecutorMcpServer extends BaseExecutorMcpServer {
+  type?: undefined;
+}
+
+export type ExecutorMcpServer =
+  | LocalExecutorMcpServer
+  | GitExecutorMcpServer
+  | CommandExecutorMcpServer;
+
+/**
+ * An ExecutorMcpServer after host-side resolution. The adapter receives this
+ * and decides how to wire it into the sandbox VM. `hostDir` is present only
+ * when the entry had a source (local/git); sourceless entries omit it.
+ */
+export interface ResolvedExecutorMcpServer {
+  name: string;
+  command: string;
+  args: string[];
+  /** Absolute host path to the MCP server source — only when there was a source. */
+  hostDir?: string;
+}
+
 export interface SecretConfig {
   /** Raw value or "$ENV_VAR" reference resolved from host environment. */
   value: string;
@@ -223,6 +287,15 @@ export interface Config {
    * with these so judge scoring stays independent of the executor's tooling.
    */
   executorPlugins?: ExecutorPlugin[];
+  /**
+   * MCP servers to install into the executor agent's CLI inside the sandbox VM.
+   * Parallel to `executorPlugins` but a separate mechanism — each adapter wires
+   * these through its CLI's native MCP-config surface (Claude: `--mcp-config`,
+   * Codex: `[mcp_servers.*]` in `config.toml`). MCP servers are scoped to the
+   * executor — the judge sandbox is intentionally not seeded with them so judge
+   * scoring stays independent of the executor's tooling.
+   */
+  executorMcpServers?: ExecutorMcpServer[];
   sandbox: SandboxConfig;
 }
 

@@ -1,6 +1,6 @@
 import { access } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { AgentConfig, AgentResult, ResolvedExecutorPlugin } from '../types.js';
+import type { AgentConfig, AgentResult, ResolvedExecutorPlugin, ResolvedExecutorMcpServer } from '../types.js';
 import type { MicrosandboxClient } from '../sandbox/microsandbox.js';
 import { uploadDirToSandbox } from '../sandbox/scaffolding.js';
 import { BaseAdapter } from './base.js';
@@ -19,6 +19,13 @@ export class ClaudeAdapter extends BaseAdapter {
    */
   private installedPluginDirs: string[] = [];
 
+  /**
+   * Sandbox path of the MCP config JSON written by `installMcpServersInSandbox()`.
+   * `sandboxCommand()` reads this to emit a `--mcp-config <path>` flag so the
+   * Claude CLI connects to each MCP server for the run. Null until install.
+   */
+  private installedMcpConfigPath: string | null = null;
+
   constructor(config: AgentConfig) {
     super(config);
   }
@@ -36,7 +43,13 @@ export class ClaudeAdapter extends BaseAdapter {
     const pluginFlags = this.installedPluginDirs
       .map((dir) => ` --plugin-dir '${dir}'`)
       .join('');
-    const cmd = `cd ${workDir} && IS_SANDBOX=1 claude --print --dangerously-skip-permissions${pluginFlags} ${args.join(' ')} '${escaped}'${schemaFlags}`.trimEnd();
+    // --mcp-config points the CLI at a JSON file of MCP servers to connect for
+    // the session. We intentionally do NOT pass --strict-mcp-config so the
+    // agent keeps any ambient MCP config alongside our injected servers.
+    const mcpFlag = this.installedMcpConfigPath
+      ? ` --mcp-config '${this.installedMcpConfigPath}'`
+      : '';
+    const cmd = `cd ${workDir} && IS_SANDBOX=1 claude --print --dangerously-skip-permissions${pluginFlags}${mcpFlag} ${args.join(' ')} '${escaped}'${schemaFlags}`.trimEnd();
     return cmd;
   }
 
@@ -141,6 +154,53 @@ export class ClaudeAdapter extends BaseAdapter {
       await uploadDirToSandbox(client, plugin.hostDir, destDir, `plugin_${plugin.name}`);
       return destDir;
     }));
+  }
+
+  /**
+   * Install MCP servers for the executor's Claude CLI session.
+   *
+   * Sourced servers are uploaded under `$HOME/.mcp-servers/<name>/` (outside
+   * `/workspace` so the agent's workspace stays clean). `${MCP_ROOT}` in each
+   * server's args is substituted with that server's sandbox install dir. A
+   * combined MCP config JSON is written to `$HOME/.mcp-servers/mcp-config.json`
+   * and surfaced to `sandboxCommand()` as a `--mcp-config` flag.
+   */
+  async installMcpServersInSandbox(
+    client: MicrosandboxClient,
+    servers: ResolvedExecutorMcpServer[],
+  ): Promise<void> {
+    if (servers.length === 0) return;
+
+    const homeResult = await client.runCommand('printf %s "${HOME:-/root}"');
+    const home = homeResult.stdout.trim() || '/root';
+    const mcpRoot = `${home}/.mcp-servers`;
+
+    const mcpServers: Record<string, { command: string; args: string[] }> = {};
+
+    for (const server of servers) {
+      let args = server.args;
+      if (server.hostDir) {
+        const destDir = `${mcpRoot}/${server.name}`;
+        await uploadDirToSandbox(client, server.hostDir, destDir, `mcp_${server.name}`);
+        args = args.map((a) => a.split('${MCP_ROOT}').join(destDir));
+      }
+      mcpServers[server.name] = { command: server.command, args };
+    }
+
+    const configJson = JSON.stringify({ mcpServers }, null, 2);
+    const configPath = `${mcpRoot}/mcp-config.json`;
+    const encoded = Buffer.from(configJson, 'utf-8').toString('base64');
+    const writeResult = await client.runCommand(
+      `mkdir -p '${mcpRoot}' && printf %s '${encoded}' | base64 -d > '${configPath}'`,
+    );
+    if (writeResult.exitCode !== 0) {
+      throw new Error(
+        `Failed to write MCP config into sandbox at '${configPath}': ` +
+        `${writeResult.stderr || writeResult.stdout}`,
+      );
+    }
+
+    this.installedMcpConfigPath = configPath;
   }
 
   protected parseEnvelope(result: AgentResult): AgentResult | null {

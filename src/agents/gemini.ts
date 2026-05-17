@@ -1,6 +1,6 @@
 import { access } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { AgentConfig, AgentResult, ResolvedExecutorPlugin } from '../types.js';
+import type { AgentConfig, AgentResult, ResolvedExecutorPlugin, ResolvedExecutorMcpServer } from '../types.js';
 import type { MicrosandboxClient } from '../sandbox/microsandbox.js';
 import { uploadDirToSandbox } from '../sandbox/scaffolding.js';
 import { BaseAdapter } from './base.js';
@@ -88,6 +88,23 @@ export class GeminiAdapter extends BaseAdapter {
         `gemini_ext_${plugin.name}`,
       ),
     ));
+  }
+
+  /**
+   * Gemini CLI loads MCP servers from `settings.json`, but in non-interactive
+   * (`--yolo -p`) mode it cannot complete the per-server trust handshake the
+   * CLI requires, so injected MCP servers would not be reliably connected for
+   * the run. We fail loudly rather than silently no-op an A/B comparison.
+   */
+  async installMcpServersInSandbox(
+    _client: MicrosandboxClient,
+    servers: ResolvedExecutorMcpServer[],
+  ): Promise<void> {
+    if (servers.length === 0) return;
+    throw new Error(
+      `Agent adapter 'gemini' does not support executorMcpServers in non-interactive mode. ` +
+      `Remove executorMcpServers from config or switch the executor to an adapter that does (claude, codex).`,
+    );
   }
 
   async extractLog(client: MicrosandboxClient): Promise<string | null> {

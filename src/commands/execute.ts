@@ -5,7 +5,7 @@ import { loadConfig } from '../core/config.js';
 import { loadTestSuite, saveResult, saveBinaryResult, formatElapsed } from '../core/suite-io.js';
 import { MicrosandboxClient, buildSecrets, applyAgentAuth, resolveEnv, type CommandResult } from '../sandbox/microsandbox.js';
 import { createEgressLogger } from '../sandbox/egress-logger.js';
-import { scaffoldWorkspace, resolveExecutorPlugins } from '../sandbox/scaffolding.js';
+import { scaffoldWorkspace, resolveExecutorPlugins, resolveExecutorMcpServers } from '../sandbox/scaffolding.js';
 import { WorkerPool } from '../sandbox/worker-pool.js';
 import { createAdapter } from '../agents/adapter.js';
 import { getPackageSource, getUrlSources, getFileSources } from '../types.js';
@@ -208,6 +208,19 @@ export async function executeTestCase(
         const message = err instanceof Error ? err.message : String(err);
         await saveResult(paths, testCase.id, 'plugin-install-error.log', message, target.name);
         throw new Error(`Executor plugin install failed: ${message}`);
+      }
+    }
+
+    // MCP servers are also executor-only — parallel to executorPlugins but a
+    // separate mechanism. The judge sandbox stays MCP-free.
+    if (config.executorMcpServers && config.executorMcpServers.length > 0) {
+      const resolvedMcpServers = await resolveExecutorMcpServers(config.executorMcpServers, paths.cacheRepos);
+      try {
+        await adapter.installMcpServersInSandbox(client, resolvedMcpServers);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await saveResult(paths, testCase.id, 'mcp-server-install-error.log', message, target.name);
+        throw new Error(`Executor MCP server install failed: ${message}`);
       }
     }
 

@@ -230,4 +230,40 @@ describe('CodexAdapter', () => {
       ])).rejects.toThrow(/'plugin-a'.*'plugin-b'/);
     });
   });
+
+  describe('installMcpServersInSandbox', () => {
+    it('is a no-op when given an empty server list', async () => {
+      const client = makeMockSandboxClient();
+      await adapter.installMcpServersInSandbox(client as any, []);
+      expect(client.runCommand).not.toHaveBeenCalled();
+    });
+
+    it('uploads sourced servers, substitutes ${MCP_ROOT}, and appends config.toml blocks', async () => {
+      const client = makeMockSandboxClient();
+      client.runCommand.mockResolvedValue({ stdout: '/root/.codex', stderr: '', exitCode: 0 });
+
+      await adapter.installMcpServersInSandbox(client as any, [
+        { name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js'], hostDir: '/tmp/mine' },
+        { name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
+
+      expect(mockUploadDir).toHaveBeenCalledWith(
+        client, '/tmp/mine', '/root/.codex/.mcp-servers/mine', 'mcp_mine',
+      );
+      expect(mockUploadDir).toHaveBeenCalledTimes(1);
+
+      // The base64-decoded TOML appended to config.toml reflects the substitution.
+      const writeCall = client.runCommand.mock.calls.find((c: any[]) => String(c[0]).includes('config.toml'));
+      expect(writeCall).toBeDefined();
+      const b64 = String(writeCall![0]).match(/printf %s '([A-Za-z0-9+/=]+)'/)![1];
+      const toml = Buffer.from(b64, 'base64').toString('utf-8');
+      expect(toml).toContain('[mcp_servers.mine]');
+      expect(toml).toContain('command = "node"');
+      expect(toml).toContain('args = ["/root/.codex/.mcp-servers/mine/server.js"]');
+      expect(toml).toContain('[mcp_servers.fs]');
+      expect(toml).toContain('args = ["-y", "server-filesystem"]');
+      // Append, not clobber.
+      expect(String(writeCall![0])).toContain('>>');
+    });
+  });
 });
