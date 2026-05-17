@@ -82,24 +82,37 @@ async function readDirRecursive(
 }
 
 /**
- * Create a tar.gz archive of a directory, excluding common bloat dirs.
- * Archives are cached on disk so concurrent sandboxes reuse the same tarball.
+ * Create a tar.gz archive of a directory.
+ *
+ * By default, common bloat dirs (`node_modules`, `.git`, build outputs, …) are
+ * excluded — correct for SDK *source* uploads. Pass `{ includeAll: true }` to
+ * archive the tree verbatim: required for runnable artifacts like MCP server
+ * payloads, which need their `node_modules` to actually start.
+ *
+ * Archives are cached on disk so concurrent sandboxes reuse the same tarball;
+ * the cache key includes the `includeAll` flag so source/full archives of the
+ * same path don't collide.
  */
-export async function getSourceArchive(srcPath: string): Promise<string> {
-  const cached = sourceArchiveCache.get(srcPath);
+export async function getSourceArchive(
+  srcPath: string,
+  opts?: { includeAll?: boolean },
+): Promise<string> {
+  const includeAll = opts?.includeAll ?? false;
+  const cacheKey = `${srcPath}::${includeAll ? 'all' : 'src'}`;
+  const cached = sourceArchiveCache.get(cacheKey);
   if (cached) {
     try {
       await fsStat(cached);
       return cached;
     } catch {
-      sourceArchiveCache.delete(srcPath);
+      sourceArchiveCache.delete(cacheKey);
     }
   }
 
   const dirName = basename(srcPath);
   const tarPath = join(tmpdir(), `agentic-sources-${dirName}-${Date.now()}.tar.gz`);
 
-  const excludeArgs = [
+  const excludeArgs = includeAll ? [] : [
     ...EXCLUDED_DIRS.flatMap((d) => ['--exclude', d]),
     ...EXCLUDED_EXTENSIONS.flatMap((ext) => ['--exclude', ext]),
   ];
@@ -114,7 +127,7 @@ export async function getSourceArchive(srcPath: string): Promise<string> {
     });
   });
 
-  sourceArchiveCache.set(srcPath, tarPath);
+  sourceArchiveCache.set(cacheKey, tarPath);
   return tarPath;
 }
 
@@ -125,14 +138,18 @@ export async function getSourceArchive(srcPath: string): Promise<string> {
  *
  * `archiveLabel` should be a slug-safe identifier (used only to name the
  * temporary tarball path inside the sandbox).
+ *
+ * Pass `{ includeAll: true }` to upload the tree verbatim (no `node_modules`
+ * exclusion) — required for runnable artifacts such as MCP server payloads.
  */
 export async function uploadDirToSandbox(
   client: MicrosandboxClient,
   hostDir: string,
   sandboxDestDir: string,
   archiveLabel: string,
+  opts?: { includeAll?: boolean },
 ): Promise<void> {
-  const tarPath = await getSourceArchive(hostDir);
+  const tarPath = await getSourceArchive(hostDir, opts);
   const tarData = await readFile(tarPath);
   const sandboxTarPath = `/tmp/_${archiveLabel}.tar.gz`;
   await client.uploadBinaryFile(sandboxTarPath, tarData);

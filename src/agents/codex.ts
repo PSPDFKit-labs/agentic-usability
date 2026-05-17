@@ -217,7 +217,9 @@ export class CodexAdapter extends BaseAdapter {
       let args = server.args;
       if (server.hostDir) {
         const destDir = `${mcpRoot}/${server.name}`;
-        await uploadDirToSandbox(client, server.hostDir, destDir, `mcp_${server.name}`);
+        // includeAll: an MCP server is a runnable artifact — it needs its
+        // node_modules, which the default source-archive exclusion strips.
+        await uploadDirToSandbox(client, server.hostDir, destDir, `mcp_${server.name}`, { includeAll: true });
         args = args.map((a) => a.split('${MCP_ROOT}').join(destDir));
       }
       tomlBlocks.push(renderMcpServerToml(server.name, server.command, args));

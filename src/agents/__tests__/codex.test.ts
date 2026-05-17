@@ -248,7 +248,7 @@ describe('CodexAdapter', () => {
       ]);
 
       expect(mockUploadDir).toHaveBeenCalledWith(
-        client, '/tmp/mine', '/root/.codex/.mcp-servers/mine', 'mcp_mine',
+        client, '/tmp/mine', '/root/.codex/.mcp-servers/mine', 'mcp_mine', { includeAll: true },
       );
       expect(mockUploadDir).toHaveBeenCalledTimes(1);
 

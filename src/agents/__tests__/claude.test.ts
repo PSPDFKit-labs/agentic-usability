@@ -204,8 +204,8 @@ describe('ClaudeAdapter', () => {
         { name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
       ]);
 
-      // Sourced server is uploaded outside /workspace.
-      expect(mockUploadDir).toHaveBeenCalledWith(client, '/tmp/mine', '/root/.mcp-servers/mine', 'mcp_mine');
+      // Sourced server is uploaded outside /workspace, verbatim (incl. node_modules).
+      expect(mockUploadDir).toHaveBeenCalledWith(client, '/tmp/mine', '/root/.mcp-servers/mine', 'mcp_mine', { includeAll: true });
       // Sourceless server is not uploaded.
       expect(mockUploadDir).toHaveBeenCalledTimes(1);
 
