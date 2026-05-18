@@ -224,14 +224,38 @@ describe('loadConfig', () => {
     await expect(loadConfig('/fake/config.json')).rejects.toThrow(/valid URL/);
   });
   
-  it('accepts secret pointing at $CLAUDE_CODE_OAUTH_TOKEN (auth mode resolved later by value prefix)', async () => {
-    const config = {
-      ...validConfig,
-      agents: { judge: { command: 'claude', secret: { value: '$CLAUDE_CODE_OAUTH_TOKEN' } } },
-    };
-    mockReadFile.mockResolvedValue(JSON.stringify(config));
-    const result = await loadConfig('/fake/config.json');
-    expect(result.agents?.judge?.secret?.value).toBe('$CLAUDE_CODE_OAUTH_TOKEN');
+  it('sets envVar to CLAUDE_CODE_OAUTH_TOKEN when resolved value has OAuth prefix', async () => {
+    const origOAuth = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-fake-test-token';
+    try {
+      const config = {
+        ...validConfig,
+        agents: { judge: { command: 'claude', secret: { value: '$CLAUDE_CODE_OAUTH_TOKEN' } } },
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      const result = await loadConfig('/fake/config.json');
+      expect(result.agents?.judge?.secret?.envVar).toBe('CLAUDE_CODE_OAUTH_TOKEN');
+    } finally {
+      if (origOAuth === undefined) delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+      else process.env.CLAUDE_CODE_OAUTH_TOKEN = origOAuth;
+    }
+  });
+
+  it('keeps envVar as ANTHROPIC_API_KEY when resolved value has API key prefix', async () => {
+    const origKey = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-api03-fake-test-key';
+    try {
+      const config = {
+        ...validConfig,
+        agents: { judge: { command: 'claude', secret: { value: '$ANTHROPIC_API_KEY' } } },
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      const result = await loadConfig('/fake/config.json');
+      expect(result.agents?.judge?.secret?.envVar).toBe('ANTHROPIC_API_KEY');
+    } finally {
+      if (origKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = origKey;
+    }
   });
 
   describe('executorPlugins', () => {

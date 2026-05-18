@@ -16,6 +16,10 @@ export interface AgentAdapter {
   readonly defaultBaseUrl: string | null;
   /** Extra hosts the agent needs to reach with the secret (e.g. telemetry endpoints). */
   readonly additionalAllowHosts: string[];
+  /** Env var name for an alternative auth mode (e.g. OAuth token). Only set by adapters that support it. */
+  readonly oauthEnvVar?: string;
+  /** Value prefix that triggers the alternative auth mode (e.g. "sk-ant-oat"). */
+  readonly oauthValuePrefix?: string;
 
   /** Full lifecycle: spawn with schema args → envelope unwrap → retry on parse failure → return clean result. */
   run(prompt: string, schema: object, workDir: string, options?: {
