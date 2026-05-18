@@ -6,6 +6,7 @@ import type {
 } from 'microsandbox';
 import type { SandboxConfig, SecretConfig, AgentSecretConfig } from '../types.js';
 import type { AgentAdapter } from '../agents/adapter.js';
+import { resolveSecretValue } from '../core/env.js';
 
 export interface CommandResult {
   stdout: string;
@@ -23,7 +24,7 @@ export function buildSecrets(
   if (!secrets) return [];
   const entries: SecretEntry[] = [];
   for (const [envVar, cfg] of Object.entries(secrets)) {
-    const value = resolveValue(cfg.value, envVar);
+    const value = resolveSecretValue(cfg.value, envVar);
     entries.push(
       Secret.env(envVar, {
         value,
@@ -45,33 +46,17 @@ export function resolveEnv(
   if (!env) return {};
   const resolved: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
-    resolved[key] = resolveValue(value, key);
+    resolved[key] = resolveSecretValue(value, key);
   }
   return resolved;
 }
 
-// Claude-specific credential format. Subscription OAuth tokens are prefixed
-// `sk-ant-oat` followed by a version (e.g. `sk-ant-oat01-…`), issued by
-// `claude setup-token`. API keys use `sk-ant-api`. The framework picks the
-// env-var slot the placeholder lands under by inspecting the resolved
-// value's prefix — no separate config flag needed.
-const OAUTH_TOKEN_PREFIX = 'sk-ant-oat';
-const OAUTH_TOKEN_ENV_VAR = 'CLAUDE_CODE_OAUTH_TOKEN';
-
 /**
  * Wire an agent's secret into the sandbox `secrets` and `env`.
  *
- * Both auth modes (API key and Claude Code subscription OAuth) go through
- * microsandbox `Secret.env()` TLS substitution — the cleartext value never
- * enters the VM. Inside the sandbox the env var contains the
- * `$MSB_<env-var-name>` placeholder; microsandbox swaps it for the real value
- * on outbound TLS to the allowed host only.
- *
- * The resolved value's prefix picks which env var name carries the placeholder:
- * - `sk-ant-oat…` (Claude Code subscription OAuth, issued by `claude setup-token`)
- *   → `CLAUDE_CODE_OAUTH_TOKEN`
- * - anything else (API keys for known agents, custom-agent secrets)
- *   → `secret.envVar` (= `ANTHROPIC_API_KEY` for claude, etc.)
+ * The auth mode (which env var to use) is already decided by config validation
+ * in `core/config.ts` — this function just injects whatever `secret.envVar`
+ * says via microsandbox `Secret.env()` TLS substitution.
  *
  * Mutates `secrets` and `env` in place.
  */
@@ -84,34 +69,16 @@ export function applyAgentAuth(
   if (!secret.envVar || !secret.baseUrl) {
     throw new Error('Agent secret must have envVar and baseUrl set (should be filled by config validation)');
   }
-  const value = resolveValue(secret.value, secret.envVar);
-
-  const envVar = value.startsWith(OAUTH_TOKEN_PREFIX)
-    ? OAUTH_TOKEN_ENV_VAR
-    : secret.envVar;
+  const value = resolveSecretValue(secret.value, secret.envVar);
 
   const hostname = new URL(secret.baseUrl).hostname;
   const allowHosts = [hostname, ...adapter.additionalAllowHosts];
-  secrets.push(Secret.env(envVar, { value, allowHosts }));
+  secrets.push(Secret.env(secret.envVar, { value, allowHosts }));
 
   const baseUrlVar = secret.baseUrlEnvVar ?? adapter.baseUrlEnvVar;
   if (baseUrlVar) {
     env[baseUrlVar] = secret.baseUrl;
   }
-}
-
-function resolveValue(value: string, envVar: string): string {
-  if (value.startsWith('$')) {
-    const hostVar = value.slice(1);
-    const hostValue = process.env[hostVar];
-    if (hostValue === undefined) {
-      throw new Error(
-        `Environment variable '${hostVar}' referenced in sandbox config for ${envVar} is not set on the host`,
-      );
-    }
-    return hostValue;
-  }
-  return value;
 }
 
 export class MicrosandboxClient {

@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { Config, AgentConfig } from '../types.js';
 import { createAdapter } from '../agents/adapter.js';
+import { resolveSecretValue } from './env.js';
 
 export async function loadConfig(configPath: string): Promise<Config> {
   let raw: string;
@@ -187,9 +188,7 @@ export function validateConfig(data: unknown, configPath?: string): Config {
       const isSandboxRole = SANDBOX_ROLES.includes(role);
 
       if (isSandboxRole) {
-        // Sandbox agents (executor/judge) require secret. Auth mode (API key vs Claude Code
-        // subscription OAuth token) is auto-detected from the resolved value's prefix at
-        // sandbox-create time.
+        // Sandbox agents (executor/judge) require secret.
         if (!agent.secret || typeof agent.secret !== 'object' || Array.isArray(agent.secret)) {
           throw new Error(`agents.${role} requires a secret with at least { value } for secure sandbox execution`);
         }
@@ -204,6 +203,23 @@ export function validateConfig(data: unknown, configPath?: string): Config {
           if (!secret.envVar) secret.envVar = adapter.defaultEnvVar;
           if (!secret.baseUrl) secret.baseUrl = adapter.defaultBaseUrl;
           if (!secret.baseUrlEnvVar) secret.baseUrlEnvVar = adapter.baseUrlEnvVar;
+
+          // Resolve auth mode from the credential's value prefix.
+          // E.g. Claude OAuth tokens (sk-ant-oat…) switch envVar to CLAUDE_CODE_OAUTH_TOKEN.
+          // If the env var isn't set yet (e.g. during config validation only),
+          // skip — the default envVar stays and resolution will happen at runtime.
+          if (adapter.oauthValuePrefix && adapter.oauthEnvVar) {
+            try {
+              const resolved = resolveSecretValue(secret.value as string, secret.envVar as string);
+              if (resolved.startsWith(adapter.oauthValuePrefix)) {
+                secret.envVar = adapter.oauthEnvVar;
+              }
+            } catch {
+              // Env var not set at config-load time — keep the default envVar.
+              // If secret.value is a $VAR reference, applyAgentAuth will resolve
+              // it again at sandbox-create time and fail loudly if still unset.
+            }
+          }
         } else {
           // Custom agents must specify envVar and baseUrl
           if (!secret.envVar || typeof secret.envVar !== 'string') {
