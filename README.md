@@ -364,6 +364,28 @@ Generator and insights agents run locally and do not require a secret.
 | `baseUrl` | API base URL. Hostname is used for network allowlisting. Auto-detected for known agents. |
 | `baseUrlEnvVar` | Override the base URL env var name. Auto-detected for known agents. |
 
+#### Claude Code subscription auth (avoid API billing)
+
+If you have a Claude Pro / Max / Team / Enterprise subscription, sandbox agents using `command: "claude"` can authenticate via your subscription instead of paying per-token API charges. Point `secret.value` at the Claude Code OAuth token instead of an API key:
+
+```json
+{
+  "agents": {
+    "executor": { "command": "claude", "secret": { "value": "$CLAUDE_CODE_OAUTH_TOKEN" } },
+    "judge":    { "command": "claude", "secret": { "value": "$CLAUDE_CODE_OAUTH_TOKEN" } }
+  }
+}
+```
+
+One-time host setup:
+
+```bash
+claude setup-token             # interactive — generates a long-lived OAuth token
+export CLAUDE_CODE_OAUTH_TOKEN='<token>'   # before running the eval
+```
+
+How it works: the runtime sniffs the resolved value's prefix at sandbox-create time. Anthropic OAuth tokens start with `sk-ant-oat` (e.g. `sk-ant-oat01-…`); API keys start with `sk-ant-api` (e.g. `sk-ant-api03-…`). Both paths flow through microsandbox's `Secret.env()` TLS substitution — cleartext never enters the VM; the env var inside the sandbox contains a placeholder, and microsandbox swaps it for the real value on outbound TLS to `api.anthropic.com` only. The prefix only decides which env var name (`CLAUDE_CODE_OAUTH_TOKEN` vs `ANTHROPIC_API_KEY`) carries the placeholder. Subscription concurrent-session caps apply.
+
 #### Custom agents
 
 Custom agents support additional args fields with `{prompt}` and `{workDir}` placeholders:

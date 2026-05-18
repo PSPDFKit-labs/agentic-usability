@@ -223,6 +223,16 @@ describe('loadConfig', () => {
     mockReadFile.mockResolvedValue(JSON.stringify(config));
     await expect(loadConfig('/fake/config.json')).rejects.toThrow(/valid URL/);
   });
+  
+  it('accepts secret pointing at $CLAUDE_CODE_OAUTH_TOKEN (auth mode resolved later by value prefix)', async () => {
+    const config = {
+      ...validConfig,
+      agents: { judge: { command: 'claude', secret: { value: '$CLAUDE_CODE_OAUTH_TOKEN' } } },
+    };
+    mockReadFile.mockResolvedValue(JSON.stringify(config));
+    const result = await loadConfig('/fake/config.json');
+    expect(result.agents?.judge?.secret?.value).toBe('$CLAUDE_CODE_OAUTH_TOKEN');
+  });
 
   describe('executorPlugins', () => {
     it('accepts a single local plugin', async () => {

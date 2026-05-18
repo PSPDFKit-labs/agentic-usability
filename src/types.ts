@@ -109,9 +109,28 @@ export interface AgentConfig {
   logPattern?: string;
 }
 
-/** Agent config for sandboxed execution (executor/judge). Secret is required for microsandbox TLS injection. */
+/** Agent config for sandboxed execution (executor/judge).
+ *
+ * Both auth modes flow through microsandbox `Secret.env()` TLS substitution —
+ * the cleartext credential never enters the VM. Inside the sandbox the env
+ * var contains a `$MSB_<name>` placeholder; microsandbox swaps it for the
+ * real value on outbound TLS to the allowed host only.
+ *
+ * The resolved `secret.value`'s prefix picks which env var name carries the
+ * placeholder:
+ *
+ * - `sk-ant-oat…` (Claude Code subscription OAuth token, issued by
+ *   `claude setup-token`, requires Pro / Max / Team / Enterprise) →
+ *   `CLAUDE_CODE_OAUTH_TOKEN`. Avoids per-token API billing.
+ * - anything else (API keys for known agents, custom-agent secrets) →
+ *   `secret.envVar` (= `ANTHROPIC_API_KEY` for claude, etc.).
+ *
+ * Point `secret.value` at the host env var that holds the credential —
+ * `$ANTHROPIC_API_KEY` for the API-key path, `$CLAUDE_CODE_OAUTH_TOKEN` for
+ * the subscription path.
+ */
 export interface SandboxAgentConfig extends AgentConfig {
-  /** Agent's API secret and base URL. Flows to microsandbox TLS injection, sandbox env, and judge lockdown allowlist. */
+  /** Agent's secret and base URL. Auth mode is determined from the resolved value's prefix. */
   secret: AgentSecretConfig;
 }
 

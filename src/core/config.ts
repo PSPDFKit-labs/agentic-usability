@@ -187,7 +187,9 @@ export function validateConfig(data: unknown, configPath?: string): Config {
       const isSandboxRole = SANDBOX_ROLES.includes(role);
 
       if (isSandboxRole) {
-        // Sandbox agents (executor/judge) require secret
+        // Sandbox agents (executor/judge) require secret. Auth mode (API key vs Claude Code
+        // subscription OAuth token) is auto-detected from the resolved value's prefix at
+        // sandbox-create time.
         if (!agent.secret || typeof agent.secret !== 'object' || Array.isArray(agent.secret)) {
           throw new Error(`agents.${role} requires a secret with at least { value } for secure sandbox execution`);
         }

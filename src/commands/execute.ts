@@ -3,7 +3,7 @@ import ora from 'ora';
 import { loadDotenv } from '../core/env.js';
 import { loadConfig } from '../core/config.js';
 import { loadTestSuite, saveResult, saveBinaryResult, formatElapsed } from '../core/suite-io.js';
-import { MicrosandboxClient, buildSecrets, buildAgentSecret, resolveEnv, type CommandResult } from '../sandbox/microsandbox.js';
+import { MicrosandboxClient, buildSecrets, applyAgentAuth, resolveEnv, type CommandResult } from '../sandbox/microsandbox.js';
 import { createEgressLogger } from '../sandbox/egress-logger.js';
 import { scaffoldWorkspace, resolveExecutorPlugins } from '../sandbox/scaffolding.js';
 import { WorkerPool } from '../sandbox/worker-pool.js';
@@ -158,15 +158,10 @@ export async function executeTestCase(
     const env = resolveEnv(config.sandbox?.env);
     const timeoutSecs = target.timeout ?? config.sandbox.defaultTimeout ?? 600;
 
-    // Merge agent secret into sandbox secrets and set base URL env var
     const executorConfig: SandboxAgentConfig = config.agents?.executor
       ?? { command: 'claude', secret: { value: '$ANTHROPIC_API_KEY' } };
     const execAdapter = createAdapter(executorConfig);
-    secrets.push(buildAgentSecret(executorConfig.secret, execAdapter.additionalAllowHosts));
-    const baseUrlVar = executorConfig.secret.baseUrlEnvVar ?? execAdapter.baseUrlEnvVar;
-    if (baseUrlVar && executorConfig.secret.baseUrl) {
-      env[baseUrlVar] = executorConfig.secret.baseUrl;
-    }
+    applyAgentAuth(executorConfig.secret, execAdapter, secrets, env);
 
     await client.create(
       sandboxName(testCase.id),
