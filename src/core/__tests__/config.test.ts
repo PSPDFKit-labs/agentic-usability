@@ -223,7 +223,7 @@ describe('loadConfig', () => {
     mockReadFile.mockResolvedValue(JSON.stringify(config));
     await expect(loadConfig('/fake/config.json')).rejects.toThrow(/valid URL/);
   });
-
+  
   it('accepts secret pointing at $CLAUDE_CODE_OAUTH_TOKEN (auth mode resolved later by value prefix)', async () => {
     const config = {
       ...validConfig,
@@ -232,5 +232,97 @@ describe('loadConfig', () => {
     mockReadFile.mockResolvedValue(JSON.stringify(config));
     const result = await loadConfig('/fake/config.json');
     expect(result.agents?.judge?.secret?.value).toBe('$CLAUDE_CODE_OAUTH_TOKEN');
+  });
+
+  describe('executorPlugins', () => {
+    it('accepts a single local plugin', async () => {
+      const config = {
+        ...validConfig,
+        executorPlugins: [{ type: 'local', name: 'my-plugin', path: '/tmp/my-plugin' }],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      const result = await loadConfig('/fake/config.json');
+      expect(result.executorPlugins).toHaveLength(1);
+      expect(result.executorPlugins?.[0]).toMatchObject({ type: 'local', name: 'my-plugin', path: '/tmp/my-plugin' });
+    });
+
+    it('accepts a git plugin with branch + subpath', async () => {
+      const config = {
+        ...validConfig,
+        executorPlugins: [{
+          type: 'git',
+          name: 'shared',
+          url: 'https://example.com/repo.git',
+          branch: 'main',
+          subpath: 'plugins/shared',
+        }],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      const result = await loadConfig('/fake/config.json');
+      expect(result.executorPlugins).toHaveLength(1);
+    });
+
+    it('throws when executorPlugins is not an array', async () => {
+      const config = { ...validConfig, executorPlugins: 'not-an-array' };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/executorPlugins must be an array/);
+    });
+
+    it('throws when a plugin entry is missing name', async () => {
+      const config = {
+        ...validConfig,
+        executorPlugins: [{ type: 'local', path: '/tmp/x' }],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/name/);
+    });
+
+    it('throws when a plugin entry has an invalid name with shell-special chars', async () => {
+      const config = {
+        ...validConfig,
+        executorPlugins: [{ type: 'local', name: 'bad name; rm -rf /', path: '/tmp/x' }],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/unsupported characters/);
+    });
+
+    it('throws when a plugin entry has an invalid type', async () => {
+      const config = {
+        ...validConfig,
+        executorPlugins: [{ type: 'url', name: 'a', url: 'https://x.com' }],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/invalid/i);
+    });
+
+    it('throws when a local plugin is missing path', async () => {
+      const config = {
+        ...validConfig,
+        executorPlugins: [{ type: 'local', name: 'a' }],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/path/);
+    });
+
+    it('throws when a git plugin is missing url', async () => {
+      const config = {
+        ...validConfig,
+        executorPlugins: [{ type: 'git', name: 'a' }],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/url/);
+    });
+
+    it('throws when two plugins share the same name', async () => {
+      const config = {
+        ...validConfig,
+        executorPlugins: [
+          { type: 'local', name: 'a', path: '/tmp/a' },
+          { type: 'local', name: 'a', path: '/tmp/b' },
+        ],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/duplicated/);
+    });
   });
 });

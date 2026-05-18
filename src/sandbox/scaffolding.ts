@@ -1,10 +1,10 @@
 import { readFile, readdir, stat as fsStat } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
-import { basename, join, relative } from 'node:path';
+import { basename, join, relative, resolve as resolvePath } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { MicrosandboxClient } from './microsandbox.js';
-import type { Config, TestCase, SourceConfig } from '../types.js';
-import { resolveSources } from '../core/source-resolver.js';
+import type { Config, TestCase, SourceConfig, ExecutorPlugin, ResolvedExecutorPlugin } from '../types.js';
+import { resolveSources, resolveSource } from '../core/source-resolver.js';
 
 /** Directories excluded from source uploads — these are large and not useful for evaluation. */
 const EXCLUDED_DIRS = [
@@ -82,7 +82,7 @@ async function readDirRecursive(
  * Create a tar.gz archive of a directory, excluding common bloat dirs.
  * Archives are cached on disk so concurrent sandboxes reuse the same tarball.
  */
-async function getSourceArchive(srcPath: string): Promise<string> {
+export async function getSourceArchive(srcPath: string): Promise<string> {
   const cached = sourceArchiveCache.get(srcPath);
   if (cached) {
     try {
@@ -113,6 +113,35 @@ async function getSourceArchive(srcPath: string): Promise<string> {
 
   sourceArchiveCache.set(srcPath, tarPath);
   return tarPath;
+}
+
+/**
+ * Tar a host directory, upload the archive to the sandbox, and extract it
+ * into `sandboxDestDir`. Used for any "copy this directory tree to a known
+ * path inside the VM" operation (source uploads, plugin installs).
+ *
+ * `archiveLabel` should be a slug-safe identifier (used only to name the
+ * temporary tarball path inside the sandbox).
+ */
+export async function uploadDirToSandbox(
+  client: MicrosandboxClient,
+  hostDir: string,
+  sandboxDestDir: string,
+  archiveLabel: string,
+): Promise<void> {
+  const tarPath = await getSourceArchive(hostDir);
+  const tarData = await readFile(tarPath);
+  const sandboxTarPath = `/tmp/_${archiveLabel}.tar.gz`;
+  await client.uploadBinaryFile(sandboxTarPath, tarData);
+  const result = await client.runCommand(
+    `mkdir -p '${sandboxDestDir}' && tar xzf '${sandboxTarPath}' -C '${sandboxDestDir}' && rm -f '${sandboxTarPath}'`,
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `Failed to extract '${hostDir}' into sandbox at '${sandboxDestDir}': ` +
+      `${result.stderr || result.stdout}`,
+    );
+  }
 }
 
 /**
@@ -238,15 +267,37 @@ export async function uploadSources(
       const targetPrefix = `/workspace/sources/${dirName}/`;
       sandboxDirs.push(targetPrefix);
 
-      const tarPath = await getSourceArchive(srcPath);
-      const tarData = await readFile(tarPath);
-      const sandboxTarPath = `/tmp/_sources_${dirName}.tar.gz`;
-      await client.uploadBinaryFile(sandboxTarPath, tarData);
-      await client.runCommand(
-        `mkdir -p '${targetPrefix}' && tar xzf '${sandboxTarPath}' -C '${targetPrefix}' && rm -f '${sandboxTarPath}'`,
-      );
+      await uploadDirToSandbox(client, srcPath, targetPrefix, `sources_${dirName}`);
     }
   }
 
   return sandboxDirs;
+}
+
+/**
+ * Resolve `config.executorPlugins` to host-side directories. Reuses the
+ * existing source-resolver for git clones (cached under `cacheRepos`) so
+ * repeat runs don't re-clone the same plugin source.
+ *
+ * Returns an empty array when no plugins are configured.
+ */
+export async function resolveExecutorPlugins(
+  plugins: ExecutorPlugin[] | undefined,
+  cacheRepos: string,
+): Promise<ResolvedExecutorPlugin[]> {
+  if (!plugins || plugins.length === 0) return [];
+
+  return Promise.all(plugins.map(async (plugin) => {
+    const source: SourceConfig = plugin.type === 'local'
+      ? { type: 'local', path: plugin.path }
+      : {
+          type: 'git',
+          url: plugin.url,
+          branch: plugin.branch,
+          subpath: plugin.subpath,
+          sparse: plugin.sparse,
+        };
+    const hostDir = await resolveSource(source, { reposDir: cacheRepos });
+    return { name: plugin.name, hostDir: resolvePath(hostDir) };
+  }));
 }

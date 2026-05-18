@@ -24,6 +24,47 @@ export async function loadConfig(configPath: string): Promise<Config> {
 
 const VALID_SOURCE_TYPES = ['local', 'git', 'url', 'package'];
 
+const VALID_PLUGIN_TYPES = ['local', 'git'];
+
+function validateExecutorPluginEntry(plugin: Record<string, unknown>, prefix: string): void {
+  if (!plugin || typeof plugin !== 'object' || Array.isArray(plugin)) {
+    throw new Error(`${prefix} must be an object`);
+  }
+
+  if (!plugin.name || typeof plugin.name !== 'string') {
+    throw new Error(`${prefix} requires a non-empty 'name' string`);
+  }
+  if (!/^[a-zA-Z0-9._-]+$/.test(plugin.name)) {
+    throw new Error(
+      `${prefix}.name '${plugin.name}' contains unsupported characters. ` +
+      `Use only letters, digits, '.', '_', or '-'.`,
+    );
+  }
+
+  if (!plugin.type || typeof plugin.type !== 'string') {
+    throw new Error(`${prefix} missing required field: type`);
+  }
+
+  if (!VALID_PLUGIN_TYPES.includes(plugin.type)) {
+    throw new Error(
+      `${prefix}.type '${plugin.type}' is invalid. Must be one of: ${VALID_PLUGIN_TYPES.map(t => `'${t}'`).join(', ')}`
+    );
+  }
+
+  switch (plugin.type) {
+    case 'local':
+      if (!plugin.path || typeof plugin.path !== 'string') {
+        throw new Error(`${prefix} type 'local' requires path to be set`);
+      }
+      break;
+    case 'git':
+      if (!plugin.url || typeof plugin.url !== 'string') {
+        throw new Error(`${prefix} type 'git' requires url to be set`);
+      }
+      break;
+  }
+}
+
 function validateSourceEntry(source: Record<string, unknown>, prefix: string): void {
   if (!source || typeof source !== 'object' || Array.isArray(source)) {
     throw new Error(`${prefix} must be an object`);
@@ -86,6 +127,23 @@ export function validateConfig(data: unknown, configPath?: string): Config {
     }
     for (let i = 0; i < obj.publicInfo.length; i++) {
       validateSourceEntry(obj.publicInfo[i] as Record<string, unknown>, `publicInfo[${i}]`);
+    }
+  }
+
+  // Validate executorPlugins (optional)
+  if (obj.executorPlugins !== undefined) {
+    if (!Array.isArray(obj.executorPlugins)) {
+      throw new Error('Config executorPlugins must be an array');
+    }
+    const seenNames = new Set<string>();
+    for (let i = 0; i < obj.executorPlugins.length; i++) {
+      const entry = obj.executorPlugins[i] as Record<string, unknown>;
+      validateExecutorPluginEntry(entry, `executorPlugins[${i}]`);
+      const name = entry.name as string;
+      if (seenNames.has(name)) {
+        throw new Error(`executorPlugins[${i}].name '${name}' is duplicated`);
+      }
+      seenNames.add(name);
     }
   }
 

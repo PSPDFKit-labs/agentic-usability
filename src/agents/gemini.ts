@@ -1,5 +1,8 @@
-import type { AgentConfig, AgentResult } from '../types.js';
+import { access } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { AgentConfig, AgentResult, ResolvedExecutorPlugin } from '../types.js';
 import type { MicrosandboxClient } from '../sandbox/microsandbox.js';
+import { uploadDirToSandbox } from '../sandbox/scaffolding.js';
 import { BaseAdapter } from './base.js';
 
 export class GeminiAdapter extends BaseAdapter {
@@ -38,6 +41,53 @@ export class GeminiAdapter extends BaseAdapter {
     ];
 
     return this.spawn(args, workDir, env, undefined, prompt);
+  }
+
+  /**
+   * Install plugin directories into the Gemini CLI's extensions folder.
+   *
+   * Gemini's extension model expects each extension dir to contain a
+   * `gemini-extension.json` manifest at its root (see Gemini CLI docs:
+   * Extensions reference). Auto-discovery loads extensions from
+   * `${GEMINI_HOME:-$HOME/.gemini}/extensions/<name>/`.
+   *
+   * For each plugin we look for `gemini-extension.json` at the plugin root.
+   * If present, the entire plugin directory is treated as a Gemini extension
+   * and laid out at the expected location. If absent, we throw — the plugin
+   * has nothing the Gemini CLI knows how to load, and an A/B comparison that
+   * silently no-ops would be misleading.
+   */
+  async installPluginsInSandbox(
+    client: MicrosandboxClient,
+    plugins: ResolvedExecutorPlugin[],
+  ): Promise<void> {
+    if (plugins.length === 0) return;
+
+    await Promise.all(plugins.map(async (plugin) => {
+      const manifestPath = join(plugin.hostDir, 'gemini-extension.json');
+      try {
+        await access(manifestPath);
+      } catch {
+        throw new Error(
+          `Plugin '${plugin.name}' has no Gemini extension manifest at ${manifestPath}. ` +
+          `Gemini CLI loads extensions from a 'gemini-extension.json' file at the extension root. ` +
+          `Add one to the plugin directory or remove '${plugin.name}' from executorPlugins when running the Gemini executor.`,
+        );
+      }
+    }));
+
+    const homeResult = await client.runCommand('printf %s "${HOME:-/root}"');
+    const home = homeResult.stdout.trim() || '/root';
+    const extensionsDir = `${home}/.gemini/extensions`;
+
+    await Promise.all(plugins.map((plugin) =>
+      uploadDirToSandbox(
+        client,
+        plugin.hostDir,
+        `${extensionsDir}/${plugin.name}`,
+        `gemini_ext_${plugin.name}`,
+      ),
+    ));
   }
 
   async extractLog(client: MicrosandboxClient): Promise<string | null> {

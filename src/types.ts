@@ -148,6 +148,41 @@ export interface WorkspaceConfig {
   setupScript?: string;
 }
 
+/**
+ * Source of a plugin directory tree to install into the executor's agent CLI.
+ * Resolved to a local filesystem path by the source resolver; the adapter then
+ * lays the tree out wherever its CLI expects to find plugins.
+ */
+export interface LocalExecutorPlugin {
+  type: 'local';
+  /** Plugin slug — used as the directory name under the CLI's plugins dir. */
+  name: string;
+  /** Absolute or relative path to a directory containing the adapter-specific plugin manifest. */
+  path: string;
+}
+
+export interface GitExecutorPlugin {
+  type: 'git';
+  name: string;
+  url: string;
+  branch?: string;
+  /** Path within the cloned repo that contains the plugin manifest. */
+  subpath?: string;
+  sparse?: string[];
+}
+
+export type ExecutorPlugin = LocalExecutorPlugin | GitExecutorPlugin;
+
+/**
+ * An ExecutorPlugin after host-side resolution. The adapter receives this and
+ * decides how to install it inside the sandbox VM.
+ */
+export interface ResolvedExecutorPlugin {
+  name: string;
+  /** Absolute path on the host to the plugin directory. */
+  hostDir: string;
+}
+
 export interface SecretConfig {
   /** Raw value or "$ENV_VAR" reference resolved from host environment. */
   value: string;
@@ -180,6 +215,14 @@ export interface Config {
   };
   targets: TargetConfig[];
   workspace?: WorkspaceConfig;
+  /**
+   * Plugin directories to install into the executor agent's CLI inside the sandbox VM.
+   * Each adapter knows where its CLI expects plugins on disk (Claude: `~/.claude/plugins/`,
+   * Codex: `~/.codex/plugins/`, Gemini: not yet supported in non-interactive mode).
+   * Plugins are scoped to the executor — the judge sandbox is intentionally not seeded
+   * with these so judge scoring stays independent of the executor's tooling.
+   */
+  executorPlugins?: ExecutorPlugin[];
   sandbox: SandboxConfig;
 }
 

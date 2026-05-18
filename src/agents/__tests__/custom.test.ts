@@ -182,4 +182,18 @@ describe('CustomAdapter', () => {
     });
   });
 
+  describe('installPluginsInSandbox', () => {
+    it('is a no-op when given an empty plugin list', async () => {
+      const adapter = new CustomAdapter({ command: 'my-tool' });
+      await expect(adapter.installPluginsInSandbox({} as any, [])).resolves.toBeUndefined();
+    });
+
+    it('throws a clear error when given plugins (custom CLIs have no documented plugin layout)', async () => {
+      const adapter = new CustomAdapter({ command: 'my-tool' });
+      await expect(adapter.installPluginsInSandbox({} as any, [
+        { name: 'x', hostDir: '/tmp/x' },
+      ])).rejects.toThrow(/does not support executorPlugins/);
+    });
+  });
+
 });

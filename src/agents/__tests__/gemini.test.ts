@@ -1,15 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { access } from 'node:fs/promises';
 import { spawnAgent, spawnInteractive } from '../spawn.js';
+import { uploadDirToSandbox } from '../../sandbox/scaffolding.js';
 import { GeminiAdapter } from '../gemini.js';
 import { makeAgentResult } from '../../__tests__/helpers/fixtures.js';
+import { makeMockSandboxClient } from '../../__tests__/helpers/mock-sandbox-client.js';
 
 vi.mock('../spawn.js', () => ({
   spawnAgent: vi.fn(),
   spawnInteractive: vi.fn(),
 }));
 
+vi.mock('node:fs/promises', () => ({
+  access: vi.fn(),
+}));
+
+vi.mock('../../sandbox/scaffolding.js', () => ({
+  uploadDirToSandbox: vi.fn(),
+}));
+
 const mockSpawnAgent = vi.mocked(spawnAgent);
 const mockSpawnInteractive = vi.mocked(spawnInteractive);
+const mockAccess = vi.mocked(access);
+const mockUploadDir = vi.mocked(uploadDirToSandbox);
 
 describe('GeminiAdapter', () => {
   let adapter: GeminiAdapter;
@@ -102,6 +115,49 @@ describe('GeminiAdapter', () => {
   describe('installCommand', () => {
     it('returns npm install command for gemini-cli', () => {
       expect(adapter.installCommand).toBe('npm i -g @google/gemini-cli');
+    });
+  });
+
+  describe('installPluginsInSandbox', () => {
+    it('is a no-op when given an empty plugin list', async () => {
+      const client = makeMockSandboxClient();
+      await adapter.installPluginsInSandbox(client as any, []);
+      expect(client.runCommand).not.toHaveBeenCalled();
+    });
+
+    it('throws when a plugin has no gemini-extension.json manifest', async () => {
+      mockAccess.mockRejectedValueOnce(new Error('ENOENT'));
+      const client = makeMockSandboxClient();
+      await expect(adapter.installPluginsInSandbox(client as any, [
+        { name: 'noext', hostDir: '/tmp/noext' },
+      ])).rejects.toThrow(/gemini-extension\.json/);
+    });
+
+    it('extracts each manifest-bearing plugin into ~/.gemini/extensions', async () => {
+      mockAccess.mockResolvedValue(undefined);
+      const client = makeMockSandboxClient();
+      client.runCommand
+        .mockResolvedValueOnce({ stdout: '/root', stderr: '', exitCode: 0 })  // printf HOME
+        .mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });            // mkdir
+
+      await adapter.installPluginsInSandbox(client as any, [
+        { name: 'ext-a', hostDir: '/tmp/a' },
+        { name: 'ext-b', hostDir: '/tmp/b' },
+      ]);
+
+      expect(mockUploadDir).toHaveBeenCalledTimes(2);
+      expect(mockUploadDir).toHaveBeenCalledWith(
+        client,
+        '/tmp/a',
+        '/root/.gemini/extensions/ext-a',
+        'gemini_ext_ext-a',
+      );
+      expect(mockUploadDir).toHaveBeenCalledWith(
+        client,
+        '/tmp/b',
+        '/root/.gemini/extensions/ext-b',
+        'gemini_ext_ext-b',
+      );
     });
   });
 });

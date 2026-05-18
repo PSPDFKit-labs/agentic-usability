@@ -9,6 +9,7 @@
 | `agents` | `object` | No | Per-role agent configuration. |
 | `targets` | `TargetConfig[]` | **Yes** | Non-empty array. Docker images for sandboxed execution. |
 | `workspace` | `WorkspaceConfig` | No | Workspace template and setup. |
+| `executorPlugins` | `ExecutorPlugin[]` | No | Plugin directories installed into the executor's agent CLI inside the sandbox (Claude marketplace, Codex skills, Gemini extensions). Not installed in the judge sandbox — that's intentional, so the judge stays independent of the executor's tooling. |
 | `sandbox` | `SandboxConfig` | **Yes** | Must be an object (can be `{}`). Resource limits, secrets, env vars. |
 
 ## SourceConfig (discriminated union on `type`)
@@ -142,6 +143,49 @@ Custom agents (any command not in the table above) **must** provide `envVar` and
 | `template` | `string` | No — local directory to copy into sandbox workspace |
 | `setupScript` | `string` | No — path to script run during workspace setup |
 
+## ExecutorPlugin (discriminated union on `type`)
+
+A plugin tree installed into the executor's agent CLI. Use these to A/B test
+whether shipping skills/plugins to the executor improves judge scores. Plugins
+are installed **only** in the executor sandbox; the judge sandbox is kept
+plugin-free so its scoring is independent of the executor's tooling.
+
+Each entry has a `name` (slug — letters/digits/`.`/`_`/`-` only) plus the
+discriminator:
+
+### LocalExecutorPlugin (`type: "local"`)
+
+| Field | Type | Required |
+|-------|------|----------|
+| `type` | `"local"` | Yes |
+| `name` | `string` | Yes — plugin slug |
+| `path` | `string` | Yes — absolute or relative directory on the host |
+
+### GitExecutorPlugin (`type: "git"`)
+
+| Field | Type | Required |
+|-------|------|----------|
+| `type` | `"git"` | Yes |
+| `name` | `string` | Yes — plugin slug |
+| `url` | `string` | Yes — git repository URL |
+| `branch` | `string` | No |
+| `subpath` | `string` | No — path within the repo to the plugin dir |
+| `sparse` | `string[]` | No — sparse checkout paths |
+
+### Per-adapter expectations
+
+What an adapter requires inside the plugin directory:
+
+| Adapter | Required file(s) | Sandbox destination |
+|---|---|---|
+| `claude` | `.claude-plugin/plugin.json` at plugin root | Plugin dir extracted to `$HOME/.claude/plugins/<name>/`; loaded for each session via the `--plugin-dir <path>` CLI flag. |
+| `codex` | `.codex-plugin/plugin.json` at plugin root, and one or more `skills/<skill-name>/SKILL.md` files | Each `skills/<skill-name>/` dir extracted to `$CODEX_HOME/skills/<skill-name>/` (auto-discovered). |
+| `gemini` | `gemini-extension.json` at plugin root | Entire plugin dir extracted to `$HOME/.gemini/extensions/<name>/`. |
+| custom | — | Not supported. Adapter throws a clear error if `executorPlugins` is non-empty. |
+
+Each adapter fails fast at install time if its required file is missing — the
+A/B comparison won't silently no-op.
+
 ## Validation Rules
 
 1. Root must be a JSON object
@@ -153,6 +197,7 @@ Custom agents (any command not in the table above) **must** provide `envVar` and
 7. `agents.executor` and `agents.judge` must have `secret.value` (non-empty string)
 8. Custom agents must provide `envVar` and `baseUrl` in their secret
 9. `baseUrl` must be a parseable URL
+10. `executorPlugins`, if present, must be an array; each entry needs a `name` (slug-safe) and a valid `type` (`local` or `git`); names must be unique
 
 ## Minimal Examples
 
