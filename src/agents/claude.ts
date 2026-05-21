@@ -173,7 +173,11 @@ export class ClaudeAdapter extends BaseAdapter {
     if (servers.length === 0) return;
 
     const homeResult = await client.runCommand('printf %s "${HOME:-/root}"');
-    const home = homeResult.stdout.trim() || '/root';
+    // $HOME=/ slips past the ${HOME:-/root} shell fallback (it's set, just
+    // degenerate). Collapse repeated slashes so e.g. $HOME=/// also normalises,
+    // then treat a bare / as "no real home" and fall back to /root.
+    const normalizedHome = homeResult.stdout.trim().replace(/\/+/g, '/');
+    const home = !normalizedHome || normalizedHome === '/' ? '/root' : normalizedHome;
     const mcpRoot = `${home}/.mcp-servers`;
 
     const resolved = await uploadMcpServerSources(client, mcpRoot, servers);

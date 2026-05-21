@@ -209,7 +209,13 @@ export class CodexAdapter extends BaseAdapter {
     if (servers.length === 0) return;
 
     const homeResult = await client.runCommand('printf %s "${CODEX_HOME:-${HOME:-/root}/.codex}"');
-    const codexHome = homeResult.stdout.trim() || '/root/.codex';
+    // $HOME=/ slips past the inner ${HOME:-/root} shell fallback and produces
+    // "//.codex" (literal "/" + literal "/.codex"). Collapse repeated slashes
+    // and then treat / or /.codex as "no real home" and fall back to /root/.codex.
+    const normalized = homeResult.stdout.trim().replace(/\/+/g, '/');
+    const codexHome = !normalized || normalized === '/' || normalized === '/.codex'
+      ? '/root/.codex'
+      : normalized;
     const mcpRoot = `${codexHome}/.mcp-servers`;
 
     const resolved = await uploadMcpServerSources(client, mcpRoot, servers);

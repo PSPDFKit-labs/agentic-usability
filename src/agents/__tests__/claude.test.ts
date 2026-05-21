@@ -237,6 +237,27 @@ describe('ClaudeAdapter', () => {
       expect(cmd).not.toContain('--strict-mcp-config');
     });
 
+    it('falls back to /root when $HOME degenerates to /', async () => {
+      const client = makeMockSandboxClient();
+      // First runCommand call is the $HOME probe; later calls are the config write.
+      client.runCommand.mockImplementation(async (cmd: string) =>
+        cmd.includes('${HOME')
+          ? { stdout: '/', stderr: '', exitCode: 0 }
+          : { stdout: '', stderr: '', exitCode: 0 },
+      );
+      mockUploadMcpSources.mockResolvedValue([]);
+
+      await adapter.installMcpServersInSandbox(client as any, [
+        { kind: 'sourceless', name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
+
+      // Adapter should treat $HOME=/ as degenerate and use /root, not //.mcp-servers.
+      expect(mockUploadMcpSources).toHaveBeenCalledWith(client, '/root/.mcp-servers', expect.any(Array));
+      const cmd = adapter.sandboxCommand('go');
+      expect(cmd).toContain("--mcp-config '/root/.mcp-servers/mcp-config.json'");
+      expect(cmd).not.toContain('//.mcp-servers');
+    });
+
     it('sandboxCommand omits --mcp-config when no MCP servers were installed', () => {
       const fresh = new ClaudeAdapter({ command: 'claude' });
       expect(fresh.sandboxCommand('go')).not.toContain('--mcp-config');

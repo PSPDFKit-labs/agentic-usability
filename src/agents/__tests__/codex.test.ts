@@ -279,5 +279,29 @@ describe('CodexAdapter', () => {
       // Append, not clobber.
       expect(String(writeCall![0])).toContain('>>');
     });
+
+    it('falls back to /root/.codex when $HOME=/ leaks through as //.codex', async () => {
+      const client = makeMockSandboxClient();
+      // What `printf %s "${CODEX_HOME:-${HOME:-/root}/.codex}"` produces when
+      // $HOME=/ and $CODEX_HOME is unset: literal "/" + literal "/.codex".
+      client.runCommand.mockImplementation(async (cmd: string) =>
+        cmd.includes('CODEX_HOME')
+          ? { stdout: '//.codex', stderr: '', exitCode: 0 }
+          : { stdout: '', stderr: '', exitCode: 0 },
+      );
+      mockUploadMcpSources.mockResolvedValue([]);
+
+      await adapter.installMcpServersInSandbox(client as any, [
+        { kind: 'sourceless', name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
+
+      // Adapter should recognise /.codex as the $HOME=/ degenerate case and rewrite to /root/.codex.
+      expect(mockUploadMcpSources).toHaveBeenCalledWith(client, '/root/.codex/.mcp-servers', expect.any(Array));
+      // The config write should target /root/.codex/config.toml, not /.codex/config.toml.
+      const writeCall = client.runCommand.mock.calls.find((c: any[]) => String(c[0]).includes('config.toml'));
+      expect(writeCall).toBeDefined();
+      expect(String(writeCall![0])).toContain("'/root/.codex/config.toml'");
+      expect(String(writeCall![0])).not.toContain("'/.codex/config.toml'");
+    });
   });
 });
