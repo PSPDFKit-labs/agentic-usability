@@ -82,37 +82,29 @@ async function readDirRecursive(
 }
 
 /**
- * Create a tar.gz archive of a directory.
+ * Create a tar.gz archive of an SDK *source* directory. Common bloat dirs
+ * (`node_modules`, `.git`, build outputs, …) and large binaries are stripped
+ * because the target is code review, not runtime use. For runnable artifacts
+ * (e.g. MCP server payloads) see `uploadMcpServerPayload` in `./mcp.ts`, which
+ * archives the tree verbatim instead.
  *
- * By default, common bloat dirs (`node_modules`, `.git`, build outputs, …) are
- * excluded — correct for SDK *source* uploads. Pass `{ includeAll: true }` to
- * archive the tree verbatim: required for runnable artifacts like MCP server
- * payloads, which need their `node_modules` to actually start.
- *
- * Archives are cached on disk so concurrent sandboxes reuse the same tarball;
- * the cache key includes the `includeAll` flag so source/full archives of the
- * same path don't collide.
+ * Archives are cached on disk so concurrent sandboxes reuse the same tarball.
  */
-export async function getSourceArchive(
-  srcPath: string,
-  opts?: { includeAll?: boolean },
-): Promise<string> {
-  const includeAll = opts?.includeAll ?? false;
-  const cacheKey = `${srcPath}::${includeAll ? 'all' : 'src'}`;
-  const cached = sourceArchiveCache.get(cacheKey);
+export async function getSourceArchive(srcPath: string): Promise<string> {
+  const cached = sourceArchiveCache.get(srcPath);
   if (cached) {
     try {
       await fsStat(cached);
       return cached;
     } catch {
-      sourceArchiveCache.delete(cacheKey);
+      sourceArchiveCache.delete(srcPath);
     }
   }
 
   const dirName = basename(srcPath);
   const tarPath = join(tmpdir(), `agentic-sources-${dirName}-${Date.now()}.tar.gz`);
 
-  const excludeArgs = includeAll ? [] : [
+  const excludeArgs = [
     ...EXCLUDED_DIRS.flatMap((d) => ['--exclude', d]),
     ...EXCLUDED_EXTENSIONS.flatMap((ext) => ['--exclude', ext]),
   ];
@@ -127,29 +119,26 @@ export async function getSourceArchive(
     });
   });
 
-  sourceArchiveCache.set(cacheKey, tarPath);
+  sourceArchiveCache.set(srcPath, tarPath);
   return tarPath;
 }
 
 /**
- * Tar a host directory, upload the archive to the sandbox, and extract it
- * into `sandboxDestDir`. Used for any "copy this directory tree to a known
- * path inside the VM" operation (source uploads, plugin installs).
+ * Tar an SDK *source* directory on the host, upload the archive, and extract
+ * it into `sandboxDestDir`. Used for source uploads and plugin installs —
+ * anything whose target is code review rather than runtime execution. For
+ * runnable artifacts see `uploadMcpServerPayload` in `./mcp.ts`.
  *
  * `archiveLabel` should be a slug-safe identifier (used only to name the
  * temporary tarball path inside the sandbox).
- *
- * Pass `{ includeAll: true }` to upload the tree verbatim (no `node_modules`
- * exclusion) — required for runnable artifacts such as MCP server payloads.
  */
 export async function uploadDirToSandbox(
   client: MicrosandboxClient,
   hostDir: string,
   sandboxDestDir: string,
   archiveLabel: string,
-  opts?: { includeAll?: boolean },
 ): Promise<void> {
-  const tarPath = await getSourceArchive(hostDir, opts);
+  const tarPath = await getSourceArchive(hostDir);
   const tarData = await readFile(tarPath);
   const sandboxTarPath = `/tmp/_${archiveLabel}.tar.gz`;
   await client.uploadBinaryFile(sandboxTarPath, tarData);

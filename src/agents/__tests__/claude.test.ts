@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { access } from 'node:fs/promises';
 import { spawnAgent, spawnInteractive } from '../spawn.js';
 import { uploadDirToSandbox } from '../../sandbox/scaffolding.js';
+import { uploadMcpServerSources } from '../../sandbox/mcp.js';
 import { ClaudeAdapter } from '../claude.js';
 import { makeAgentResult } from '../../__tests__/helpers/fixtures.js';
 import { makeMockSandboxClient } from '../../__tests__/helpers/mock-sandbox-client.js';
@@ -19,10 +20,15 @@ vi.mock('../../sandbox/scaffolding.js', () => ({
   uploadDirToSandbox: vi.fn(),
 }));
 
+vi.mock('../../sandbox/mcp.js', () => ({
+  uploadMcpServerSources: vi.fn(),
+}));
+
 const mockSpawnAgent = vi.mocked(spawnAgent);
 const mockSpawnInteractive = vi.mocked(spawnInteractive);
 const mockAccess = vi.mocked(access);
 const mockUploadDir = vi.mocked(uploadDirToSandbox);
+const mockUploadMcpSources = vi.mocked(uploadMcpServerSources);
 
 describe('ClaudeAdapter', () => {
   let adapter: ClaudeAdapter;
@@ -195,26 +201,34 @@ describe('ClaudeAdapter', () => {
       expect(client.runCommand).not.toHaveBeenCalled();
     });
 
-    it('uploads sourced servers, substitutes ${MCP_ROOT}, and writes mcp-config.json', async () => {
+    it('delegates uploads to uploadMcpServerSources and renders its result into mcp-config.json', async () => {
       const client = makeMockSandboxClient();
       client.runCommand.mockResolvedValue({ stdout: '/root', stderr: '', exitCode: 0 });
+      mockUploadMcpSources.mockResolvedValue([
+        { name: 'mine', command: 'node', args: ['/root/.mcp-servers/mine/server.js', '--flag'] },
+        { name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
 
       await adapter.installMcpServersInSandbox(client as any, [
         { kind: 'sourced', name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js', '--flag'], hostDir: '/tmp/mine' },
         { kind: 'sourceless', name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
       ]);
 
-      // Sourced server is uploaded outside /workspace, verbatim (incl. node_modules).
-      expect(mockUploadDir).toHaveBeenCalledWith(client, '/tmp/mine', '/root/.mcp-servers/mine', 'mcp_mine', { includeAll: true });
-      // Sourceless server is not uploaded.
-      expect(mockUploadDir).toHaveBeenCalledTimes(1);
+      // Adapter passes the right mcpRoot + server list to the dedicated MCP upload helper.
+      expect(mockUploadMcpSources).toHaveBeenCalledTimes(1);
+      expect(mockUploadMcpSources).toHaveBeenCalledWith(client, '/root/.mcp-servers', [
+        { kind: 'sourced', name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js', '--flag'], hostDir: '/tmp/mine' },
+        { kind: 'sourceless', name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
+      // Source-only uploads (uploadDirToSandbox) are not used for MCP payloads.
+      expect(mockUploadDir).not.toHaveBeenCalled();
 
-      // The base64-decoded MCP config JSON should reflect the substitution.
+      // The base64-decoded MCP config JSON reflects the resolved args returned by the helper.
       const writeCall = client.runCommand.mock.calls.find((c: any[]) => String(c[0]).includes('base64 -d'));
       expect(writeCall).toBeDefined();
       const b64 = String(writeCall![0]).match(/printf %s '([A-Za-z0-9+/=]+)'/)![1];
       const cfg = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'));
-      expect(cfg.mcpServers.mine.args).toEqual(['/root/.mcp-servers/mine/server.js', '--flag']);
+      expect(cfg.mcpServers.mine).toEqual({ command: 'node', args: ['/root/.mcp-servers/mine/server.js', '--flag'] });
       expect(cfg.mcpServers.fs).toEqual({ command: 'npx', args: ['-y', 'server-filesystem'] });
 
       // sandboxCommand emits --mcp-config, not --strict-mcp-config.

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { writeFile, readFile, rm, access, readdir, stat } from 'node:fs/promises';
 import { spawnAgent, spawnInteractive } from '../spawn.js';
 import { uploadDirToSandbox } from '../../sandbox/scaffolding.js';
+import { uploadMcpServerSources } from '../../sandbox/mcp.js';
 import { CodexAdapter } from '../codex.js';
 import { makeAgentResult } from '../../__tests__/helpers/fixtures.js';
 import { makeMockSandboxClient } from '../../__tests__/helpers/mock-sandbox-client.js';
@@ -24,6 +25,10 @@ vi.mock('../../sandbox/scaffolding.js', () => ({
   uploadDirToSandbox: vi.fn(),
 }));
 
+vi.mock('../../sandbox/mcp.js', () => ({
+  uploadMcpServerSources: vi.fn(),
+}));
+
 const mockSpawnAgent = vi.mocked(spawnAgent);
 const mockSpawnInteractive = vi.mocked(spawnInteractive);
 const mockWriteFile = vi.mocked(writeFile);
@@ -33,6 +38,7 @@ const mockAccess = vi.mocked(access);
 const mockReaddir = vi.mocked(readdir);
 const mockStat = vi.mocked(stat);
 const mockUploadDir = vi.mocked(uploadDirToSandbox);
+const mockUploadMcpSources = vi.mocked(uploadMcpServerSources);
 
 describe('CodexAdapter', () => {
   let adapter: CodexAdapter;
@@ -238,21 +244,29 @@ describe('CodexAdapter', () => {
       expect(client.runCommand).not.toHaveBeenCalled();
     });
 
-    it('uploads sourced servers, substitutes ${MCP_ROOT}, and appends config.toml blocks', async () => {
+    it('delegates uploads to uploadMcpServerSources and renders its result into config.toml blocks', async () => {
       const client = makeMockSandboxClient();
       client.runCommand.mockResolvedValue({ stdout: '/root/.codex', stderr: '', exitCode: 0 });
+      mockUploadMcpSources.mockResolvedValue([
+        { name: 'mine', command: 'node', args: ['/root/.codex/.mcp-servers/mine/server.js'] },
+        { name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
 
       await adapter.installMcpServersInSandbox(client as any, [
         { kind: 'sourced', name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js'], hostDir: '/tmp/mine' },
         { kind: 'sourceless', name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
       ]);
 
-      expect(mockUploadDir).toHaveBeenCalledWith(
-        client, '/tmp/mine', '/root/.codex/.mcp-servers/mine', 'mcp_mine', { includeAll: true },
-      );
-      expect(mockUploadDir).toHaveBeenCalledTimes(1);
+      // Adapter passes the right mcpRoot + server list to the dedicated MCP upload helper.
+      expect(mockUploadMcpSources).toHaveBeenCalledTimes(1);
+      expect(mockUploadMcpSources).toHaveBeenCalledWith(client, '/root/.codex/.mcp-servers', [
+        { kind: 'sourced', name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js'], hostDir: '/tmp/mine' },
+        { kind: 'sourceless', name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
+      // Source-only uploads (uploadDirToSandbox) are not used for MCP payloads.
+      expect(mockUploadDir).not.toHaveBeenCalled();
 
-      // The base64-decoded TOML appended to config.toml reflects the substitution.
+      // The base64-decoded TOML appended to config.toml reflects the resolved args returned by the helper.
       const writeCall = client.runCommand.mock.calls.find((c: any[]) => String(c[0]).includes('config.toml'));
       expect(writeCall).toBeDefined();
       const b64 = String(writeCall![0]).match(/printf %s '([A-Za-z0-9+/=]+)'/)![1];
