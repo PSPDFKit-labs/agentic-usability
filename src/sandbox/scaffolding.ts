@@ -338,8 +338,7 @@ export async function resolveExecutorMcpServers(
 
   return Promise.all(servers.map(async (server): Promise<ResolvedExecutorMcpServer> => {
     if (server.type === undefined) {
-      // Sourceless — command/args used as-is.
-      return { name: server.name, command: server.command, args: server.args };
+      return { kind: 'sourceless', name: server.name, command: server.command, args: server.args };
     }
     const source: SourceConfig = server.type === 'local'
       ? { type: 'local', path: server.path }
@@ -352,6 +351,7 @@ export async function resolveExecutorMcpServers(
         };
     const hostDir = await resolveSource(source, { reposDir: cacheRepos });
     return {
+      kind: 'sourced',
       name: server.name,
       command: server.command,
       args: server.args,

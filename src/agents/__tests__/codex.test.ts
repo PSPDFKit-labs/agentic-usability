@@ -243,8 +243,8 @@ describe('CodexAdapter', () => {
       client.runCommand.mockResolvedValue({ stdout: '/root/.codex', stderr: '', exitCode: 0 });
 
       await adapter.installMcpServersInSandbox(client as any, [
-        { name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js'], hostDir: '/tmp/mine' },
-        { name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+        { kind: 'sourced', name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js'], hostDir: '/tmp/mine' },
+        { kind: 'sourceless', name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
       ]);
 
       expect(mockUploadDir).toHaveBeenCalledWith(

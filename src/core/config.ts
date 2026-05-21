@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { Config, AgentConfig } from '../types.js';
 import { createAdapter } from '../agents/adapter.js';
+import { MCP_ROOT_PLACEHOLDER } from '../sandbox/mcp.js';
 
 export async function loadConfig(configPath: string): Promise<Config> {
   let raw: string;
@@ -64,8 +65,6 @@ function validateExecutorPluginEntry(plugin: Record<string, unknown>, prefix: st
       break;
   }
 }
-
-const MCP_ROOT_PLACEHOLDER = '${MCP_ROOT}';
 
 function validateExecutorMcpServerEntry(server: Record<string, unknown>, prefix: string): void {
   if (!server || typeof server !== 'object' || Array.isArray(server)) {

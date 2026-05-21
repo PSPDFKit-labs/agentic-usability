@@ -200,8 +200,8 @@ describe('ClaudeAdapter', () => {
       client.runCommand.mockResolvedValue({ stdout: '/root', stderr: '', exitCode: 0 });
 
       await adapter.installMcpServersInSandbox(client as any, [
-        { name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js', '--flag'], hostDir: '/tmp/mine' },
-        { name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+        { kind: 'sourced', name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js', '--flag'], hostDir: '/tmp/mine' },
+        { kind: 'sourceless', name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
       ]);
 
       // Sourced server is uploaded outside /workspace, verbatim (incl. node_modules).

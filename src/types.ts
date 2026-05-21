@@ -235,17 +235,27 @@ export type ExecutorMcpServer =
   | CommandExecutorMcpServer;
 
 /**
- * An ExecutorMcpServer after host-side resolution. The adapter receives this
- * and decides how to wire it into the sandbox VM. `hostDir` is present only
- * when the entry had a source (local/git); sourceless entries omit it.
+ * An ExecutorMcpServer after host-side resolution. Discriminated on `kind` so
+ * consumers narrow at compile time instead of probing an optional `hostDir`.
+ * `sourced` entries were `local`/`git` in the input and carry a host directory
+ * to upload; `sourceless` entries had no input `type` and run from `command`
+ * alone (e.g. `npx server-name`).
  */
-export interface ResolvedExecutorMcpServer {
-  name: string;
-  command: string;
-  args: string[];
-  /** Absolute host path to the MCP server source — only when there was a source. */
-  hostDir?: string;
-}
+export type ResolvedExecutorMcpServer =
+  | {
+      kind: 'sourced';
+      name: string;
+      command: string;
+      args: string[];
+      /** Absolute host path to the MCP server source. */
+      hostDir: string;
+    }
+  | {
+      kind: 'sourceless';
+      name: string;
+      command: string;
+      args: string[];
+    };
 
 export interface SecretConfig {
   /** Raw value or "$ENV_VAR" reference resolved from host environment. */

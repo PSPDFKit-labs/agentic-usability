@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import type { AgentConfig, AgentResult, ResolvedExecutorPlugin, ResolvedExecutorMcpServer } from '../types.js';
 import type { MicrosandboxClient } from '../sandbox/microsandbox.js';
 import { uploadDirToSandbox } from '../sandbox/scaffolding.js';
+import { uploadMcpServerSources } from '../sandbox/mcp.js';
 import { BaseAdapter } from './base.js';
 
 export class CodexAdapter extends BaseAdapter {
@@ -211,19 +212,11 @@ export class CodexAdapter extends BaseAdapter {
     const codexHome = homeResult.stdout.trim() || '/root/.codex';
     const mcpRoot = `${codexHome}/.mcp-servers`;
 
-    const tomlBlocks: string[] = [];
+    const resolved = await uploadMcpServerSources(client, mcpRoot, servers);
 
-    for (const server of servers) {
-      let args = server.args;
-      if (server.hostDir) {
-        const destDir = `${mcpRoot}/${server.name}`;
-        // includeAll: an MCP server is a runnable artifact — it needs its
-        // node_modules, which the default source-archive exclusion strips.
-        await uploadDirToSandbox(client, server.hostDir, destDir, `mcp_${server.name}`, { includeAll: true });
-        args = args.map((a) => a.split('${MCP_ROOT}').join(destDir));
-      }
-      tomlBlocks.push(renderMcpServerToml(server.name, server.command, args));
-    }
+    const tomlBlocks = resolved.map((server) =>
+      renderMcpServerToml(server.name, server.command, server.args),
+    );
 
     const configPath = `${codexHome}/config.toml`;
     const tomlText = `\n${tomlBlocks.join('\n')}\n`;

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { AgentConfig, AgentResult, ResolvedExecutorPlugin, ResolvedExecutorMcpServer } from '../types.js';
 import type { MicrosandboxClient } from '../sandbox/microsandbox.js';
 import { uploadDirToSandbox } from '../sandbox/scaffolding.js';
+import { uploadMcpServerSources } from '../sandbox/mcp.js';
 import { BaseAdapter } from './base.js';
 
 export class ClaudeAdapter extends BaseAdapter {
@@ -175,18 +176,11 @@ export class ClaudeAdapter extends BaseAdapter {
     const home = homeResult.stdout.trim() || '/root';
     const mcpRoot = `${home}/.mcp-servers`;
 
-    const mcpServers: Record<string, { command: string; args: string[] }> = {};
+    const resolved = await uploadMcpServerSources(client, mcpRoot, servers);
 
-    for (const server of servers) {
-      let args = server.args;
-      if (server.hostDir) {
-        const destDir = `${mcpRoot}/${server.name}`;
-        // includeAll: an MCP server is a runnable artifact — it needs its
-        // node_modules, which the default source-archive exclusion strips.
-        await uploadDirToSandbox(client, server.hostDir, destDir, `mcp_${server.name}`, { includeAll: true });
-        args = args.map((a) => a.split('${MCP_ROOT}').join(destDir));
-      }
-      mcpServers[server.name] = { command: server.command, args };
+    const mcpServers: Record<string, { command: string; args: string[] }> = {};
+    for (const server of resolved) {
+      mcpServers[server.name] = { command: server.command, args: server.args };
     }
 
     const configJson = JSON.stringify({ mcpServers }, null, 2);
