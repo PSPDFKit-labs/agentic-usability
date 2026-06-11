@@ -11,6 +11,8 @@ export class ClaudeAdapter extends BaseAdapter {
   readonly baseUrlEnvVar = 'ANTHROPIC_BASE_URL';
   readonly defaultEnvVar = 'ANTHROPIC_API_KEY';
   readonly defaultBaseUrl = 'https://api.anthropic.com';
+  readonly oauthEnvVar = 'CLAUDE_CODE_OAUTH_TOKEN';
+  readonly oauthValuePrefix = 'sk-ant-oat';
 
   /**
    * Sandbox paths of plugins extracted by `installPluginsInSandbox()`.
