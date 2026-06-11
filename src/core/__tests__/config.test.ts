@@ -349,4 +349,116 @@ describe('loadConfig', () => {
       await expect(loadConfig('/fake/config.json')).rejects.toThrow(/duplicated/);
     });
   });
+
+  describe('executorMcpServers', () => {
+    it('accepts a sourceless server (no type)', async () => {
+      const config = {
+        ...validConfig,
+        executorMcpServers: [
+          { name: 'fs', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/workspace'] },
+        ],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      const result = await loadConfig('/fake/config.json');
+      expect(result.executorMcpServers).toHaveLength(1);
+      expect(result.executorMcpServers?.[0]).toMatchObject({ name: 'fs', command: 'npx' });
+    });
+
+    it('accepts a local server with ${MCP_ROOT} in args', async () => {
+      const config = {
+        ...validConfig,
+        executorMcpServers: [
+          { type: 'local', name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js'], path: '/tmp/mine' },
+        ],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      const result = await loadConfig('/fake/config.json');
+      expect(result.executorMcpServers).toHaveLength(1);
+    });
+
+    it('accepts a git server with branch + subpath', async () => {
+      const config = {
+        ...validConfig,
+        executorMcpServers: [
+          { type: 'git', name: 'shared', command: 'node', args: ['${MCP_ROOT}/index.js'],
+            url: 'https://example.com/repo.git', branch: 'main', subpath: 'mcp' },
+        ],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      const result = await loadConfig('/fake/config.json');
+      expect(result.executorMcpServers).toHaveLength(1);
+    });
+
+    it('throws when executorMcpServers is not an array', async () => {
+      const config = { ...validConfig, executorMcpServers: 'not-an-array' };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/executorMcpServers must be an array/);
+    });
+
+    it('throws when a server has an invalid name', async () => {
+      const config = {
+        ...validConfig,
+        executorMcpServers: [{ name: 'bad name; rm -rf /', command: 'node', args: [] }],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/unsupported characters/);
+    });
+
+    it('throws when a server is missing command', async () => {
+      const config = {
+        ...validConfig,
+        executorMcpServers: [{ name: 'a', args: [] }],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/command/);
+    });
+
+    it('throws when a server has non-array args', async () => {
+      const config = {
+        ...validConfig,
+        executorMcpServers: [{ name: 'a', command: 'node', args: 'oops' }],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/args/);
+    });
+
+    it('throws when ${MCP_ROOT} is used without a source', async () => {
+      const config = {
+        ...validConfig,
+        executorMcpServers: [{ name: 'a', command: 'node', args: ['${MCP_ROOT}/server.js'] }],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/MCP_ROOT/);
+    });
+
+    it('throws when a local server is missing path', async () => {
+      const config = {
+        ...validConfig,
+        executorMcpServers: [{ type: 'local', name: 'a', command: 'node', args: [] }],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/path/);
+    });
+
+    it('throws when a server has an invalid type', async () => {
+      const config = {
+        ...validConfig,
+        executorMcpServers: [{ type: 'url', name: 'a', command: 'node', args: [] }],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/invalid/i);
+    });
+
+    it('throws when two servers share the same name', async () => {
+      const config = {
+        ...validConfig,
+        executorMcpServers: [
+          { name: 'a', command: 'node', args: [] },
+          { name: 'a', command: 'npx', args: [] },
+        ],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await expect(loadConfig('/fake/config.json')).rejects.toThrow(/duplicated/);
+    });
+  });
 });

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { access } from 'node:fs/promises';
 import { spawnAgent, spawnInteractive } from '../spawn.js';
 import { uploadDirToSandbox } from '../../sandbox/scaffolding.js';
+import { uploadMcpServerSources } from '../../sandbox/mcp.js';
 import { ClaudeAdapter } from '../claude.js';
 import { makeAgentResult } from '../../__tests__/helpers/fixtures.js';
 import { makeMockSandboxClient } from '../../__tests__/helpers/mock-sandbox-client.js';
@@ -19,10 +20,15 @@ vi.mock('../../sandbox/scaffolding.js', () => ({
   uploadDirToSandbox: vi.fn(),
 }));
 
+vi.mock('../../sandbox/mcp.js', () => ({
+  uploadMcpServerSources: vi.fn(),
+}));
+
 const mockSpawnAgent = vi.mocked(spawnAgent);
 const mockSpawnInteractive = vi.mocked(spawnInteractive);
 const mockAccess = vi.mocked(access);
 const mockUploadDir = vi.mocked(uploadDirToSandbox);
+const mockUploadMcpSources = vi.mocked(uploadMcpServerSources);
 
 describe('ClaudeAdapter', () => {
   let adapter: ClaudeAdapter;
@@ -185,6 +191,76 @@ describe('ClaudeAdapter', () => {
       const fresh = new ClaudeAdapter({ command: 'claude' });
       const cmd = fresh.sandboxCommand('do the thing');
       expect(cmd).not.toContain('--plugin-dir');
+    });
+  });
+
+  describe('installMcpServersInSandbox', () => {
+    it('is a no-op when given an empty server list', async () => {
+      const client = makeMockSandboxClient();
+      await adapter.installMcpServersInSandbox(client as any, []);
+      expect(client.runCommand).not.toHaveBeenCalled();
+    });
+
+    it('delegates uploads to uploadMcpServerSources and renders its result into mcp-config.json', async () => {
+      const client = makeMockSandboxClient();
+      client.runCommand.mockResolvedValue({ stdout: '/root', stderr: '', exitCode: 0 });
+      mockUploadMcpSources.mockResolvedValue([
+        { name: 'mine', command: 'node', args: ['/root/.mcp-servers/mine/server.js', '--flag'] },
+        { name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
+
+      await adapter.installMcpServersInSandbox(client as any, [
+        { kind: 'sourced', name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js', '--flag'], hostDir: '/tmp/mine' },
+        { kind: 'sourceless', name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
+
+      // Adapter passes the right mcpRoot + server list to the dedicated MCP upload helper.
+      expect(mockUploadMcpSources).toHaveBeenCalledTimes(1);
+      expect(mockUploadMcpSources).toHaveBeenCalledWith(client, '/root/.mcp-servers', [
+        { kind: 'sourced', name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js', '--flag'], hostDir: '/tmp/mine' },
+        { kind: 'sourceless', name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
+      // Source-only uploads (uploadDirToSandbox) are not used for MCP payloads.
+      expect(mockUploadDir).not.toHaveBeenCalled();
+
+      // The base64-decoded MCP config JSON reflects the resolved args returned by the helper.
+      const writeCall = client.runCommand.mock.calls.find((c: any[]) => String(c[0]).includes('base64 -d'));
+      expect(writeCall).toBeDefined();
+      const b64 = String(writeCall![0]).match(/printf %s '([A-Za-z0-9+/=]+)'/)![1];
+      const cfg = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'));
+      expect(cfg.mcpServers.mine).toEqual({ command: 'node', args: ['/root/.mcp-servers/mine/server.js', '--flag'] });
+      expect(cfg.mcpServers.fs).toEqual({ command: 'npx', args: ['-y', 'server-filesystem'] });
+
+      // sandboxCommand emits --mcp-config, not --strict-mcp-config.
+      const cmd = adapter.sandboxCommand('do the thing');
+      expect(cmd).toContain("--mcp-config '/root/.mcp-servers/mcp-config.json'");
+      expect(cmd).not.toContain('--strict-mcp-config');
+    });
+
+    it('falls back to /root when $HOME degenerates to /', async () => {
+      const client = makeMockSandboxClient();
+      // First runCommand call is the $HOME probe; later calls are the config write.
+      client.runCommand.mockImplementation(async (cmd: string) =>
+        cmd.includes('${HOME')
+          ? { stdout: '/', stderr: '', exitCode: 0 }
+          : { stdout: '', stderr: '', exitCode: 0 },
+      );
+      mockUploadMcpSources.mockResolvedValue([]);
+
+      await adapter.installMcpServersInSandbox(client as any, [
+        { kind: 'sourceless', name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
+
+      // Adapter should treat $HOME=/ as degenerate and use /root, not //.mcp-servers.
+      expect(mockUploadMcpSources).toHaveBeenCalledWith(client, '/root/.mcp-servers', expect.any(Array));
+      const cmd = adapter.sandboxCommand('go');
+      expect(cmd).toContain("--mcp-config '/root/.mcp-servers/mcp-config.json'");
+      expect(cmd).not.toContain('//.mcp-servers');
+    });
+
+    it('sandboxCommand omits --mcp-config when no MCP servers were installed', () => {
+      const fresh = new ClaudeAdapter({ command: 'claude' });
+      expect(fresh.sandboxCommand('go')).not.toContain('--mcp-config');
     });
   });
 });

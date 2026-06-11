@@ -3,7 +3,10 @@ import { execFile } from 'node:child_process';
 import { basename, join, relative, resolve as resolvePath } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { MicrosandboxClient } from './microsandbox.js';
-import type { Config, TestCase, SourceConfig, ExecutorPlugin, ResolvedExecutorPlugin } from '../types.js';
+import type {
+  Config, TestCase, SourceConfig, ExecutorPlugin, ResolvedExecutorPlugin,
+  ExecutorMcpServer, ResolvedExecutorMcpServer,
+} from '../types.js';
 import { resolveSources, resolveSource } from '../core/source-resolver.js';
 
 /** Directories excluded from source uploads — these are large and not useful for evaluation. */
@@ -79,7 +82,12 @@ async function readDirRecursive(
 }
 
 /**
- * Create a tar.gz archive of a directory, excluding common bloat dirs.
+ * Create a tar.gz archive of an SDK *source* directory. Common bloat dirs
+ * (`node_modules`, `.git`, build outputs, …) and large binaries are stripped
+ * because the target is code review, not runtime use. For runnable artifacts
+ * (e.g. MCP server payloads) see `uploadMcpServerPayload` in `./mcp.ts`, which
+ * archives the tree verbatim instead.
+ *
  * Archives are cached on disk so concurrent sandboxes reuse the same tarball.
  */
 export async function getSourceArchive(srcPath: string): Promise<string> {
@@ -116,9 +124,10 @@ export async function getSourceArchive(srcPath: string): Promise<string> {
 }
 
 /**
- * Tar a host directory, upload the archive to the sandbox, and extract it
- * into `sandboxDestDir`. Used for any "copy this directory tree to a known
- * path inside the VM" operation (source uploads, plugin installs).
+ * Tar an SDK *source* directory on the host, upload the archive, and extract
+ * it into `sandboxDestDir`. Used for source uploads and plugin installs —
+ * anything whose target is code review rather than runtime execution. For
+ * runnable artifacts see `uploadMcpServerPayload` in `./mcp.ts`.
  *
  * `archiveLabel` should be a slug-safe identifier (used only to name the
  * temporary tarball path inside the sandbox).
@@ -299,5 +308,43 @@ export async function resolveExecutorPlugins(
         };
     const hostDir = await resolveSource(source, { reposDir: cacheRepos });
     return { name: plugin.name, hostDir: resolvePath(hostDir) };
+  }));
+}
+
+/**
+ * Resolve `config.executorMcpServers` to host-side directories. Mirrors
+ * `resolveExecutorPlugins`: entries with a source (local/git) resolve via the
+ * shared source-resolver (git clones cached under `cacheRepos`); sourceless
+ * entries (no `type`) carry no `hostDir`.
+ *
+ * Returns an empty array when no MCP servers are configured.
+ */
+export async function resolveExecutorMcpServers(
+  servers: ExecutorMcpServer[] | undefined,
+  cacheRepos: string,
+): Promise<ResolvedExecutorMcpServer[]> {
+  if (!servers || servers.length === 0) return [];
+
+  return Promise.all(servers.map(async (server): Promise<ResolvedExecutorMcpServer> => {
+    if (server.type === undefined) {
+      return { kind: 'sourceless', name: server.name, command: server.command, args: server.args };
+    }
+    const source: SourceConfig = server.type === 'local'
+      ? { type: 'local', path: server.path }
+      : {
+          type: 'git',
+          url: server.url,
+          branch: server.branch,
+          subpath: server.subpath,
+          sparse: server.sparse,
+        };
+    const hostDir = await resolveSource(source, { reposDir: cacheRepos });
+    return {
+      kind: 'sourced',
+      name: server.name,
+      command: server.command,
+      args: server.args,
+      hostDir: resolvePath(hostDir),
+    };
   }));
 }

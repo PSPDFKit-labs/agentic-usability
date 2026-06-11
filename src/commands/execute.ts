@@ -5,7 +5,7 @@ import { loadConfig } from '../core/config.js';
 import { loadTestSuite, saveResult, saveBinaryResult, formatElapsed } from '../core/suite-io.js';
 import { MicrosandboxClient, buildSecrets, applyAgentAuth, resolveEnv, type CommandResult } from '../sandbox/microsandbox.js';
 import { createEgressLogger } from '../sandbox/egress-logger.js';
-import { scaffoldWorkspace, resolveExecutorPlugins } from '../sandbox/scaffolding.js';
+import { scaffoldWorkspace, resolveExecutorPlugins, resolveExecutorMcpServers } from '../sandbox/scaffolding.js';
 import { WorkerPool } from '../sandbox/worker-pool.js';
 import { createAdapter } from '../agents/adapter.js';
 import { getPackageSource, getUrlSources, getFileSources } from '../types.js';
@@ -197,17 +197,38 @@ export async function executeTestCase(
       }
     }
 
-    // Plugins are intentionally executor-only — the judge sandbox stays
-    // plugin-free so its scoring is independent of the executor's tooling.
+    // Plugins and MCP servers are both executor-only — the judge sandbox stays
+    // free of either so its scoring is independent of the executor's tooling.
+    // Run the two install blocks concurrently: they write to disjoint sandbox
+    // dirs (plugins under the CLI's plugin dir; MCP servers under .mcp-servers)
+    // and update disjoint adapter state.
+    const installTasks: Promise<void>[] = [];
     if (config.executorPlugins && config.executorPlugins.length > 0) {
-      const resolvedPlugins = await resolveExecutorPlugins(config.executorPlugins, paths.cacheRepos);
-      try {
-        await adapter.installPluginsInSandbox(client, resolvedPlugins);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        await saveResult(paths, testCase.id, 'plugin-install-error.log', message, target.name);
-        throw new Error(`Executor plugin install failed: ${message}`);
-      }
+      installTasks.push((async () => {
+        const resolvedPlugins = await resolveExecutorPlugins(config.executorPlugins, paths.cacheRepos);
+        try {
+          await adapter.installPluginsInSandbox(client, resolvedPlugins);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          await saveResult(paths, testCase.id, 'plugin-install-error.log', message, target.name);
+          throw new Error(`Executor plugin install failed: ${message}`);
+        }
+      })());
+    }
+    if (config.executorMcpServers && config.executorMcpServers.length > 0) {
+      installTasks.push((async () => {
+        const resolvedMcpServers = await resolveExecutorMcpServers(config.executorMcpServers, paths.cacheRepos);
+        try {
+          await adapter.installMcpServersInSandbox(client, resolvedMcpServers);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          await saveResult(paths, testCase.id, 'mcp-server-install-error.log', message, target.name);
+          throw new Error(`Executor MCP server install failed: ${message}`);
+        }
+      })());
+    }
+    if (installTasks.length > 0) {
+      await Promise.all(installTasks);
     }
 
     // Upload public file sources (docs directories, etc.) for the executor

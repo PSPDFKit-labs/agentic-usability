@@ -10,6 +10,7 @@
 | `targets` | `TargetConfig[]` | **Yes** | Non-empty array. Docker images for sandboxed execution. |
 | `workspace` | `WorkspaceConfig` | No | Workspace template and setup. |
 | `executorPlugins` | `ExecutorPlugin[]` | No | Plugin directories installed into the executor's agent CLI inside the sandbox (Claude marketplace, Codex skills, Gemini extensions). Not installed in the judge sandbox — that's intentional, so the judge stays independent of the executor's tooling. |
+| `executorMcpServers` | `ExecutorMcpServer[]` | No | MCP servers wired into the executor's agent CLI inside the sandbox (Claude `--mcp-config`, Codex `config.toml`). A separate mechanism from `executorPlugins` — a plugin's bundled MCP servers are not loaded. Not installed in the judge sandbox. |
 | `sandbox` | `SandboxConfig` | **Yes** | Must be an object (can be `{}`). Resource limits, secrets, env vars. |
 
 ## SourceConfig (discriminated union on `type`)
@@ -186,6 +187,63 @@ What an adapter requires inside the plugin directory:
 Each adapter fails fast at install time if its required file is missing — the
 A/B comparison won't silently no-op.
 
+## ExecutorMcpServer (discriminated union on optional `type`)
+
+An MCP server wired into the executor's agent CLI. Independent of
+`ExecutorPlugin` — MCP servers are wired through each CLI's native MCP-config
+surface, NOT through agent plugins (a Claude plugin's `mcpServers` are not
+loaded by `claude --plugin-dir`). Installed **only** in the executor sandbox;
+the judge sandbox is kept MCP-free.
+
+Every entry shares three fields:
+
+| Field | Type | Required |
+|-------|------|----------|
+| `name` | `string` | Yes — server slug (letters/digits/`.`/`_`/`-`), unique across the array. Used as the MCP server name and install dir name. |
+| `command` | `string` | Yes — executable that launches the MCP server (e.g. `node`, `npx`). |
+| `args` | `string[]` | Yes — args to `command`. May contain the literal `${MCP_ROOT}` placeholder when a source is present. |
+
+The optional `type` discriminator selects the source shape:
+
+### CommandExecutorMcpServer (no `type`)
+
+No source — `command`/`args` are used as-is (e.g. a server launched via `npx`).
+`${MCP_ROOT}` must NOT appear in `args` (there is nothing to substitute) — the
+config validator rejects it.
+
+### LocalExecutorMcpServer (`type: "local"`)
+
+| Field | Type | Required |
+|-------|------|----------|
+| `type` | `"local"` | Yes |
+| `path` | `string` | Yes — host directory tree uploaded into the sandbox |
+
+### GitExecutorMcpServer (`type: "git"`)
+
+| Field | Type | Required |
+|-------|------|----------|
+| `type` | `"git"` | Yes |
+| `url` | `string` | Yes — git repository URL |
+| `branch` | `string` | No |
+| `subpath` | `string` | No — path within the repo to the server source |
+| `sparse` | `string[]` | No — sparse checkout paths |
+
+### `${MCP_ROOT}` substitution
+
+For sourced servers (`local`/`git`), the source directory is uploaded into the
+sandbox and the literal string `${MCP_ROOT}` in each `args` entry is replaced
+with that server's absolute sandbox install dir at install time. Sourceless
+servers cannot use the placeholder.
+
+### Per-adapter wiring
+
+| Adapter | Sandbox destination | Wiring |
+|---|---|---|
+| `claude` | sourced servers extracted to `$HOME/.mcp-servers/<name>/` (outside `/workspace`) | combined `$HOME/.mcp-servers/mcp-config.json` passed via the `--mcp-config` flag (no `--strict-mcp-config`) |
+| `codex` | sourced servers extracted to `$CODEX_HOME/.mcp-servers/<name>/` | `[mcp_servers.<name>]` block appended to `$CODEX_HOME/config.toml` (auto-read; existing content preserved) |
+| `gemini` | — | Not supported in non-interactive mode. Adapter throws a clear error if `executorMcpServers` is non-empty. |
+| custom | — | Not supported. Adapter throws a clear error if `executorMcpServers` is non-empty. |
+
 ## Validation Rules
 
 1. Root must be a JSON object
@@ -198,6 +256,7 @@ A/B comparison won't silently no-op.
 8. Custom agents must provide `envVar` and `baseUrl` in their secret
 9. `baseUrl` must be a parseable URL
 10. `executorPlugins`, if present, must be an array; each entry needs a `name` (slug-safe) and a valid `type` (`local` or `git`); names must be unique
+11. `executorMcpServers`, if present, must be an array; each entry needs a slug-safe unique `name`, a string `command`, and a `string[]` `args`; `type` is optional but when present must be `local` (needs `path`) or `git` (needs `url`); when `type` is absent, `${MCP_ROOT}` must not appear in `args`
 
 ## Minimal Examples
 

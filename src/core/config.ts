@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { Config, AgentConfig } from '../types.js';
 import { createAdapter } from '../agents/adapter.js';
+import { MCP_ROOT_PLACEHOLDER } from '../sandbox/mcp.js';
 import { resolveSecretValue } from './env.js';
 
 export async function loadConfig(configPath: string): Promise<Config> {
@@ -63,6 +64,61 @@ function validateExecutorPluginEntry(plugin: Record<string, unknown>, prefix: st
         throw new Error(`${prefix} type 'git' requires url to be set`);
       }
       break;
+  }
+}
+
+function validateExecutorMcpServerEntry(server: Record<string, unknown>, prefix: string): void {
+  if (!server || typeof server !== 'object' || Array.isArray(server)) {
+    throw new Error(`${prefix} must be an object`);
+  }
+
+  if (!server.name || typeof server.name !== 'string') {
+    throw new Error(`${prefix} requires a non-empty 'name' string`);
+  }
+  if (!/^[a-zA-Z0-9._-]+$/.test(server.name)) {
+    throw new Error(
+      `${prefix}.name '${server.name}' contains unsupported characters. ` +
+      `Use only letters, digits, '.', '_', or '-'.`,
+    );
+  }
+
+  if (!server.command || typeof server.command !== 'string') {
+    throw new Error(`${prefix} requires a non-empty 'command' string`);
+  }
+
+  if (!Array.isArray(server.args) || !server.args.every((a) => typeof a === 'string')) {
+    throw new Error(`${prefix} requires 'args' to be an array of strings`);
+  }
+  const args = server.args as string[];
+
+  // `type` is OPTIONAL for MCP servers. When present it must be local|git.
+  if (server.type !== undefined) {
+    if (typeof server.type !== 'string' || !VALID_PLUGIN_TYPES.includes(server.type)) {
+      throw new Error(
+        `${prefix}.type '${String(server.type)}' is invalid. Must be one of: ` +
+        `${VALID_PLUGIN_TYPES.map(t => `'${t}'`).join(', ')} (or omitted for a sourceless server)`,
+      );
+    }
+    switch (server.type) {
+      case 'local':
+        if (!server.path || typeof server.path !== 'string') {
+          throw new Error(`${prefix} type 'local' requires path to be set`);
+        }
+        break;
+      case 'git':
+        if (!server.url || typeof server.url !== 'string') {
+          throw new Error(`${prefix} type 'git' requires url to be set`);
+        }
+        break;
+    }
+  } else {
+    // Sourceless server — `${MCP_ROOT}` cannot be substituted, so reject it.
+    if (args.some((a) => a.includes(MCP_ROOT_PLACEHOLDER))) {
+      throw new Error(
+        `${prefix} uses the '${MCP_ROOT_PLACEHOLDER}' placeholder but has no source ` +
+        `('type' is omitted). Add a 'local' or 'git' source, or remove the placeholder.`,
+      );
+    }
   }
 }
 
@@ -145,6 +201,23 @@ export function validateConfig(data: unknown, configPath?: string): Config {
         throw new Error(`executorPlugins[${i}].name '${name}' is duplicated`);
       }
       seenNames.add(name);
+    }
+  }
+
+  // Validate executorMcpServers (optional)
+  if (obj.executorMcpServers !== undefined) {
+    if (!Array.isArray(obj.executorMcpServers)) {
+      throw new Error('Config executorMcpServers must be an array');
+    }
+    const seenMcpNames = new Set<string>();
+    for (let i = 0; i < obj.executorMcpServers.length; i++) {
+      const entry = obj.executorMcpServers[i] as Record<string, unknown>;
+      validateExecutorMcpServerEntry(entry, `executorMcpServers[${i}]`);
+      const name = entry.name as string;
+      if (seenMcpNames.has(name)) {
+        throw new Error(`executorMcpServers[${i}].name '${name}' is duplicated`);
+      }
+      seenMcpNames.add(name);
     }
   }
 

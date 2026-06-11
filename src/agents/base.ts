@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentResult, ResolvedExecutorPlugin } from '../types.js';
+import type { AgentConfig, AgentResult, ResolvedExecutorPlugin, ResolvedExecutorMcpServer } from '../types.js';
 import type { AgentAdapter } from './adapter.js';
 import type { MicrosandboxClient } from '../sandbox/microsandbox.js';
 import { spawnAgent, spawnInteractive } from './spawn.js';
@@ -99,6 +99,23 @@ export abstract class BaseAdapter implements AgentAdapter {
     throw new Error(
       `Agent adapter '${this.name}' does not support executorPlugins. ` +
       `Either remove executorPlugins from config or switch executor to an adapter that supports plugin loading.`,
+    );
+  }
+
+  /**
+   * Install MCP servers into the sandbox VM. Subclasses override with
+   * CLI-specific wiring (Claude: `--mcp-config`, Codex: `config.toml`).
+   * Default raises a clear error so adapters that don't support MCP servers
+   * fail loudly when the user wires `executorMcpServers` against them.
+   */
+  async installMcpServersInSandbox(
+    _client: MicrosandboxClient,
+    servers: ResolvedExecutorMcpServer[],
+  ): Promise<void> {
+    if (servers.length === 0) return;
+    throw new Error(
+      `Agent adapter '${this.name}' does not support executorMcpServers. ` +
+      `Either remove executorMcpServers from config or switch executor to an adapter that supports MCP servers.`,
     );
   }
 

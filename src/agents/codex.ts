@@ -1,9 +1,10 @@
 import { writeFile, readFile, rm, access, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { AgentConfig, AgentResult, ResolvedExecutorPlugin } from '../types.js';
+import type { AgentConfig, AgentResult, ResolvedExecutorPlugin, ResolvedExecutorMcpServer } from '../types.js';
 import type { MicrosandboxClient } from '../sandbox/microsandbox.js';
 import { uploadDirToSandbox } from '../sandbox/scaffolding.js';
+import { uploadMcpServerSources } from '../sandbox/mcp.js';
 import { BaseAdapter } from './base.js';
 
 export class CodexAdapter extends BaseAdapter {
@@ -192,6 +193,51 @@ export class CodexAdapter extends BaseAdapter {
     ));
   }
 
+  /**
+   * Install MCP servers for the executor's Codex CLI session.
+   *
+   * Sourced servers are uploaded under `$CODEX_HOME/.mcp-servers/<name>/`.
+   * `${MCP_ROOT}` in each server's args is substituted with that server's
+   * sandbox install dir. An `[mcp_servers.<name>]` TOML block (command + args)
+   * is appended to `$CODEX_HOME/config.toml`, which Codex auto-reads. Existing
+   * config content is preserved — blocks are appended, never clobbered.
+   */
+  async installMcpServersInSandbox(
+    client: MicrosandboxClient,
+    servers: ResolvedExecutorMcpServer[],
+  ): Promise<void> {
+    if (servers.length === 0) return;
+
+    const homeResult = await client.runCommand('printf %s "${CODEX_HOME:-${HOME:-/root}/.codex}"');
+    // $HOME=/ slips past the inner ${HOME:-/root} shell fallback and produces
+    // "//.codex" (literal "/" + literal "/.codex"). Collapse repeated slashes
+    // and then treat / or /.codex as "no real home" and fall back to /root/.codex.
+    const normalized = homeResult.stdout.trim().replace(/\/+/g, '/');
+    const codexHome = !normalized || normalized === '/' || normalized === '/.codex'
+      ? '/root/.codex'
+      : normalized;
+    const mcpRoot = `${codexHome}/.mcp-servers`;
+
+    const resolved = await uploadMcpServerSources(client, mcpRoot, servers);
+
+    const tomlBlocks = resolved.map((server) =>
+      renderMcpServerToml(server.name, server.command, server.args),
+    );
+
+    const configPath = `${codexHome}/config.toml`;
+    const tomlText = `\n${tomlBlocks.join('\n')}\n`;
+    const encoded = Buffer.from(tomlText, 'utf-8').toString('base64');
+    const writeResult = await client.runCommand(
+      `mkdir -p '${codexHome}' && touch '${configPath}' && printf %s '${encoded}' | base64 -d >> '${configPath}'`,
+    );
+    if (writeResult.exitCode !== 0) {
+      throw new Error(
+        `Failed to append MCP servers to Codex config at '${configPath}': ` +
+        `${writeResult.stderr || writeResult.stdout}`,
+      );
+    }
+  }
+
   async extractLog(client: MicrosandboxClient): Promise<string | null> {
     const result = await client.runCommand(
       "find / -path '*/.codex/sessions/*.jsonl' -type f 2>/dev/null | sort | tail -1",
@@ -215,4 +261,25 @@ export class CodexAdapter extends BaseAdapter {
       return null;
     }
   }
+}
+
+/** Encode a JS string as a TOML basic string (double-quoted, escaped). */
+function tomlString(value: string): string {
+  const escaped = value
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t')
+    .replace(/\r/g, '\\r');
+  return `"${escaped}"`;
+}
+
+/** Render an `[mcp_servers.<name>]` TOML block with command + args. */
+function renderMcpServerToml(name: string, command: string, args: string[]): string {
+  const argsArray = args.map(tomlString).join(', ');
+  return [
+    `[mcp_servers.${name}]`,
+    `command = ${tomlString(command)}`,
+    `args = [${argsArray}]`,
+  ].join('\n');
 }

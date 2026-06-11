@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { writeFile, readFile, rm, access, readdir, stat } from 'node:fs/promises';
 import { spawnAgent, spawnInteractive } from '../spawn.js';
 import { uploadDirToSandbox } from '../../sandbox/scaffolding.js';
+import { uploadMcpServerSources } from '../../sandbox/mcp.js';
 import { CodexAdapter } from '../codex.js';
 import { makeAgentResult } from '../../__tests__/helpers/fixtures.js';
 import { makeMockSandboxClient } from '../../__tests__/helpers/mock-sandbox-client.js';
@@ -24,6 +25,10 @@ vi.mock('../../sandbox/scaffolding.js', () => ({
   uploadDirToSandbox: vi.fn(),
 }));
 
+vi.mock('../../sandbox/mcp.js', () => ({
+  uploadMcpServerSources: vi.fn(),
+}));
+
 const mockSpawnAgent = vi.mocked(spawnAgent);
 const mockSpawnInteractive = vi.mocked(spawnInteractive);
 const mockWriteFile = vi.mocked(writeFile);
@@ -33,6 +38,7 @@ const mockAccess = vi.mocked(access);
 const mockReaddir = vi.mocked(readdir);
 const mockStat = vi.mocked(stat);
 const mockUploadDir = vi.mocked(uploadDirToSandbox);
+const mockUploadMcpSources = vi.mocked(uploadMcpServerSources);
 
 describe('CodexAdapter', () => {
   let adapter: CodexAdapter;
@@ -228,6 +234,74 @@ describe('CodexAdapter', () => {
         { name: 'plugin-a', hostDir: '/tmp/a' },
         { name: 'plugin-b', hostDir: '/tmp/b' },
       ])).rejects.toThrow(/'plugin-a'.*'plugin-b'/);
+    });
+  });
+
+  describe('installMcpServersInSandbox', () => {
+    it('is a no-op when given an empty server list', async () => {
+      const client = makeMockSandboxClient();
+      await adapter.installMcpServersInSandbox(client as any, []);
+      expect(client.runCommand).not.toHaveBeenCalled();
+    });
+
+    it('delegates uploads to uploadMcpServerSources and renders its result into config.toml blocks', async () => {
+      const client = makeMockSandboxClient();
+      client.runCommand.mockResolvedValue({ stdout: '/root/.codex', stderr: '', exitCode: 0 });
+      mockUploadMcpSources.mockResolvedValue([
+        { name: 'mine', command: 'node', args: ['/root/.codex/.mcp-servers/mine/server.js'] },
+        { name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
+
+      await adapter.installMcpServersInSandbox(client as any, [
+        { kind: 'sourced', name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js'], hostDir: '/tmp/mine' },
+        { kind: 'sourceless', name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
+
+      // Adapter passes the right mcpRoot + server list to the dedicated MCP upload helper.
+      expect(mockUploadMcpSources).toHaveBeenCalledTimes(1);
+      expect(mockUploadMcpSources).toHaveBeenCalledWith(client, '/root/.codex/.mcp-servers', [
+        { kind: 'sourced', name: 'mine', command: 'node', args: ['${MCP_ROOT}/server.js'], hostDir: '/tmp/mine' },
+        { kind: 'sourceless', name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
+      // Source-only uploads (uploadDirToSandbox) are not used for MCP payloads.
+      expect(mockUploadDir).not.toHaveBeenCalled();
+
+      // The base64-decoded TOML appended to config.toml reflects the resolved args returned by the helper.
+      const writeCall = client.runCommand.mock.calls.find((c: any[]) => String(c[0]).includes('config.toml'));
+      expect(writeCall).toBeDefined();
+      const b64 = String(writeCall![0]).match(/printf %s '([A-Za-z0-9+/=]+)'/)![1];
+      const toml = Buffer.from(b64, 'base64').toString('utf-8');
+      expect(toml).toContain('[mcp_servers.mine]');
+      expect(toml).toContain('command = "node"');
+      expect(toml).toContain('args = ["/root/.codex/.mcp-servers/mine/server.js"]');
+      expect(toml).toContain('[mcp_servers.fs]');
+      expect(toml).toContain('args = ["-y", "server-filesystem"]');
+      // Append, not clobber.
+      expect(String(writeCall![0])).toContain('>>');
+    });
+
+    it('falls back to /root/.codex when $HOME=/ leaks through as //.codex', async () => {
+      const client = makeMockSandboxClient();
+      // What `printf %s "${CODEX_HOME:-${HOME:-/root}/.codex}"` produces when
+      // $HOME=/ and $CODEX_HOME is unset: literal "/" + literal "/.codex".
+      client.runCommand.mockImplementation(async (cmd: string) =>
+        cmd.includes('CODEX_HOME')
+          ? { stdout: '//.codex', stderr: '', exitCode: 0 }
+          : { stdout: '', stderr: '', exitCode: 0 },
+      );
+      mockUploadMcpSources.mockResolvedValue([]);
+
+      await adapter.installMcpServersInSandbox(client as any, [
+        { kind: 'sourceless', name: 'fs', command: 'npx', args: ['-y', 'server-filesystem'] },
+      ]);
+
+      // Adapter should recognise /.codex as the $HOME=/ degenerate case and rewrite to /root/.codex.
+      expect(mockUploadMcpSources).toHaveBeenCalledWith(client, '/root/.codex/.mcp-servers', expect.any(Array));
+      // The config write should target /root/.codex/config.toml, not /.codex/config.toml.
+      const writeCall = client.runCommand.mock.calls.find((c: any[]) => String(c[0]).includes('config.toml'));
+      expect(writeCall).toBeDefined();
+      expect(String(writeCall![0])).toContain("'/root/.codex/config.toml'");
+      expect(String(writeCall![0])).not.toContain("'/.codex/config.toml'");
     });
   });
 });

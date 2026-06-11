@@ -1,4 +1,4 @@
-import { AgentConfig, AgentResult, ResolvedExecutorPlugin } from '../types.js';
+import { AgentConfig, AgentResult, ResolvedExecutorPlugin, ResolvedExecutorMcpServer } from '../types.js';
 import type { MicrosandboxClient } from '../sandbox/microsandbox.js';
 import { ClaudeAdapter } from './claude.js';
 import { CodexAdapter } from './codex.js';
@@ -47,6 +47,16 @@ export interface AgentAdapter {
    * clear error here instead of silently succeeding.
    */
   installPluginsInSandbox(client: MicrosandboxClient, plugins: ResolvedExecutorPlugin[]): Promise<void>;
+
+  /**
+   * Install MCP servers into the running sandbox so the agent CLI connects to
+   * them at startup. Parallel to `installPluginsInSandbox` but a separate
+   * mechanism — each adapter wires servers through its CLI's native MCP-config
+   * surface (Claude: `--mcp-config`, Codex: `[mcp_servers.*]` in `config.toml`).
+   * Adapters whose CLI cannot load MCP servers in non-interactive mode raise a
+   * clear error here instead of silently succeeding.
+   */
+  installMcpServersInSandbox(client: MicrosandboxClient, servers: ResolvedExecutorMcpServer[]): Promise<void>;
 }
 
 const KNOWN_ADAPTERS: Record<string, new (config: AgentConfig) => AgentAdapter> = {

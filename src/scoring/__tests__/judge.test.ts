@@ -72,6 +72,7 @@ function makeMockAdapter(opts: { stdout: string }) {
     extractResult: vi.fn().mockImplementation((stdout: string) => stdout),
     extractLog: vi.fn().mockResolvedValue(null),
     installPluginsInSandbox: vi.fn().mockResolvedValue(undefined),
+    installMcpServersInSandbox: vi.fn().mockResolvedValue(undefined),
   };
 }
 
