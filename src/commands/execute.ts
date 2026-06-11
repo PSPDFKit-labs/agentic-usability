@@ -160,8 +160,8 @@ export async function executeTestCase(
 
     const executorConfig: SandboxAgentConfig = config.agents?.executor
       ?? { command: 'claude', secret: { value: '$ANTHROPIC_API_KEY' } };
-    const execAdapter = createAdapter(executorConfig);
-    applyAgentAuth(executorConfig.secret, execAdapter, secrets, env);
+    const adapter = createAdapter(executorConfig);
+    applyAgentAuth(executorConfig.secret, adapter, secrets, env);
 
     await client.create(
       sandboxName(testCase.id),
@@ -183,7 +183,6 @@ export async function executeTestCase(
     ]);
 
     // Install agent CLI inside the sandbox
-    const adapter = createAdapter(executorConfig);
     const installCmd = adapter.installCommand;
     if (installCmd) {
       const installResult = await client.runCommand(installCmd);

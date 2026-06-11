@@ -48,6 +48,25 @@ export async function loadDotenv(dir: string = process.cwd()): Promise<void> {
 }
 
 /**
+ * Resolve a config value that may be a `$ENV_VAR` reference.
+ * If the value starts with `$`, the remainder is looked up in `process.env`.
+ * Throws if the referenced env var is not set.
+ */
+export function resolveSecretValue(value: string, label: string): string {
+  if (value.startsWith('$')) {
+    const hostVar = value.slice(1);
+    const hostValue = process.env[hostVar];
+    if (hostValue === undefined) {
+      throw new Error(
+        `Environment variable '${hostVar}' referenced in sandbox config for ${label} is not set on the host`,
+      );
+    }
+    return hostValue;
+  }
+  return value;
+}
+
+/**
  * Resolve a 1Password secret reference (op://vault/item/field) using the `op` CLI.
  */
 function resolveOpReference(key: string, reference: string): string {
